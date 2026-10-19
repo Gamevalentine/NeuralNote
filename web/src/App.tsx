@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent } from 'react';
 import { AudioWaveform, ChevronDown, CircleHelp, Download, FileAudio2, FolderOpen,
   Gauge, Headphones, Info, LoaderCircle, Music, Pause, Play, RotateCcw,
-  Settings2, SkipBack, SlidersHorizontal, Sparkles, Square, Upload, Volume2,
+  Settings2, SkipBack, Sparkles, Square, Upload, Volume2,
   X, ZoomIn, ZoomOut } from 'lucide-react';
 import { fmt, generateDemo, groupFor, GROUPS, makeMidi, noteName, readAudio, transcribe } from './audio';
 import type { Note, AudioInfo, PitchGroup } from './audio';
@@ -287,9 +287,7 @@ function App() {
           <button className="os-settings" onClick={() => setShowSettings(!showSettings)} title="Cài đặt" aria-label="Cài đặt"><Settings2 size={16} /></button>
         </div>
       </div>
-      <div className="notice"><Info size={15} /> <strong>Bản thử nghiệm</strong> — bố cục theo NeuralNote; AI Basic Pitch chưa tách Piano/Guitar/Drums. Ba hàng là <b>dải cao độ thực tế</b>, không phải nhạc cụ AI nhận dạng.</div>
-      <div className="transport">
-        <div className="logo"><div className="logo-box">N</div><strong>NOTIQ</strong><small>v0.2</small></div>
+      <div className="transport" role="toolbar" aria-label="Thanh công cụ NOTIQ">
         <div className="transport-buttons">
           <button title="Về đầu" onClick={() => seekTo(0)} disabled={!info}><SkipBack size={16} /></button>
           <button title={playing ? 'Tạm dừng' : 'Phát'} onClick={togglePlayback} disabled={!info} className="transport-play">{playing ? <Pause size={17} fill="currentColor" /> : <Play size={17} fill="currentColor" />}</button>
@@ -303,7 +301,15 @@ function App() {
           <div className="select-wrap"><select id="playmode" value={playbackMode} onChange={event => setPlaybackMode(event.target.value as PlaybackMode)}><option value="mix">Gốc + MIDI</option><option value="original">Âm gốc</option><option value="midi">MIDI</option></select><ChevronDown size={12} /></div>
         </div>
         <div className="master-output"><Volume2 size={17} /><input aria-label="Âm lượng chung" type="range" value={masterVolume} min={0} max={1} step={0.01} onChange={e => setMasterVolume(Number(e.target.value))} /></div>
-        <button className="icon-button" onClick={() => setShowSettings(!showSettings)} title="Tùy chọn"><SlidersHorizontal size={16}/></button>
+        <div className="toolbar-separator" aria-hidden="true" />
+        <div className="toolbar-actions">
+          {selection && <span className="toolbar-file" title={selection.name}><FileAudio2 size={15} /><span>{selection.name}</span><button type="button" className="remove-file" onClick={reset} title="Xóa tệp đang mở" aria-label="Xóa tệp đang mở" disabled={phase === 'analyzing'}><X size={14}/></button></span>}
+          <button className="action-outline" onClick={() => fileInput.current?.click()} disabled={busyLoading || phase === 'analyzing'}><FolderOpen size={15}/> Mở tệp</button>
+          <button className="action-outline" onClick={() => void setAudio(generateDemo(), 'NOTIQ - giai điệu mẫu.wav')} disabled={busyLoading || phase === 'analyzing'}><Music size={15}/> Nhạc mẫu</button>
+          <label className="tempo-chip">BPM <input type="number" min={40} max={240} value={bpm} onChange={e => setBpm(Math.min(240, Math.max(40, Number(e.target.value) || 120)))} /></label>
+          <button className="primary-action" onClick={startInference} disabled={!selection || phase === 'analyzing'}>{phase === 'analyzing' ? <LoaderCircle className="spin" size={15}/> : <Sparkles size={15}/>} {phase === 'analyzing' ? 'Đang nhận diện' : 'Nhận diện'}</button>
+          <button className="export-action" onClick={exportFile} disabled={!visibleNotes.length}><Download size={15}/> Xuất MIDI</button>
+        </div>
       </div>
       {showSettings && <div className="settings-popup">
         <div className="popup-head"><strong><Gauge size={17} /> Tùy chọn NOTIQ</strong><button aria-label="Đóng" onClick={() => setShowSettings(false)}><X size={16} /></button></div>
@@ -334,16 +340,6 @@ function App() {
           <div className="side-bottom"><strong>ĐẦU RA</strong><div className="bar-dummy"/><p>{summary}</p></div>
         </aside>
         <section className="editor">
-          <div className="editor-toolbar">
-            <div className="filename"><FileAudio2 size={17}/><span title={selection?.name}>{selection?.name || 'Chưa có âm thanh · chọn tệp để bắt đầu'}</span>{selection && <button className="remove-file" onClick={reset} title="Xóa âm thanh" disabled={phase === 'analyzing'}><X size={15}/></button>}</div>
-            <div className="file-actions">
-              <button className="action-outline" onClick={() => fileInput.current?.click()} disabled={busyLoading || phase === 'analyzing'}><FolderOpen size={15}/> Mở tệp</button>
-              <button className="action-outline" onClick={() => void setAudio(generateDemo(), 'NOTIQ - giai điệu mẫu.wav')} disabled={busyLoading || phase === 'analyzing'}><Music size={15}/> Nhạc mẫu</button>
-              <label className="tempo-chip">BPM <input type="number" min={40} max={240} value={bpm} onChange={e => setBpm(Math.min(240, Math.max(40, Number(e.target.value) || 120)))} /></label>
-              <button className="primary-action" onClick={startInference} disabled={!selection || phase === 'analyzing'}>{phase === 'analyzing' ? <LoaderCircle className="spin" size={15}/> : <Sparkles size={15}/>} {phase === 'analyzing' ? 'Đang nhận diện' : 'Nhận diện'}</button>
-              <button className="export-action" onClick={exportFile} disabled={!visibleNotes.length}><Download size={15}/> Xuất MIDI</button>
-            </div>
-          </div>
           <div className="workarea">
             <div className="keyboard" ref={keyColumn}>
               <div className="wave-key-label">WAVE<br/>FORM</div>
