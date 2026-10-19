@@ -48,14 +48,14 @@ inline const char* modelSizeToDisplayName(ModelSize inModelSize)
 {
     switch (inModelSize) {
         case ModelSize::Small:
-            return "Small";
+            return "Nhỏ";
         case ModelSize::Medium:
-            return "Medium";
+            return "Vừa";
         case ModelSize::Large:
-            return "Large";
+            return "Lớn";
     }
 
-    return "Medium";
+    return "Vừa";
 }
 
 /** @return Nothing for anything modelSizeToString did not write, including an empty string. */
