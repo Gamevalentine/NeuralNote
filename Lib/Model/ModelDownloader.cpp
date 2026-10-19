@@ -137,13 +137,13 @@ private:
         juce::InterProcessLock process_lock("NeuralNoteModelDownload_" + juce::String(modelSizeToString(mModelSize)));
 
         if (!process_lock.enter(0)) {
-            return "Another NeuralNote is already downloading this model";
+            return "Một phiên NOTIQ khác đang tải mô hình này";
         }
 
         const juce::File directory = NNFileUtils::getModelsDirectory();
 
         if (!NNFileUtils::ensureDirectoryExists(directory)) {
-            return "Could not create " + directory.getFullPathName();
+            return "Không thể tạo " + directory.getFullPathName();
         }
 
         const juce::File part = NNFileUtils::getModelPartFile(mModelSize);
@@ -195,12 +195,12 @@ private:
                             "ModelDownloader: " + juce::String(modelSizeToString(mModelSize))
                                 + ": checksum mismatch, got " + digest);
             part.deleteFile();
-            return "The download was corrupted. Try again";
+            return "Tệp tải về bị hỏng. Hãy thử lại";
         }
 
         // Replaces a checkpoint of the wrong size, which is what a file from another release is.
         if (!part.moveFileTo(NNFileUtils::getModelFile(mModelSize))) {
-            return "Could not move the model into " + directory.getFullPathName();
+            return "Không thể chuyển mô hình vào " + directory.getFullPathName();
         }
 
         NnLogger::write(NnLogger::Level::Info,
@@ -244,7 +244,7 @@ private:
         }
 
         if (!stream.connect(nullptr)) {
-            return {"Could not reach huggingface.co"};
+            return {"Không thể kết nối huggingface.co"};
         }
 
         const int status_code = stream.getStatusCode();
@@ -264,12 +264,12 @@ private:
             // Not a continuation of the part file: start again, as for 416.
             if (!range_matches) {
                 inPart.deleteFile();
-                return {"Unexpected response from huggingface.co"};
+                return {"Máy chủ huggingface.co trả về phản hồi không hợp lệ"};
             }
         } else if (status_code == 200) {
             // The whole file, whether or not a range was asked for.
             if (offset > 0 && !inPart.deleteFile()) {
-                return {"Could not write to " + inPart.getFullPathName(), false};
+                return {"Không thể ghi vào " + inPart.getFullPathName(), false};
             }
 
             offset = 0;
@@ -277,15 +277,15 @@ private:
         } else if (status_code == 416) {
             // The part file is not a prefix the server recognises: start again.
             inPart.deleteFile();
-            return {"The partial download could not be resumed"};
+            return {"Không thể tiếp tục tải phần còn lại"};
         } else {
-            return {"huggingface.co answered HTTP " + juce::String(status_code), status_code >= 500};
+            return {"huggingface.co trả về HTTP " + juce::String(status_code), status_code >= 500};
         }
 
         juce::FileOutputStream output(inPart);
 
         if (output.failedToOpen()) {
-            return {"Could not write to " + inPart.getFullPathName(), false};
+            return {"Không thể ghi vào " + inPart.getFullPathName(), false};
         }
 
         juce::HeapBlock<char> buffer(CHUNK_BYTES);
@@ -298,11 +298,11 @@ private:
             }
 
             if (mDownloadedBytes.load() + num_read > inEntry.numBytes) {
-                return {"huggingface.co sent more than the expected size", false};
+                return {"huggingface.co gửi dữ liệu vượt kích thước dự kiến", false};
             }
 
             if (!output.write(buffer.get(), static_cast<size_t>(num_read))) {
-                return {"Could not write to " + inPart.getFullPathName(), false};
+                return {"Không thể ghi vào " + inPart.getFullPathName(), false};
             }
 
             mDownloadedBytes += num_read;
@@ -311,12 +311,12 @@ private:
         output.flush();
 
         if (output.getStatus().failed()) {
-            return {"Could not write to " + inPart.getFullPathName(), false};
+            return {"Không thể ghi vào " + inPart.getFullPathName(), false};
         }
 
         // A connection that drops mid-body ends the stream early rather than reporting an error.
         if (mDownloadedBytes.load() != inEntry.numBytes) {
-            return {"The connection dropped"};
+            return {"Mất kết nối mạng"};
         }
 
         return {};
