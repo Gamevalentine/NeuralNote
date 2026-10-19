@@ -5,6 +5,8 @@ import { AudioWaveform, CircleHelp, Gauge, Headphones, Info, LoaderCircle,
   Music, Settings2, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { fmt, generateDemo, groupFor, GROUPS, makeMidi, noteName, readAudio, transcribe } from './audio';
 import type { Note, AudioInfo, PitchGroup } from './audio';
+import { GM_PRESETS, NeuralNoteSoundFont } from './soundfont';
+import type { Programs } from './soundfont';
 
 type Selection = { file: Blob; name: string; url: string };
 type Phase = 'empty' | 'ready' | 'analyzing' | 'complete' | 'error';
