@@ -1,3 +1,17 @@
+# NOTIQ · LUNOR MUSIC
+
+**NOTIQ** là dự án nhận diện âm thanh thành MIDI của hệ sinh thái **LUNOR MUSIC**, được phát triển từ mã nguồn mở [NeuralNote](https://github.com/DamRsn/NeuralNote) (Apache-2.0).
+
+- **Phần mềm máy tính:** bản chuyển thương hiệu đang phát triển trên nhánh `feature/notiq-stage1-branding`. Bản này chưa được build và kiểm thử; **không cài đè lên NeuralNote**.
+- **Bản chạy trên trình duyệt:** [NOTIQ Web (thử nghiệm)](https://notiq-lunor-music-rvvio6.v2.appdeploy.ai/). Bản web dùng **Spotify Basic Pitch**, khác với engine MuScriptor của NeuralNote v2; không phải bản chuyển nguyên trạng NeuralNote C++.
+- **Giấy phép:** mã nguồn NeuralNote theo Apache-2.0 (giữ nguyên `LICENSE` và ghi công tác giả). Trọng số AI MuScriptor theo **CC BY-NC 4.0**, chỉ được phép sử dụng phi thương mại trừ khi có giấy phép khác. Cần kiểm tra thêm giấy phép JUCE, ASIO và các tài nguyên bên thứ ba trước khi phát hành.
+- **Bước 1:** tách tên sản phẩm, mã nhận dạng, thư mục dữ liệu và bộ cài khỏi NeuralNote; **chưa thay icon gốc và chưa hoàn tất Việt hóa**.
+- **Bước 2 dự kiến:** Việt hóa giao diện, kiểm tra chức năng và đóng gói build thử nghiệm sau khi được phê duyệt.
+
+---
+
+## Tài liệu gốc NeuralNote (giữ nguyên thông tin tác giả và hướng dẫn)
+
 # NeuralNote <img align="right" src="NeuralNote/Assets/Logo/neuralnote-1024.png" width="100" />
 
 NeuralNote is the audio plugin that brings **state-of-the-art audio-to-MIDI transcription** into your favorite Digital
