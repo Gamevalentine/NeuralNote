@@ -12,8 +12,8 @@
 
 namespace
 {
-const juce::String TITLE = "ADD INSTRUMENT";
-const juce::String FOOTER = "TICK TO INCLUDE IN TRANSCRIPTION";
+const juce::String TITLE = "THÊM NHẠC CỤ";
+const juce::String FOOTER = "CHỌN NHẠC CỤ CẦN NHẬN DIỆN";
 
 constexpr float TITLE_TRACKING = 0.13f;
 constexpr float FOOTER_TRACKING = 0.04f;
@@ -27,7 +27,7 @@ InstrumentMenu::InstrumentMenu(NeuralNoteAudioProcessor& inProcessor)
 {
     // Nothing is selected by default and that means the model chooses, which is worth naming rather
     // than leaving as the state you get by unticking everything.
-    mEntries.push_back({"Automatic (any instrument)", std::nullopt});
+    mEntries.push_back({"Tự động (mọi nhạc cụ)", std::nullopt});
 
     for (const msl::InstrumentGroup group: msl::allInstrumentGroups()) {
         mEntries.push_back({instrumentDisplayForGroup(group).name, group});
