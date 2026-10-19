@@ -1,5 +1,6 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { DragEvent } from 'react';
 import { AudioWaveform, ChevronDown, CircleHelp, Download, FileAudio2, FolderOpen,
   Gauge, Headphones, Info, LoaderCircle, Music, Pause, Play, RotateCcw,
   Settings2, SkipBack, SlidersHorizontal, Sparkles, Square, Upload, Volume2,
@@ -10,11 +11,7 @@ import type { Note, AudioInfo, PitchGroup } from './audio';
 type Selection = { file: Blob; name: string; url: string };
 type Phase = 'empty' | 'ready' | 'analyzing' | 'complete' | 'error';
 type PlaybackMode = 'original' | 'midi' | 'mix';
-const PITCH_TOP = 92;
-const PITCH_BOTTOM = 36;
 const PITCH_ROW = 16;
-const GRID_HEIGHT = (PITCH_TOP - PITCH_BOTTOM + 1) * PITCH_ROW;
-const PITCHES = Array.from({ length: PITCH_TOP - PITCH_BOTTOM + 1 }, (_, i) => PITCH_TOP - i);
 const midiColor = (pitch: number) => GROUPS.find(group => group.id === groupFor(pitch))?.color || '#59bfa3';
 
 function App() {
@@ -40,6 +37,7 @@ function App() {
   const [dragging, setDragging] = useState(false);
   const audioEl = useRef<HTMLAudioElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const keyColumn = useRef<HTMLDivElement>(null);
   const audioCtx = useRef<AudioContext | null>(null);
   const firedNotes = useRef<Set<number>>(new Set());
   const previousTime = useRef(0);
@@ -53,6 +51,10 @@ function App() {
     if (audioCtx.current) void audioCtx.current.close().catch(() => undefined);
   }, []);
 
+  const pitchBottom = Math.min(36, notes.length ? Math.max(21, Math.floor(Math.min(...notes.map(n => n.pitchMidi)) / 12) * 12) : 36);
+  const pitchTop = Math.max(92, notes.length ? Math.min(108, Math.ceil(Math.max(...notes.map(n => n.pitchMidi)) / 12) * 12 + 11) : 92);
+  const gridHeight = (pitchTop - pitchBottom + 1) * PITCH_ROW;
+  const pitches = Array.from({ length: pitchTop - pitchBottom + 1 }, (_, i) => pitchTop - i);
   const totalSeconds = Math.max(1, info?.duration || 8);
   const timelineWidth = Math.max(1000, Math.round(totalSeconds * 80 * zoom));
   const activeGroups = useMemo(
@@ -79,6 +81,9 @@ function App() {
       return;
     }
     setBusyLoading(true);
+    if (selectionRef.current) URL.revokeObjectURL(selectionRef.current.url);
+    selectionRef.current = null;
+    setSelection(null);
     setError('');
     setPlaying(false);
     setNotes([]);
@@ -91,7 +96,6 @@ function App() {
       const decoded = await readAudio(file);
       if (decoded.duration > 45) throw new Error('Bản thử nghiệm chỉ xử lý tối đa 45 giây. Vui lòng cắt đoạn cần nhận diện.');
       const next = { file, name, url: URL.createObjectURL(file) };
-      if (selectionRef.current) URL.revokeObjectURL(selectionRef.current.url);
       selectionRef.current = next;
       setSelection(next);
       setInfo(decoded);
@@ -235,7 +239,7 @@ function App() {
   const peakBars = info?.peaks || [];
   const markers = Array.from({ length: Math.ceil(totalSeconds) + 1 }, (_, i) => i);
   const cursorX = time / totalSeconds * timelineWidth;
-  const onDropFile = (event: React.DragEvent<HTMLDivElement>) => {
+  const onDropFile = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     setDragging(false);
     if (event.dataTransfer.files[0]) {
@@ -324,12 +328,12 @@ function App() {
             </div>
           </div>
           <div className="workarea">
-            <div className="keyboard">
+            <div className="keyboard" ref={keyColumn}>
               <div className="wave-key-label">WAVE<br/>FORM</div>
               <div className="ruler-key-label">THỜI GIAN</div>
-              {PITCHES.map(pitch => <button key={pitch} type="button" onClick={() => void oscPreview(pitch)} title={'Nghe nốt ' + noteName(pitch)} className={'key ' + ([1,3,6,8,10].includes(pitch%12) ? 'black' : 'white')}>{pitch % 12 === 0 ? noteName(pitch) : ''}</button>)}
+              {pitches.map(pitch => <button key={pitch} type="button" onClick={() => void oscPreview(pitch)} title={'Nghe nốt ' + noteName(pitch)} className={'key ' + ([1,3,6,8,10].includes(pitch%12) ? 'black' : 'white')}>{pitch % 12 === 0 ? noteName(pitch) : ''}</button>)}
             </div>
-            <div className="scroller">
+            <div className="scroller" onScroll={event => { if (keyColumn.current) keyColumn.current.scrollTop = event.currentTarget.scrollTop; }}>
               <div className="timeline" style={{ width: timelineWidth }}>
                 <div className={'wave-panel ' + (dragging ? 'dragging' : '')} onDragOver={e => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDropFile}>
                   {peakBars.length ? (
@@ -347,14 +351,14 @@ function App() {
                 <div className="ruler">
                   {markers.map(n => <button type="button" key={n} className="tick" style={{ left: n/totalSeconds*100 + '%' }} onClick={() => seekTo(n)}>{n}s</button>)}
                 </div>
-                <div className="roll" style={{ height: GRID_HEIGHT }}>
-                  {PITCHES.map(pitch => <div className={'pitch-grid ' + (pitch%12 === 0 ? 'octave' : '')} key={pitch} style={{top:(PITCH_TOP-pitch)*PITCH_ROW,height:PITCH_ROW}}/>)}
+                <div className="roll" style={{ height: gridHeight }}>
+                  {pitches.map(pitch => <div className={'pitch-grid ' + (pitch%12 === 0 ? 'octave' : '')} key={pitch} style={{top:(pitchTop-pitch)*PITCH_ROW,height:PITCH_ROW}}/>)}
                   {markers.map(n => <div key={n} className="beat-grid" style={{left: n/totalSeconds*100 + '%'}}/>)}
                   {visibleNotes.map((n,i) => (
                     <button className="note" key={i} title={noteName(n.pitchMidi) + ' · ' + fmt(n.startTimeSeconds) + ' · ' + n.durationSeconds.toFixed(2) + 's'}
                       onClick={() => void oscPreview(n.pitchMidi, Math.min(0.45,n.durationSeconds))}
                       style={{
-                        top:(PITCH_TOP-n.pitchMidi)*PITCH_ROW + 1,
+                        top:(pitchTop-n.pitchMidi)*PITCH_ROW + 1,
                         left:n.startTimeSeconds/totalSeconds*100 + '%',
                         width:Math.max(3,n.durationSeconds/totalSeconds*timelineWidth-1),
                         backgroundColor:midiColor(n.pitchMidi),borderColor:midiColor(n.pitchMidi),
@@ -362,7 +366,7 @@ function App() {
                   ))}
                   {!notes.length && <div className="empty-roll">{phase === 'analyzing' ? <><LoaderCircle className="spin" size={26}/><strong>AI đang nhận diện nốt...</strong></> : <><Music size={27}/><strong>{selection ? 'Đã tải âm thanh — nhấn Nhận diện' : 'Piano Roll đang trống'}</strong><small>Chỉ hiển thị nốt thật sau khi chạy AI</small></>}</div>}
                 </div>
-                {info && <div className="playhead" style={{left:cursorX,height:106+28+GRID_HEIGHT}}/>}
+                {info && <div className="playhead" style={{left:cursorX,height:106+28+gridHeight}}/>}
               </div>
             </div>
           </div>
