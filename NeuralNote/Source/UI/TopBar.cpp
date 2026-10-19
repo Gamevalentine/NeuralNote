@@ -65,12 +65,12 @@ void paintWordmark(juce::Graphics& g, juce::Rectangle<int> inBounds)
 
     const auto name_font = nn::fonts::wordmark();
     const float name_x = static_cast<float>(inBounds.getX()) + 9.0f + 9.0f;
-    const float name_width = nn::trackedTextWidth("NEURALNOTE", name_font, 0.14f);
+    const float name_width = nn::trackedTextWidth("NOTIQ", name_font, 0.14f);
 
     g.setColour(nn::colours::textBright);
     nn::drawTrackedText(
         g,
-        "NEURALNOTE",
+        "NOTIQ",
         name_font,
         {name_x, static_cast<float>(inBounds.getY()), name_width, static_cast<float>(inBounds.getHeight())},
         juce::Justification::centredLeft,
@@ -79,7 +79,7 @@ void paintWordmark(juce::Graphics& g, juce::Rectangle<int> inBounds)
     // Nudged down against the wordmark's cap height, which is where the mockup sits it.
     g.setColour(nn::colours::textFaint);
     nn::drawTrackedText(g,
-                        "v2",
+                        "BETA",
                         nn::fonts::wordmarkVersion(),
                         {name_x + name_width + 9.0f,
                          static_cast<float>(inBounds.getY()) + 2.0f,
