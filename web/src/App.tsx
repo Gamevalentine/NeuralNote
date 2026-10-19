@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent } from 'react';
 import { AudioWaveform, CircleHelp, Gauge, Headphones, Info, LoaderCircle,
-  Music, Settings2, Upload, X, ZoomIn, ZoomOut } from 'lucide-react';
+  Music, Settings2, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { fmt, generateDemo, groupFor, GROUPS, makeMidi, noteName, readAudio, transcribe } from './audio';
 import type { Note, AudioInfo, PitchGroup } from './audio';
 
@@ -37,7 +37,6 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [activeMenu, setActiveMenu] = useState<MenuKey | null>(null);
   const [menuPosition, setMenuPosition] = useState({ left: 0, top: 43 });
-  const [dragging, setDragging] = useState(false);
   const audioEl = useRef<HTMLAudioElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLElement>(null);
@@ -268,12 +267,10 @@ function App() {
     if (selectionRef.current) URL.revokeObjectURL(selectionRef.current.url);
     selectionRef.current = null;
   };
-  const peakBars = info?.peaks || [];
   const markers = Array.from({ length: Math.ceil(totalSeconds) + 1 }, (_, i) => i);
   const cursorX = time / totalSeconds * timelineWidth;
   const onDropFile = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
-    setDragging(false);
     if (event.dataTransfer.files[0]) {
       const file = event.dataTransfer.files[0];
       void setAudio(file, file.name);
@@ -447,25 +444,11 @@ function App() {
         <section className="editor">
           <div className="workarea">
             <div className="keyboard" ref={keyColumn}>
-              <div className="wave-key-label">WAVE<br/>FORM</div>
               <div className="ruler-key-label">THỜI GIAN</div>
               {pitches.map(pitch => <button key={pitch} type="button" onClick={() => void oscPreview(pitch)} title={'Nghe nốt ' + noteName(pitch)} className={'key ' + ([1,3,6,8,10].includes(pitch%12) ? 'black' : 'white')}>{pitch % 12 === 0 ? noteName(pitch) : ''}</button>)}
             </div>
-            <div className="scroller" ref={timelineViewport} onScroll={event => { if (keyColumn.current) keyColumn.current.scrollTop = event.currentTarget.scrollTop; }}>
+            <div className="scroller" ref={timelineViewport} onDragOver={event => event.preventDefault()} onDrop={onDropFile} onScroll={event => { if (keyColumn.current) keyColumn.current.scrollTop = event.currentTarget.scrollTop; }}>
               <div className="timeline" style={{ width: timelineWidth }}>
-                <div className={'wave-panel ' + (dragging ? 'dragging' : '')} onDragOver={e => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDropFile}>
-                  {peakBars.length ? (
-                    <svg width="100%" height="100%" viewBox={'0 0 ' + timelineWidth + ' 106'} preserveAspectRatio="none" aria-label="Dạng sóng âm thanh">
-                      <line x1="0" y1="53" x2={timelineWidth} y2="53" stroke="#4b5669" strokeWidth=".8"/>
-                      {peakBars.map((amp,i) => {
-                        const h = Math.max(1, amp * 42);
-                        const x = i / peakBars.length * timelineWidth;
-                        return <line key={i} x1={x} y1={53-h} x2={x} y2={53+h} stroke={x < cursorX ? '#7797b8' : '#9caabf'} strokeWidth={Math.max(1,timelineWidth/peakBars.length*0.64)}/>;
-                      })}
-                    </svg>
-                  ) : <div className="wave-empty" onClick={() => fileInput.current?.click()}><Upload size={25}/><strong>Kéo thả âm thanh vào đây hoặc chọn Mở tệp</strong><small>WAV · MP3 · FLAC · OGG · M4A · Tối đa 45 giây</small></div>}
-                  <span className="wave-caption">{info ? 'DẠNG SÓNG ÂM THANH' : 'CHƯA CÓ DỮ LIỆU ÂM THANH'}</span>
-                </div>
                 <div className="ruler">
                   {markers.map(n => <button type="button" key={n} className="tick" style={{ left: n/totalSeconds*100 + '%' }} onClick={() => seekTo(n)}>{n}s</button>)}
                 </div>
@@ -484,7 +467,7 @@ function App() {
                   ))}
                   {!notes.length && <div className="empty-roll">{phase === 'analyzing' ? <><LoaderCircle className="spin" size={26}/><strong>AI đang nhận diện nốt...</strong></> : <><Music size={27}/><strong>{selection ? 'Đã tải âm thanh — nhấn Nhận diện' : 'Piano Roll đang trống'}</strong><small>Chỉ hiển thị nốt thật sau khi chạy AI</small></>}</div>}
                 </div>
-                {info && <div className="playhead" style={{left:cursorX,height:106+28+gridHeight}}/>}
+                {info && <div className="playhead" style={{left:cursorX,height:28+gridHeight}}/>}
               </div>
             </div>
           </div>
