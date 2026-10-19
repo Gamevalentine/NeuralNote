@@ -37,13 +37,13 @@ constexpr float MODEL_LABEL_TRACKING = 0.09f;
 
 juce::String modelButtonLabel(const char* inModelName)
 {
-    return ("Model: " + juce::String(inModelName)).toUpperCase();
+    return ("MÔ HÌNH: " + juce::String(inModelName)).toUpperCase();
 }
 
 /** Sized for the longest label it can carry, so changing model does not move the bar around it. */
 int modelButtonWidth()
 {
-    float widest = nn::trackedTextWidth(modelButtonLabel("None"), nn::fonts::sectionHeader(), MODEL_LABEL_TRACKING);
+    float widest = nn::trackedTextWidth(modelButtonLabel("Chưa có"), nn::fonts::sectionHeader(), MODEL_LABEL_TRACKING);
 
     for (const ModelSize size: ALL_MODEL_SIZES) {
         widest = std::max(widest,
@@ -175,14 +175,14 @@ TopBar::TopBar(NeuralNoteAudioProcessor& inProcessor)
 
     mMixSlider.setColour(NnFlatSlider::trackColourId, nn::colours::faderTrackTop);
     mMixSlider.setColour(NnFlatSlider::fillColourId, nn::colours::mixSliderFill());
-    mMixSlider.setTooltip("Balance between the source audio and the synthesised transcription");
+    mMixSlider.setTooltip("Cân bằng âm thanh gốc và âm thanh MIDI");
     mMixAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         mProcessor.getAPVTS(), ParameterHelpers::getIdStr(ParameterHelpers::MixId), mMixSlider);
     addAndMakeVisible(mMixSlider);
 
     mMasterGainSlider.setColour(NnFlatSlider::trackColourId, nn::colours::faderTrackTop);
     mMasterGainSlider.setColour(NnFlatSlider::fillColourId, nn::colours::volumeFill);
-    mMasterGainSlider.setTooltip("Output level");
+    mMasterGainSlider.setTooltip("Âm lượng đầu ra");
     // The pill paints the dB readout, so it has to repaint with the fader.
     mMasterGainSlider.onValueChange = [this] { repaint(); };
     mMasterGainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
@@ -191,7 +191,7 @@ TopBar::TopBar(NeuralNoteAudioProcessor& inProcessor)
 
     mMuteButton.setClickingTogglesState(true);
     mMuteButton.setIcon(nn::icons::speakerMuted, NnFlatButton::IconStyle::filled, 14.0f);
-    mMuteButton.setLabel("MUTE", nn::fonts::sectionHeader(), 0.09f);
+    mMuteButton.setLabel("TẮT", nn::fonts::sectionHeader(), 0.09f);
     mMuteButton.setPadding(11, 11, 7);
     mMuteButton.setColour(NnFlatButton::backgroundColourId, nn::colours::bgControl);
     mMuteButton.setColour(NnFlatButton::backgroundOnColourId, nn::colours::muteFill());
@@ -223,7 +223,7 @@ void TopBar::resized()
     bounds.setLeft(nn::metrics::sidebarWidth - 1);
 
     const auto label_font = nn::fonts::pillLabel();
-    const int orig_width = juce::roundToInt(std::ceil(nn::trackedTextWidth("ORIG", label_font, LABEL_TRACKING)));
+    const int orig_width = juce::roundToInt(std::ceil(nn::trackedTextWidth("GỐC", label_font, LABEL_TRACKING)));
     const int midi_width = juce::roundToInt(std::ceil(nn::trackedTextWidth("MIDI", label_font, LABEL_TRACKING)));
 
     const int transport_width = 5 * nn::metrics::transportButtonW + 4 * TRANSPORT_GAP;
@@ -371,7 +371,7 @@ void TopBar::_paintMixPill(juce::Graphics& g, float inAlpha) const
     auto text_area = mMixPill.reduced(PILL_PADDING, 0).toFloat();
 
     g.setColour(nn::colours::textLabel.withMultipliedAlpha(inAlpha));
-    nn::drawTrackedText(g, "ORIG", font, text_area, juce::Justification::centredLeft, LABEL_TRACKING);
+    nn::drawTrackedText(g, "GỐC", font, text_area, juce::Justification::centredLeft, LABEL_TRACKING);
 
     g.setColour(nn::colours::accentText.withMultipliedAlpha(inAlpha));
     nn::drawTrackedText(g, "MIDI", font, text_area, juce::Justification::centredRight, LABEL_TRACKING);
@@ -424,7 +424,7 @@ void TopBar::_refreshMixAvailability()
 void TopBar::syncModelButton(bool inModelPanelVisible)
 {
     const std::optional<ModelSize> in_use = NNFileUtils::getInstalledModelSize(NnGlobalSettings::getModelSize());
-    const juce::String label = modelButtonLabel(in_use.has_value() ? modelSizeToDisplayName(*in_use) : "None");
+    const juce::String label = modelButtonLabel(in_use.has_value() ? modelSizeToDisplayName(*in_use) : "Chưa có");
 
     if (label != mModelButtonLabel) {
         mModelButtonLabel = label;
