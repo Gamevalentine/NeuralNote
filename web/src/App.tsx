@@ -36,6 +36,8 @@ function App() {
   const [solo, setSolo] = useState<PitchGroup | null>(null);
   const [gain, setGain] = useState<Record<PitchGroup, number>>({ high: 0.7, mid: 0.7, low: 0.7 });
   const [masterVolume, setMasterVolume] = useState(0.65);
+  const [instrumentPrograms, setInstrumentPrograms] = useState<Programs>({ high: 0, mid: 0, low: 0 });
+  const [soundfontStatus, setSoundfontStatus] = useState('NeuralNote GM');
   const [showSettings, setShowSettings] = useState(false);
   const [activeMenu, setActiveMenu] = useState<MenuKey | null>(null);
   const [menuPosition, setMenuPosition] = useState({ left: 0, top: 43 });
