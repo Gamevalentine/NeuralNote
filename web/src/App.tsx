@@ -5,8 +5,6 @@ import { AudioWaveform, CircleHelp, Gauge, Headphones, Info, LoaderCircle,
   Music, Settings2, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { fmt, generateDemo, groupFor, GROUPS, makeMidi, noteName, readAudio, transcribe } from './audio';
 import type { Note, AudioInfo, PitchGroup } from './audio';
-import { GM_PRESETS, NeuralNoteSoundFont } from './soundfont';
-import type { Programs } from './soundfont';
 
 type Selection = { file: Blob; name: string; url: string };
 type Phase = 'empty' | 'ready' | 'analyzing' | 'complete' | 'error';
@@ -36,8 +34,6 @@ function App() {
   const [solo, setSolo] = useState<PitchGroup | null>(null);
   const [gain, setGain] = useState<Record<PitchGroup, number>>({ high: 0.7, mid: 0.7, low: 0.7 });
   const [masterVolume, setMasterVolume] = useState(0.65);
-  const [instrumentPrograms, setInstrumentPrograms] = useState<Programs>({ high: 0, mid: 0, low: 0 });
-  const [soundfontStatus, setSoundfontStatus] = useState('NeuralNote GM');
   const [showSettings, setShowSettings] = useState(false);
   const [activeMenu, setActiveMenu] = useState<MenuKey | null>(null);
   const [menuPosition, setMenuPosition] = useState({ left: 0, top: 43 });

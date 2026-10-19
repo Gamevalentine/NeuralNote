@@ -6,8 +6,7 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview --host 0.0.0.0",
-    "prebuild": "node scripts/prepare-soundfont.mjs"
+    "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
     "@spotify/basic-pitch": "^1.0.1",
@@ -15,8 +14,7 @@
     "@tonejs/midi": "^2.0.28",
     "lucide-react": "^0.469.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "spessasynth_lib": "4.3.14"
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
