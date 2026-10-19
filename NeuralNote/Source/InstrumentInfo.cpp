@@ -18,7 +18,7 @@ struct GroupDisplay {
 
 // The 35 named groups, in enumerator order. Names are shortened where the group's own is longer
 // than the 12 px strip can show without ellipsising -- "electric_bass" is the only bass a mix
-// usually has, so it is "Bass"; the acoustic one keeps the qualifier that tells them apart.
+// usually has, so it is "Bass điện"; the acoustic one keeps the qualifier that tells them apart.
 //
 // Colours are per instrument, not per sidebar position, so an instrument keeps its hue as a
 // transcription streams in and across two runs of the same file. They are grouped into families
@@ -30,48 +30,48 @@ struct GroupDisplay {
 constexpr GroupDisplay GROUP_DISPLAYS[] = {
     // Keys
     {msl::InstrumentGroup::AcousticPiano, "Piano", "PNO", 0x3372ff},
-    {msl::InstrumentGroup::ElectricPiano, "Electric Piano", "EPN", 0x85a0ff},
+    {msl::InstrumentGroup::ElectricPiano, "Piano điện", "EPN", 0x85a0ff},
     {msl::InstrumentGroup::Organ, "Organ", "ORG", 0x1f5fc1},
     // Guitars
-    {msl::InstrumentGroup::AcousticGuitar, "Acoustic Guitar", "AGT", 0x45d1a8},
-    {msl::InstrumentGroup::CleanElectricGuitar, "Electric Guitar", "GTR", 0x7aeed6},
-    {msl::InstrumentGroup::DistortedElectricGuitar, "Distorted Guitar", "DGT", 0x388d6d},
+    {msl::InstrumentGroup::AcousticGuitar, "Guitar mộc", "AGT", 0x45d1a8},
+    {msl::InstrumentGroup::CleanElectricGuitar, "Guitar điện", "GTR", 0x7aeed6},
+    {msl::InstrumentGroup::DistortedElectricGuitar, "Guitar distortion", "DGT", 0x388d6d},
     // Bass
     {msl::InstrumentGroup::ElectricBass, "Bass", "BAS", 0x9033ff},
-    {msl::InstrumentGroup::AcousticBass, "Acoustic Bass", "ABS", 0xc685ff},
-    {msl::InstrumentGroup::Contrabass, "Contrabass", "CBS", 0x5b1fc1},
+    {msl::InstrumentGroup::AcousticBass, "Bass mộc", "ABS", 0xc685ff},
+    {msl::InstrumentGroup::Contrabass, "Đại hồ cầm", "CBS", 0x5b1fc1},
     // Strings
-    {msl::InstrumentGroup::Violin, "Violin", "VLN", 0xf9295d},
+    {msl::InstrumentGroup::Violin, "Vĩ cầm", "VLN", 0xf9295d},
     {msl::InstrumentGroup::Viola, "Viola", "VLA", 0xff4363},
     {msl::InstrumentGroup::Cello, "Cello", "VLC", 0xea175e},
-    {msl::InstrumentGroup::StringEnsemble, "Strings", "STR", 0xff6471},
-    {msl::InstrumentGroup::SynthStrings, "Synth Strings", "SST", 0xc11f63},
-    {msl::InstrumentGroup::OrchestralHarp, "Harp", "HRP", 0xff8585},
+    {msl::InstrumentGroup::StringEnsemble, "Dàn dây", "STR", 0xff6471},
+    {msl::InstrumentGroup::SynthStrings, "Synth dây", "SST", 0xc11f63},
+    {msl::InstrumentGroup::OrchestralHarp, "Đàn hạc", "HRP", 0xff8585},
     // Brass
-    {msl::InstrumentGroup::Trumpet, "Trumpet", "TPT", 0xffc458},
-    {msl::InstrumentGroup::Trombone, "Trombone", "TBN", 0xe07f25},
-    {msl::InstrumentGroup::FrenchHorn, "French Horn", "HRN", 0xde9a3b},
-    {msl::InstrumentGroup::BrassSection, "Brass", "BRS", 0xffdd81},
-    {msl::InstrumentGroup::Tuba, "Tuba", "TBA", 0xb46029},
+    {msl::InstrumentGroup::Trumpet, "Kèn trumpet", "TPT", 0xffc458},
+    {msl::InstrumentGroup::Trombone, "Kèn trombone", "TBN", 0xe07f25},
+    {msl::InstrumentGroup::FrenchHorn, "Kèn horn", "HRN", 0xde9a3b},
+    {msl::InstrumentGroup::BrassSection, "Kèn đồng", "BRS", 0xffdd81},
+    {msl::InstrumentGroup::Tuba, "Kèn tuba", "TBA", 0xb46029},
     // Saxes
-    {msl::InstrumentGroup::SopranoAndAltoSax, "Alto Sax", "ASX", 0xfeac85},
-    {msl::InstrumentGroup::TenorSax, "Tenor Sax", "TSX", 0xe8704a},
-    {msl::InstrumentGroup::BaritoneSax, "Baritone Sax", "BSX", 0xae4532},
+    {msl::InstrumentGroup::SopranoAndAltoSax, "Sax alto", "ASX", 0xfeac85},
+    {msl::InstrumentGroup::TenorSax, "Sax tenor", "TSX", 0xe8704a},
+    {msl::InstrumentGroup::BaritoneSax, "Sax baritone", "BSX", 0xae4532},
     // Winds
-    {msl::InstrumentGroup::Flutes, "Flute", "FLT", 0xc3d94e},
-    {msl::InstrumentGroup::Oboe, "Oboe", "OBO", 0xc9e868},
-    {msl::InstrumentGroup::EnglishHorn, "English Horn", "EHN", 0xd0f385},
-    {msl::InstrumentGroup::Clarinet, "Clarinet", "CLR", 0xbbc638},
-    {msl::InstrumentGroup::Bassoon, "Bassoon", "BSN", 0x9c9c39},
+    {msl::InstrumentGroup::Flutes, "Sáo", "FLT", 0xc3d94e},
+    {msl::InstrumentGroup::Oboe, "Kèn oboe", "OBO", 0xc9e868},
+    {msl::InstrumentGroup::EnglishHorn, "Kèn cor anglais", "EHN", 0xd0f385},
+    {msl::InstrumentGroup::Clarinet, "Kèn clarinet", "CLR", 0xbbc638},
+    {msl::InstrumentGroup::Bassoon, "Kèn bassoon", "BSN", 0x9c9c39},
     // Voice and synth
-    {msl::InstrumentGroup::Voice, "Voice", "VOX", 0x4bc1e7},
-    {msl::InstrumentGroup::SynthLead, "Synth Lead", "LED", 0x86d7fe},
-    {msl::InstrumentGroup::SynthPad, "Synth Pad", "PAD", 0x329bae},
+    {msl::InstrumentGroup::Voice, "Giọng hát", "VOX", 0x4bc1e7},
+    {msl::InstrumentGroup::SynthLead, "Synth lead", "LED", 0x86d7fe},
+    {msl::InstrumentGroup::SynthPad, "Synth pad", "PAD", 0x329bae},
     // Percussion
-    {msl::InstrumentGroup::Drums, "Drums", "DRM", 0x77869f},
-    {msl::InstrumentGroup::Timpani, "Timpani", "TMP", 0x949fb9},
-    {msl::InstrumentGroup::ChromaticPercussion, "Chromatic Perc.", "CPR", 0xb3b9d1},
-    {msl::InstrumentGroup::OrchestraHit, "Orchestra Hit", "OHT", 0x616f80},
+    {msl::InstrumentGroup::Drums, "Trống", "DRM", 0x77869f},
+    {msl::InstrumentGroup::Timpani, "Trống định âm", "TMP", 0x949fb9},
+    {msl::InstrumentGroup::ChromaticPercussion, "Bộ gõ cao độ", "CPR", 0xb3b9d1},
+    {msl::InstrumentGroup::OrchestraHit, "Dàn nhạc", "OHT", 0x616f80},
 };
 
 static_assert(std::size(GROUP_DISPLAYS) == 35, "One entry per named group in msl::InstrumentGroup");

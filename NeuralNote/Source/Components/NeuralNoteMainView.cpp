@@ -238,7 +238,7 @@ void NeuralNoteMainView::_buildSettingsMenu()
 
     // Applies from the next transcription: the model is loaded per run.
     PopupMenu device_menu;
-    String device_menu_name = "Compute device";
+    String device_menu_name = "Thiết bị xử lý";
 
     if (const std::vector<msl::Device>* devices = ComputeDevices::tryGet()) {
         const auto is_selected = [devices](std::optional<std::size_t> inIndex) {
@@ -260,7 +260,7 @@ void NeuralNoteMainView::_buildSettingsMenu()
                 device_menu.addItem(device_item);
             };
 
-        const String auto_label = "Auto (" + String(ComputeDevices::label(*devices, msl::autoDevice(*devices))) + ")";
+        const String auto_label = "Tự động (" + String(ComputeDevices::label(*devices, msl::autoDevice(*devices))) + ")";
         const auto selected = ComputeDevices::resolve(*devices, NnGlobalSettings::getComputeDevice());
         device_menu_name +=
             ": " + (selected.has_value() ? String(ComputeDevices::label(*devices, *selected)) : auto_label);
@@ -274,7 +274,7 @@ void NeuralNoteMainView::_buildSettingsMenu()
     }
 
     else {
-        auto detecting_item = PopupMenu::Item("Detecting devices...");
+        auto detecting_item = PopupMenu::Item("Đang tìm thiết bị...");
         detecting_item.setID(++item_id);
         detecting_item.setEnabled(false);
         mSettingsMenuItemsShouldBeEnabled.emplace_back(detecting_item.itemID, [] { return false; });
@@ -284,7 +284,7 @@ void NeuralNoteMainView::_buildSettingsMenu()
     mSettingsMenu->addSubMenu(device_menu_name, device_menu);
     mSettingsMenu->addSeparator();
 
-    auto tooltip_visibility_item = PopupMenu::Item("Show tooltips");
+    auto tooltip_visibility_item = PopupMenu::Item("Hiện chú thích");
     tooltip_visibility_item.setID(++item_id);
     tooltip_visibility_item.setEnabled(true);
     mSettingsMenuItemsShouldBeTicked.emplace_back(tooltip_visibility_item.itemID,
@@ -321,9 +321,9 @@ void NeuralNoteMainView::_buildSettingsMenu()
         scale_menu.addItem(scale_item);
     }
 
-    mSettingsMenu->addSubMenu("Window size", scale_menu);
+    mSettingsMenu->addSubMenu("Kích thước cửa sổ", scale_menu);
 
-    auto reset_zoom_item = PopupMenu::Item("Reset piano roll zoom");
+    auto reset_zoom_item = PopupMenu::Item("Đặt lại thu phóng Piano Roll");
     reset_zoom_item.setID(++item_id);
     reset_zoom_item.setTicked(false);
     reset_zoom_item.setAction([this] {
@@ -340,8 +340,8 @@ void NeuralNoteMainView::_buildSettingsMenu()
     PopupMenu overflow_menu;
 
     for (const auto& [mode, label]:
-         {std::pair {MidiOverflowMode::ReuseChannels, "Reuse the last channels"},
-          std::pair {MidiOverflowMode::DropExtraInstruments, "Drop the extra instruments"}}) {
+         {std::pair {MidiOverflowMode::ReuseChannels, "Dùng lại các kênh cuối"},
+          std::pair {MidiOverflowMode::DropExtraInstruments, "Bỏ nhạc cụ vượt giới hạn"}}) {
         auto overflow_item = PopupMenu::Item(label);
         overflow_item.setID(++item_id);
         overflow_item.setEnabled(true);
@@ -358,14 +358,14 @@ void NeuralNoteMainView::_buildSettingsMenu()
         overflow_menu.addItem(overflow_item);
     }
 
-    mSettingsMenu->addSubMenu("MIDI export on channel overflow", overflow_menu);
+    mSettingsMenu->addSubMenu("Xuất MIDI khi hết kênh", overflow_menu);
 
 #if JUCE_WINDOWS
     mSettingsMenu->addSeparator();
 
     PopupMenu crash_menu;
 
-    auto crash_reports_item = PopupMenu::Item("Enable crash reports");
+    auto crash_reports_item = PopupMenu::Item("Bật báo cáo sự cố");
     crash_reports_item.setID(++item_id);
     crash_reports_item.setEnabled(true);
     mSettingsMenuItemsShouldBeTicked.emplace_back(crash_reports_item.itemID,
@@ -378,13 +378,13 @@ void NeuralNoteMainView::_buildSettingsMenu()
     });
     crash_menu.addItem(crash_reports_item);
 
-    auto open_crash_reports_item = PopupMenu::Item("Open crash reports folder");
+    auto open_crash_reports_item = PopupMenu::Item("Mở thư mục báo cáo sự cố");
     open_crash_reports_item.setID(++item_id);
     open_crash_reports_item.setEnabled(true);
     open_crash_reports_item.setAction([] { NNFileUtils::openDirectory(NNFileUtils::getCrashReportsDirectory()); });
     crash_menu.addItem(open_crash_reports_item);
 
-    mSettingsMenu->addSubMenu("Crash reports", crash_menu);
+    mSettingsMenu->addSubMenu("Báo cáo sự cố", crash_menu);
 #endif
 
     mSettingsMenu->addSeparator();
@@ -394,8 +394,8 @@ void NeuralNoteMainView::_buildSettingsMenu()
 
     for (const auto& [level, label]: {std::pair {NnLogger::Level::Debug, "Debug"},
                                       std::pair {NnLogger::Level::Info, "Info"},
-                                      std::pair {NnLogger::Level::Warning, "Warning"},
-                                      std::pair {NnLogger::Level::Error, "Error"}}) {
+                                      std::pair {NnLogger::Level::Warning, "Cảnh báo"},
+                                      std::pair {NnLogger::Level::Error, "Lỗi"}}) {
         auto level_item = PopupMenu::Item(label);
         level_item.setID(++item_id);
         level_item.setEnabled(true);
@@ -410,17 +410,17 @@ void NeuralNoteMainView::_buildSettingsMenu()
         log_level_menu.addItem(level_item);
     }
 
-    logs_menu.addSubMenu("Log level", log_level_menu);
+    logs_menu.addSubMenu("Mức ghi nhật ký", log_level_menu);
 
-    auto open_logs_item = PopupMenu::Item("Open logs folder");
+    auto open_logs_item = PopupMenu::Item("Mở thư mục nhật ký");
     open_logs_item.setID(++item_id);
     open_logs_item.setEnabled(true);
     open_logs_item.setAction([] { NNFileUtils::openDirectory(NNFileUtils::getLogsDirectory()); });
     logs_menu.addItem(open_logs_item);
 
-    mSettingsMenu->addSubMenu("Logs", logs_menu);
+    mSettingsMenu->addSubMenu("Nhật ký", logs_menu);
 
-    auto check_updates_item = PopupMenu::Item("Check for updates");
+    auto check_updates_item = PopupMenu::Item("Kiểm tra cập nhật");
     check_updates_item.setID(++item_id);
     check_updates_item.setEnabled(true);
     check_updates_item.setTicked(false);

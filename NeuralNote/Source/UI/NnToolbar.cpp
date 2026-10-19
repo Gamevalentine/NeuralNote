@@ -53,12 +53,12 @@ NnToolbar::NnToolbar(NeuralNoteAudioProcessor& inProcessor)
     addAndMakeVisible(*mTempoEditor);
 
     mExportButton.setIcon(nn::icons::folderStroked, NnFlatButton::IconStyle::stroked, 13.0f);
-    mExportButton.setLabel("Export MIDI out", nn::fonts::buttonLabel());
+    mExportButton.setLabel("Xuất MIDI", nn::fonts::buttonLabel());
     mExportButton.setPadding(12, 12, 7);
     mExportButton.setColour(NnFlatButton::backgroundColourId, nn::colours::bgControlAlt);
     mExportButton.setColour(NnFlatButton::iconColourId, nn::colours::textIconSoft);
     mExportButton.setColour(NnFlatButton::textColourId, nn::colours::textButton);
-    mExportButton.setTooltip("Write the transcribed MIDI to a file");
+    mExportButton.setTooltip("Lưu các nốt đã nhận diện thành tệp MIDI");
     mExportButton.setWantsKeyboardFocus(false);
     mExportButton.onClick = [this] { _exportMidiFile(); };
     addAndMakeVisible(mExportButton);
@@ -93,7 +93,7 @@ void NnToolbar::resized()
     place_right(mExportButton, mExportButton.getIdealWidth());
 
     const int label_width =
-        juce::roundToInt(std::ceil(nn::trackedTextWidth("EXPORT TEMPO", nn::fonts::pillLabel(), LABEL_TRACKING)));
+        juce::roundToInt(std::ceil(nn::trackedTextWidth("BPM XUẤT", nn::fonts::pillLabel(), LABEL_TRACKING)));
     const int tempo_width = 2 * PILL_PADDING + label_width + PILL_GAP + TEMPO_VALUE_WIDTH + PILL_GAP + SPINNER_WIDTH;
 
     mTempoPill = bounds.removeFromRight(tempo_width).withSizeKeepingCentre(tempo_width, button_height);
@@ -147,7 +147,7 @@ void NnToolbar::_exportMidiFile()
         NNFileUtils::getMidiExportFileName(mProcessor.getSourceAudioManager()->getDroppedFilename());
 
     mFileChooser = std::make_shared<juce::FileChooser>(
-        "Export MIDI", NNFileUtils::getDefaultMidiExportDirectory().getChildFile(filename), "*.mid");
+        "Xuất tệp MIDI", NNFileUtils::getDefaultMidiExportDirectory().getChildFile(filename), "*.mid");
 
     mFileChooser->launchAsync(
         juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting,
@@ -173,7 +173,7 @@ void NnToolbar::_exportMidiFile()
             if (!success) {
                 NnLogger::write(NnLogger::Level::Error, "NnToolbar: Could not write the MIDI file.");
                 juce::NativeMessageBox::showMessageBoxAsync(
-                    juce::MessageBoxIconType::NoIcon, "Error", "Could not write the MIDI file.");
+                    juce::MessageBoxIconType::NoIcon, "Lỗi", "Không thể lưu tệp MIDI.");
             }
         });
 }
@@ -220,7 +220,7 @@ void NnToolbar::_paintTempoPill(juce::Graphics& g) const
 
     g.setColour(nn::colours::textDim.withMultipliedAlpha(alpha));
     nn::drawTrackedText(
-        g, "EXPORT TEMPO", nn::fonts::pillLabel(), content.toFloat(), juce::Justification::centredLeft, LABEL_TRACKING);
+        g, "BPM XUẤT", nn::fonts::pillLabel(), content.toFloat(), juce::Justification::centredLeft, LABEL_TRACKING);
 
     // Stacked triangles rather than a spinner control: the value is typed, and these say the field
     // is a number without pretending to be a second way of setting it.

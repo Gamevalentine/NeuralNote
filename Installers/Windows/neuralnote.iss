@@ -27,11 +27,11 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 
 [Types]
-Name: "custom"; Description: "Custom Installation"; Flags: iscustom
+Name: "custom"; Description: "Cài đặt tùy chỉnh"; Flags: iscustom
 
 [Components]
-Name: "mainapp"; Description: "NOTIQ Standalone"; Types: custom; Flags: disablenouninstallwarning
-Name: "plugin"; Description: "NOTIQ VST3"; Types: custom; Flags: disablenouninstallwarning
+Name: "mainapp"; Description: "Ứng dụng NOTIQ độc lập"; Types: custom; Flags: disablenouninstallwarning
+Name: "plugin"; Description: "NOTIQ VST3 (plugin cho DAW)"; Types: custom; Flags: disablenouninstallwarning
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Components: mainapp; Flags: unchecked
@@ -60,7 +60,7 @@ begin
 
   DataDir := ExpandConstant('{userappdata}\NOTIQ');
   if DirExists(DataDir) and not UninstallSilent then
-    if MsgBox('Also delete NOTIQ''s downloaded models, recordings and settings?' + #13#10#13#10 + DataDir,
+    if MsgBox('Bạn có muốn xóa cả mô hình AI, bản ghi âm và cài đặt của NOTIQ không?' + #13#10#13#10 + DataDir,
               mbConfirmation, MB_YESNO) = IDYES then
       DelTree(DataDir, True, True, True);
 end;

@@ -14,7 +14,7 @@ MidiFileDrag::MidiFileDrag(NeuralNoteAudioProcessor* inProcessor)
     , mProcessor(inProcessor)
 {
     setIcon(nn::icons::downloadStroked, IconStyle::stroked, 13.0f);
-    setLabel("Drag MIDI out", nn::fonts::buttonLabel());
+    setLabel("Kéo MIDI ra", nn::fonts::buttonLabel());
     setPadding(12, 12, 7);
 
     // The one accent-outlined control in the window: this is the primary way a transcription
@@ -24,7 +24,7 @@ MidiFileDrag::MidiFileDrag(NeuralNoteAudioProcessor* inProcessor)
     setColour(iconColourId, nn::colours::accentText);
     setColour(textColourId, nn::colours::accentText);
 
-    setTooltip("Drag the transcribed MIDI into your DAW");
+    setTooltip("Kéo MIDI vào phần mềm phối nhạc của bạn");
 }
 
 MidiFileDrag::~MidiFileDrag()
@@ -45,7 +45,7 @@ void MidiFileDrag::mouseDown(const juce::MouseEvent& inEvent)
     if (!NNFileUtils::ensureDirectoryExists(mTempDirectory)) {
         NnLogger::write(NnLogger::Level::Error, "MidiFileDrag: Temporary directory for midi file failed.");
         juce::NativeMessageBox::showMessageBoxAsync(
-            juce::MessageBoxIconType::NoIcon, "Error", "Temporary directory for midi file failed.");
+            juce::MessageBoxIconType::NoIcon, "Lỗi", "Không thể tạo thư mục MIDI tạm.");
         return;
     }
 
@@ -65,7 +65,7 @@ void MidiFileDrag::mouseDown(const juce::MouseEvent& inEvent)
     if (!success) {
         NnLogger::write(NnLogger::Level::Error, "MidiFileDrag: Could not create the midi file.");
         juce::NativeMessageBox::showMessageBoxAsync(
-            juce::MessageBoxIconType::NoIcon, "Error", "Could not create the midi file.");
+            juce::MessageBoxIconType::NoIcon, "Lỗi", "Không thể tạo tệp MIDI.");
         return;
     }
 

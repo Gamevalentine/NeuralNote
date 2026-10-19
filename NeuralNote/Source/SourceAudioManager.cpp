@@ -163,7 +163,7 @@ void SourceAudioManager::startRecording()
         mProcessor->clear();
         NnLogger::write(NnLogger::Level::Error, "SourceAudioManager: File creation for recording failed.");
         NativeMessageBox::showMessageBoxAsync(
-            MessageBoxIconType::NoIcon, "Error", "File creation for recording failed.");
+            MessageBoxIconType::NoIcon, "Lỗi", "Không thể tạo tệp ghi âm.");
         return;
     }
 
@@ -249,7 +249,7 @@ void SourceAudioManager::stopRecording()
         mProcessor->clear();
         NnLogger::write(NnLogger::Level::Error, "SourceAudioManager: Could not load the recorded audio sample.");
         NativeMessageBox::showMessageBoxAsync(
-            MessageBoxIconType::NoIcon, "Could not load the recorded audio sample.", "");
+            MessageBoxIconType::NoIcon, "Không thể đọc bản ghi âm.", "");
         return;
     }
 
@@ -262,7 +262,7 @@ void SourceAudioManager::stopRecording()
         mProcessor->clear();
         NnLogger::write(NnLogger::Level::Error, "SourceAudioManager: Could not load the recorded audio sample.");
         NativeMessageBox::showMessageBoxAsync(
-            MessageBoxIconType::NoIcon, "Could not load the recorded audio sample.", "");
+            MessageBoxIconType::NoIcon, "Không thể đọc bản ghi âm.", "");
         return;
     }
 
@@ -299,8 +299,8 @@ bool SourceAudioManager::onFileDrop(const File& inFile)
                             "SourceAudioManager: Could not load the audio file (" + inFile.getFileExtension() + ").");
             NativeMessageBox::showMessageBoxAsync(
                 MessageBoxIconType::NoIcon,
-                "Could not load the audio file.",
-                "Check your file format (Accepted formats: .wav, .aiff, .flac, .mp3, .ogg).");
+                "Không thể mở tệp âm thanh.",
+                "Kiểm tra định dạng (.wav, .aiff, .flac, .mp3, .ogg).");
             return false;
         }
 

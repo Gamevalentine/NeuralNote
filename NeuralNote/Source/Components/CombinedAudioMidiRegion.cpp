@@ -105,8 +105,8 @@ void CombinedAudioMidiRegion::filesDropped(const StringArray& files, int x, int 
                             + juce::File(files[0]).getFileExtension() + ").");
         juce::NativeMessageBox::showMessageBoxAsync(
             juce::MessageBoxIconType::NoIcon,
-            "Could not load the file.",
-            "Check your file format (Accepted formats: " + supported_format_string + ").");
+            "Không thể mở tệp âm thanh.",
+            "Kiểm tra định dạng tệp (Hỗ trợ: " + supported_format_string + ").");
     }
 }
 

@@ -11,41 +11,41 @@ namespace NeuralNoteTooltips
 {
 // Controls
 
-const String record = "Record | r";
+const String record = "Thu âm | r";
 
-const String clear = "Clear transcription, then audio | Shift + Backspace\nDiscards a running transcription";
+const String clear = "Xóa nốt đã nhận diện, sau đó xóa âm thanh | Shift + Backspace\nHủy lượt nhận diện đang chạy";
 
-const String play_pause = "Play / Pause | Space";
+const String play_pause = "Phát / Tạm dừng | Space";
 
-const String back = "Go to start | Shift + Space";
+const String back = "Về đầu | Shift + Space";
 
-const String center = "Center playhead | c";
+const String center = "Đưa con trỏ vào giữa | c";
 
-const String loop = "Loop | l";
+const String loop = "Phát lặp | l";
 
-const String settings = "Settings";
+const String settings = "Cài đặt";
 
-const String mute = "Mute / Unmute input | m";
+const String mute = "Tắt / Bật tiếng đầu vào | m";
 
-const String pause_transcription = "Pause transcription. What is transcribed so far is kept";
+const String pause_transcription = "Tạm dừng nhận diện; các nốt đã tìm thấy vẫn được giữ";
 
-const String resume_transcription = "Resume transcription";
+const String resume_transcription = "Tiếp tục nhận diện";
 
-const String model = "Choose the transcription model, or download another";
+const String model = "Chọn mô hình AI hoặc tải mô hình khác";
 
-const String stop_model_download = "Stop the download. Starting it again resumes where it stopped";
+const String stop_model_download = "Dừng tải; có thể tiếp tục từ nơi đã dừng";
 
-const String transcribe = "Transcribe the loaded audio";
+const String transcribe = "Nhận diện nốt từ âm thanh đã tải";
 
-const String load_audio = "Load an audio file";
+const String load_audio = "Mở tệp âm thanh";
 
-const String add_instrument = "Restrict the transcription to chosen instruments";
+const String add_instrument = "Chỉ nhận diện các nhạc cụ đã chọn";
 
-const String export_tempo = "Set export tempo for midi file";
+const String export_tempo = "Chọn BPM của tệp MIDI xuất ra";
 
-const String source_audio_level = "Set source audio level";
+const String source_audio_level = "Điều chỉnh âm lượng âm thanh gốc";
 
-const String internal_synth_level = "Set internal synth level";
+const String internal_synth_level = "Điều chỉnh âm lượng MIDI";
 
 } // namespace NeuralNoteTooltips
 
