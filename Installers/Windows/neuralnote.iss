@@ -3,7 +3,7 @@
 #endif
 
 [Setup]
-; NOTIQ uses a distinct AppId to avoid overwriting any upstream NOTIQ installation.
+; NOTIQ uses a distinct AppId to avoid overwriting the original NeuralNote installation.
 AppId={{D9C4D7EC-4269-4500-A8B0-7B58AC8329BF}
 AppName=NOTIQ
 AppVersion=0.1.0
