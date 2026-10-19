@@ -50,7 +50,7 @@ void paintMasterPanel(juce::Graphics& g, juce::Rectangle<int> inBounds)
 
     g.setColour(nn::colours::textLabel);
     nn::drawTrackedText(g,
-                        "MASTER",
+                        "TỔNG",
                         nn::fonts::sectionHeader(),
                         label_row.toFloat(),
                         juce::Justification::centredLeft,
@@ -272,7 +272,7 @@ void Sidebar::_paintHeader(juce::Graphics& g, juce::Rectangle<int> inBounds) con
 
     g.setColour(nn::colours::textLabel);
     nn::drawTrackedText(
-        g, "INSTRUMENTS", nn::fonts::sectionHeader(), content, juce::Justification::centredLeft, HEADER_TRACKING);
+        g, "NHẠC CỤ", nn::fonts::sectionHeader(), content, juce::Justification::centredLeft, HEADER_TRACKING);
 
     g.setColour(nn::colours::textFainter);
     g.setFont(nn::fonts::mono(10.0f, 400));
