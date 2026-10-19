@@ -112,7 +112,7 @@ void StatusBar::paint(juce::Graphics& g)
     const InstrumentMixer* mixer = mProcessor.getInstrumentMixer();
     const auto num_instruments = static_cast<int>(mixer->getEntries().size());
 
-    juce::StringArray segments {juce::String(num_instruments) + (num_instruments == 1 ? " nhạc cụ" : " nhạc cụ"),
+    juce::StringArray segments {juce::String(num_instruments) + " nhạc cụ",
                                 juce::String(mixer->getTotalNoteCount()) + " nốt"};
 
     // The model that produced these notes, which need not be the one selected now.
