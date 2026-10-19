@@ -38,6 +38,8 @@ function App() {
   const audioEl = useRef<HTMLAudioElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const keyColumn = useRef<HTMLDivElement>(null);
+  const timelineViewport = useRef<HTMLDivElement>(null);
+  const [viewportWidth, setViewportWidth] = useState(1000);
   const audioCtx = useRef<AudioContext | null>(null);
   const firedNotes = useRef<Set<number>>(new Set());
   const previousTime = useRef(0);
@@ -50,13 +52,23 @@ function App() {
     if (selectionRef.current) URL.revokeObjectURL(selectionRef.current.url);
     if (audioCtx.current) void audioCtx.current.close().catch(() => undefined);
   }, []);
+  useEffect(() => {
+    const node = timelineViewport.current;
+    if (!node) return;
+    const measure = () => setViewportWidth(Math.max(1, Math.floor(node.clientWidth)));
+    measure();
+    const resizeObserver = new ResizeObserver(measure);
+    resizeObserver.observe(node);
+    return () => resizeObserver.disconnect();
+  }, []);
 
   const pitchBottom = Math.min(36, notes.length ? Math.max(21, Math.floor(Math.min(...notes.map(n => n.pitchMidi)) / 12) * 12) : 36);
   const pitchTop = Math.max(92, notes.length ? Math.min(108, Math.ceil(Math.max(...notes.map(n => n.pitchMidi)) / 12) * 12 + 11) : 92);
   const gridHeight = (pitchTop - pitchBottom + 1) * PITCH_ROW;
   const pitches = Array.from({ length: pitchTop - pitchBottom + 1 }, (_, i) => pitchTop - i);
   const totalSeconds = Math.max(1, info?.duration || 8);
-  const timelineWidth = Math.max(1000, Math.round(totalSeconds * 80 * zoom));
+  // Fill the available editor width on large monitors; allow horizontal scrolling when zoomed in.
+  const timelineWidth = Math.max(1000, viewportWidth, Math.round(totalSeconds * 80 * zoom));
   const activeGroups = useMemo(
     () => new Set(GROUPS.filter(g => !muted.has(g.id) && (!solo || solo === g.id)).map(g => g.id)),
     [muted, solo],
@@ -338,7 +350,7 @@ function App() {
               <div className="ruler-key-label">THỜI GIAN</div>
               {pitches.map(pitch => <button key={pitch} type="button" onClick={() => void oscPreview(pitch)} title={'Nghe nốt ' + noteName(pitch)} className={'key ' + ([1,3,6,8,10].includes(pitch%12) ? 'black' : 'white')}>{pitch % 12 === 0 ? noteName(pitch) : ''}</button>)}
             </div>
-            <div className="scroller" onScroll={event => { if (keyColumn.current) keyColumn.current.scrollTop = event.currentTarget.scrollTop; }}>
+            <div className="scroller" ref={timelineViewport} onScroll={event => { if (keyColumn.current) keyColumn.current.scrollTop = event.currentTarget.scrollTop; }}>
               <div className="timeline" style={{ width: timelineWidth }}>
                 <div className={'wave-panel ' + (dragging ? 'dragging' : '')} onDragOver={e => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDropFile}>
                   {peakBars.length ? (
