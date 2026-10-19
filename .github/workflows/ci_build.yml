@@ -38,7 +38,7 @@ jobs:
           TAG: ci-${{ github.run_number }}
         run: |
           gh release view "$TAG" > /dev/null 2>&1 || gh release create "$TAG" --draft --target "$GITHUB_SHA" \
-            --title "NeuralNote CI #$GITHUB_RUN_NUMBER" \
+            --title "NOTIQ CI #$GITHUB_RUN_NUMBER" \
             --notes "Built from \`$GITHUB_REF_NAME\` at $GITHUB_SHA by $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
 
   windows-x64:

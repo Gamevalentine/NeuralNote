@@ -29,7 +29,7 @@ namespace
     struct Store : juce::DeletedAtShutdown {
         // Declared first so that it outlives the file, which takes a pointer to it and uses it while
         // saving from its own destructor.
-        juce::InterProcessLock lock {"NeuralNoteGlobalSettings"};
+        juce::InterProcessLock lock {"NOTIQGlobalSettings"};
         juce::PropertiesFile file;
 
         Store()

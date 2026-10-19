@@ -63,8 +63,8 @@ UpdateCheck::UpdateCheck()
 
 juce::String UpdateCheck::_message() const
 {
-    return mUpdateAvailable ? "A new version of NeuralNote is available"
-                            : "You are on the latest version of NeuralNote";
+    return mUpdateAvailable ? "A new version of NOTIQ is available"
+                            : "You are on the latest version of NOTIQ";
 }
 
 juce::Rectangle<int> UpdateCheck::_panelBounds() const
@@ -144,7 +144,7 @@ void UpdateCheck::checkForUpdate(bool inShowNotificationOnLatestVersion)
         }
 
         juce::Thread::launch([safe_this, inShowNotificationOnLatestVersion] {
-            const juce::URL url("https://api.github.com/repos/DamRsn/NeuralNote/releases/latest");
+            const juce::URL url("https://api.github.com/repos/Gamevalentine/NeuralNote/releases/latest");
 
             const auto result = url.readEntireTextStream();
 
@@ -154,7 +154,7 @@ void UpdateCheck::checkForUpdate(bool inShowNotificationOnLatestVersion)
 
             auto json = juce::JSON::parse(result);
 
-            if (json.isObject()) {
+            if (json.isObject() && json.getProperty("tag_name", {}).toString().isNotEmpty()) {
                 const auto current_version = juce::String(JucePlugin_VersionString);
 
                 // Uncomment this line to test the new version available notification
@@ -174,8 +174,6 @@ void UpdateCheck::checkForUpdate(bool inShowNotificationOnLatestVersion)
                             safe_this->_showOnLatestVersionNotification();
                         }
                     });
-            } else {
-                jassertfalse;
             }
         });
     });

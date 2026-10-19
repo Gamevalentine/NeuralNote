@@ -14,7 +14,7 @@ namespace NNFileUtils
 juce::File getNeuralNoteDirectory()
 {
     return juce::File::getSpecialLocation(juce::File::SpecialLocationType::userApplicationDataDirectory)
-        .getChildFile("NeuralNote");
+        .getChildFile("NOTIQ");
 }
 
 juce::File getModelsDirectory()
@@ -44,7 +44,7 @@ juce::File getLogsDirectory()
 
 juce::File getMidiDragDirectory()
 {
-    return juce::File::getSpecialLocation(juce::File::SpecialLocationType::tempDirectory).getChildFile("neuralnote");
+    return juce::File::getSpecialLocation(juce::File::SpecialLocationType::tempDirectory).getChildFile("notiq");
 }
 
 juce::File getDefaultMidiExportDirectory()
@@ -130,7 +130,7 @@ juce::String getMidiExportFileName(const juce::String& inSourceAudioFileName)
         return "NNTranscription.mid";
     }
 
-    return inSourceAudioFileName + "_NNTranscription.mid";
+    return inSourceAudioFileName + "_NOTIQ.mid";
 }
 
 } // namespace NNFileUtils

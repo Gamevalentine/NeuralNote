@@ -3,25 +3,25 @@
 #endif
 
 [Setup]
-; Identifies the installation across versions; must never change.
-AppId={{C01E3C5A-F330-421C-94D7-6264FC93B676}
-AppName=NeuralNote
-AppVersion=2.1.0
-OutputBaseFilename=NeuralNote_Installer_Windows_x64
-DefaultDirName={commonpf}\NeuralNote
+; NOTIQ uses a distinct AppId to avoid overwriting the original NeuralNote installation.
+AppId={{D9C4D7EC-4269-4500-A8B0-7B58AC8329BF}
+AppName=NOTIQ
+AppVersion=0.1.0
+OutputBaseFilename=NOTIQ_Installer_Windows_x64
+DefaultDirName={commonpf}\NOTIQ
 DisableProgramGroupPage=yes
 InfoBeforeFile=..\readme.txt
 LicenseFile=..\license.txt
-AppPublisher=Dr. Audio
-AppPublisherURL=https://github.com/DamRsn/NeuralNote
-AppSupportURL=https://github.com/DamRsn/NeuralNote
-AppUpdatesURL=https://github.com/DamRsn/NeuralNote
+AppPublisher=LUNOR MUSIC
+AppPublisherURL=https://github.com/Gamevalentine/NeuralNote
+AppSupportURL=https://github.com/Gamevalentine/NeuralNote
+AppUpdatesURL=https://github.com/Gamevalentine/NeuralNote
 AlwaysShowComponentsList=yes
 Compression=lzma
 SolidCompression=yes
 DisableDirPage=yes
 SetupIconFile=..\..\NeuralNote\Assets\Logo\NeuralNote.ico
-UninstallDisplayIcon={app}\NeuralNote.exe
+UninstallDisplayIcon={app}\NOTIQ.exe
 AppCopyright=Copyright (c) 2026 Damien Ronssin
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -30,23 +30,21 @@ ArchitecturesInstallIn64BitMode=x64compatible
 Name: "custom"; Description: "Custom Installation"; Flags: iscustom
 
 [Components]
-Name: "mainapp"; Description: "NeuralNote Standalone"; Types: custom; Flags: disablenouninstallwarning
-Name: "plugin"; Description: "NeuralNote VST3"; Types: custom; Flags: disablenouninstallwarning
+Name: "mainapp"; Description: "NOTIQ Standalone"; Types: custom; Flags: disablenouninstallwarning
+Name: "plugin"; Description: "NOTIQ VST3"; Types: custom; Flags: disablenouninstallwarning
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Components: mainapp; Flags: unchecked
 
-[InstallDelete]
-; v1 installed the 32-bit way, into Program Files (x86), without an uninstaller.
-Type: filesandordirs; Name: "{commonpf32}\NeuralNote"
+; Do not delete any existing NeuralNote installation or user data.
 
 [Files]
-Source: "..\..\{#ReleaseDir}\Standalone\NeuralNote.exe"; DestDir: "{app}"; Components:mainapp; Flags: ignoreversion recursesubdirs;
-Source: "..\..\{#ReleaseDir}\VST3\NeuralNote.vst3\*"; DestDir: "{commoncf}\VST3\NeuralNote.vst3"; Components:plugin; Flags: ignoreversion recursesubdirs;
+Source: "..\..\{#ReleaseDir}\Standalone\NOTIQ.exe"; DestDir: "{app}"; Components:mainapp; Flags: ignoreversion recursesubdirs;
+Source: "..\..\{#ReleaseDir}\VST3\NOTIQ.vst3\*"; DestDir: "{commoncf}\VST3\NOTIQ.vst3"; Components:plugin; Flags: ignoreversion recursesubdirs;
 
 [Icons]
-Name: "{autoprograms}\NeuralNote"; Filename: "{app}\NeuralNote.exe"; Components: mainapp
-Name: "{autodesktop}\NeuralNote"; Filename: "{app}\NeuralNote.exe"; Tasks: desktopicon
+Name: "{autoprograms}\NOTIQ"; Filename: "{app}\NOTIQ.exe"; Components: mainapp
+Name: "{autodesktop}\NOTIQ"; Filename: "{app}\NOTIQ.exe"; Tasks: desktopicon
 
 [Code]
 // Models, recordings and settings live in the user's profile, not in {app}. Only the profile
@@ -58,11 +56,11 @@ begin
   if CurUninstallStep <> usPostUninstall then
     Exit;
 
-  DelTree(AddBackslash(GetTempDir) + 'neuralnote', True, True, True);
+  DelTree(AddBackslash(GetTempDir) + 'notiq', True, True, True);
 
-  DataDir := ExpandConstant('{userappdata}\NeuralNote');
+  DataDir := ExpandConstant('{userappdata}\NOTIQ');
   if DirExists(DataDir) and not UninstallSilent then
-    if MsgBox('Also delete NeuralNote''s downloaded models, recordings and settings?' + #13#10#13#10 + DataDir,
+    if MsgBox('Also delete NOTIQ''s downloaded models, recordings and settings?' + #13#10#13#10 + DataDir,
               mbConfirmation, MB_YESNO) = IDYES then
       DelTree(DataDir, True, True, True);
 end;
