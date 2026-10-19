@@ -14,3 +14,19 @@
 .menu-trigger:hover,.menu-trigger.active{background:#2d3140;color:#fff;border-color:#424a60}
 .menu-trigger.active{box-shadow:inset 0 -2px 0 #a49af9}
 .menu-dropdown{position:fixed;z-index:9999;width:266px;max-width:calc(100vw - 16px);max-height:calc(100vh - 65px);overflow-y:auto;background:#20242d;border:1px solid #475064;border-radius:7px;padding:6px;box-shadow:0 15px 45px #000b}
+
+.menu-command{display:flex;align-items:center;gap:8px;width:100%;min-height:35px;text-align:left;padding:6px 8px;border:0;border-radius:4px;color:#e0e5ef;background:transparent;font-size:12px}
+.menu-command:hover:not(:disabled){background:#343c53;color:#fff}
+.menu-command:disabled{opacity:.35}
+.menu-checked{width:13px;flex:none;color:#ad9fff;font-size:14px;font-weight:800}
+.menu-command-name{flex:1;min-width:0}
+.menu-shortcut{color:#77859a;font-size:10px}
+.menu-settings{display:flex;flex-direction:column;gap:7px;padding:11px 10px 7px;margin-top:5px;border-top:1px solid #343c4b;color:#9facbf;font-size:11px}
+.menu-settings input[type=range]{width:100%;accent-color:#aba0ff}
+.menu-settings select,.menu-settings input[type=number]{width:100%;height:30px;background:#181d27;border:1px solid #3e485e;border-radius:5px;color:#edf1fa;padding:5px 8px;font-size:12px}
+.menu-settings small{color:#8c97b2}
+.menu-note{border-top:1px solid #363e4e;color:#96a2b7;line-height:1.55;font-size:10px;margin:5px 0 0;padding:11px 9px 6px}
+.os-actions{flex:none;margin-left:auto;gap:17px;white-space:nowrap}
+.os-settings{padding:5px}
+.settings-popup{top:47px}
+.compact-clock{color:#a1aac1;font-family:ui-monospace,Consolas,monospace;font-size:11px;white-space:nowrap}
