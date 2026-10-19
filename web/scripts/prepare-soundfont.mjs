@@ -13,3 +13,6 @@ if (!existsSync(built)) {
   });
   if (task.error || task.status !== 0) throw new Error('SoundFont source download or verification failed.');
 }
+const worker = resolve(root, 'node_modules/spessasynth_lib/dist/spessasynth_processor.min.js');
+if (!existsSync(worker)) throw new Error('Missing SpessaSynth audio worklet.');
+copyFileSync(built, resolve(dest, 'NeuralNote_GM.sf3'));
