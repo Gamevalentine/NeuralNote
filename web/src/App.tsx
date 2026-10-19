@@ -3,14 +3,16 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent } from 'react';
 import { AudioWaveform, ChevronDown, CircleHelp, Download, FileAudio2, FolderOpen,
   Gauge, Headphones, Info, LoaderCircle, Music, Pause, Play, RotateCcw,
-  Settings2, SkipBack, Sparkles, Square, Upload, Volume2,
-  X, ZoomIn, ZoomOut } from 'lucide-react';
+  Settings2, Sparkles, Upload, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { fmt, generateDemo, groupFor, GROUPS, makeMidi, noteName, readAudio, transcribe } from './audio';
 import type { Note, AudioInfo, PitchGroup } from './audio';
 
 type Selection = { file: Blob; name: string; url: string };
 type Phase = 'empty' | 'ready' | 'analyzing' | 'complete' | 'error';
 type PlaybackMode = 'original' | 'midi' | 'mix';
+type MenuKey = 'file' | 'edit' | 'play' | 'track' | 'instrument' | 'tools' | 'view' | 'export';
+type MenuAction = { label: string; run: () => void; disabled?: boolean; checked?: boolean; shortcut?: string };
+type AppMenu = { id: MenuKey; label: string; commands: MenuAction[] };
 const PITCH_ROW = 16;
 const midiColor = (pitch: number) => GROUPS.find(group => group.id === groupFor(pitch))?.color || '#59bfa3';
 
@@ -34,9 +36,12 @@ function App() {
   const [gain, setGain] = useState<Record<PitchGroup, number>>({ high: 0.7, mid: 0.7, low: 0.7 });
   const [masterVolume, setMasterVolume] = useState(0.65);
   const [showSettings, setShowSettings] = useState(false);
+  const [activeMenu, setActiveMenu] = useState<MenuKey | null>(null);
+  const [menuPosition, setMenuPosition] = useState({ left: 0, top: 43 });
   const [dragging, setDragging] = useState(false);
   const audioEl = useRef<HTMLAudioElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const menuRef = useRef<HTMLElement>(null);
   const keyColumn = useRef<HTMLDivElement>(null);
   const timelineViewport = useRef<HTMLDivElement>(null);
   const [viewportWidth, setViewportWidth] = useState(1000);
@@ -51,6 +56,17 @@ function App() {
   useEffect(() => () => {
     if (selectionRef.current) URL.revokeObjectURL(selectionRef.current.url);
     if (audioCtx.current) void audioCtx.current.close().catch(() => undefined);
+  }, []);
+  useEffect(() => {
+    const onOutside = (event: PointerEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) setActiveMenu(null);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { setActiveMenu(null); setShowSettings(false); }
+    };
+    document.addEventListener('pointerdown', onOutside);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('pointerdown', onOutside); document.removeEventListener('keydown', onKey); };
   }, []);
   useEffect(() => {
     const node = timelineViewport.current;
@@ -264,6 +280,75 @@ function App() {
       void setAudio(file, file.name);
     }
   };
+
+  const menus: AppMenu[] = [
+    {
+      id: 'file', label: 'Tệp', commands: [
+        { label: 'Mở âm thanh…', run: () => fileInput.current?.click(), disabled: busyLoading || phase === 'analyzing' },
+        { label: 'Dùng nhạc mẫu', run: () => void setAudio(generateDemo(), 'NOTIQ - giai điệu mẫu.wav'), disabled: busyLoading || phase === 'analyzing' },
+        { label: 'Đóng tệp đang mở', run: reset, disabled: !selection || phase === 'analyzing' },
+      ],
+    },
+    {
+      id: 'edit', label: 'Chỉnh sửa', commands: [
+        { label: 'Xóa kết quả nhận diện', run: () => { setNotes([]); setPhase(selection ? 'ready' : 'empty'); setStatus('Đã xóa kết quả MIDI'); firedNotes.current.clear(); }, disabled: notes.length === 0 || phase === 'analyzing' },
+        { label: 'Về đầu bản nhạc', run: () => seekTo(0), disabled: !info },
+      ],
+    },
+    {
+      id: 'play', label: 'Phát lại', commands: [
+        { label: playing ? 'Tạm dừng' : 'Phát', run: () => void togglePlayback(), disabled: !info, shortcut: 'Space' },
+        { label: 'Dừng và về đầu', run: stop, disabled: !info },
+        { label: 'Phát lặp', run: () => setLoop(v => !v), checked: loop },
+      ],
+    },
+    {
+      id: 'track', label: 'Track MIDI', commands: [
+        { label: 'Bật tất cả dải nốt', run: () => { setMuted(new Set()); setSolo(null); } },
+        { label: 'Tắt tiếng tất cả', run: () => { setMuted(new Set(GROUPS.map(g => g.id))); setSolo(null); } },
+        ...GROUPS.map(group => ({
+          label: 'Bật/tắt ' + group.name.toLowerCase(),
+          run: () => toggleMute(group.id),
+          checked: !muted.has(group.id),
+        })),
+      ],
+    },
+    {
+      id: 'instrument', label: 'Nhạc cụ', commands: [
+        ...GROUPS.map(group => ({
+          label: 'Chỉ nghe ' + group.name.toLowerCase(),
+          run: () => setSolo(solo === group.id ? null : group.id),
+          checked: solo === group.id,
+        })),
+        { label: 'Thông tin AI nhận diện', run: () => setShowSettings(true) },
+      ],
+    },
+    {
+      id: 'tools', label: 'Công cụ', commands: [
+        { label: phase === 'analyzing' ? 'Đang nhận diện…' : 'Nhận diện Audio → MIDI', run: () => void startInference(), disabled: !selection || phase === 'analyzing' },
+        { label: 'Cài đặt NOTIQ', run: () => setShowSettings(true) },
+      ],
+    },
+    {
+      id: 'view', label: 'Hiển thị', commands: [
+        { label: 'Phóng to timeline', run: () => setZoom(z => Math.min(4, z * 1.25)) },
+        { label: 'Thu nhỏ timeline', run: () => setZoom(z => Math.max(0.5, z / 1.25)) },
+        { label: 'Trở về 100%', run: () => setZoom(1) },
+      ],
+    },
+    {
+      id: 'export', label: 'Xuất', commands: [
+        { label: 'Xuất MIDI (.mid)', run: exportFile, disabled: !visibleNotes.length },
+      ],
+    },
+  ];
+  const toggleMenu = (key: MenuKey, node: HTMLButtonElement) => {
+    const rect = node.getBoundingClientRect();
+    setMenuPosition({ left: Math.max(8, Math.min(rect.left, window.innerWidth - 276)), top: rect.bottom + 2 });
+    setActiveMenu(previous => previous === key ? null : key);
+    setShowSettings(false);
+  };
+
   return (
     <main className="notiq-app">
       <audio
@@ -279,38 +364,59 @@ function App() {
           } else setPlaying(false);
         }}
       />
-      <div className="osbar">
-        <span className="os-title"><AudioWaveform size={17} /> <strong>NOTIQ</strong> <b>WEB STUDIO</b></span>
+
+      <header className="osbar" ref={menuRef}>
+        <span className="os-title"><AudioWaveform size={17} /> <strong>NOTIQ</strong><b>WEB STUDIO</b></span>
+        <nav className="app-menu-items" aria-label="Menu chính">
+          {menus.map(menu => (
+            <div className="menu-slot" key={menu.id}>
+              <button type="button" className={'menu-trigger' + (activeMenu === menu.id ? ' active' : '')}
+                aria-expanded={activeMenu === menu.id} aria-haspopup="true"
+                onClick={event => toggleMenu(menu.id, event.currentTarget)}>
+                {menu.label}
+              </button>
+              {activeMenu === menu.id && (
+                <div className="menu-dropdown" role="group" aria-label={menu.label} style={{ left: menuPosition.left, top: menuPosition.top }}>
+                  {menu.commands.map(command => (
+                    <button key={command.label} type="button" className="menu-command"
+                      disabled={command.disabled} onClick={() => { command.run(); setActiveMenu(null); }}>
+                      <span className="menu-checked">{command.checked ? '✓' : ''}</span>
+                      <span className="menu-command-name">{command.label}</span>
+                      {command.shortcut && <span className="menu-shortcut">{command.shortcut}</span>}
+                    </button>
+                  ))}
+                  {menu.id === 'play' && (
+                    <div className="menu-settings">
+                      <label htmlFor="playmode-menu">Chế độ nghe</label>
+                      <select id="playmode-menu" value={playbackMode} onChange={event => setPlaybackMode(event.target.value as PlaybackMode)}>
+                        <option value="mix">Âm gốc + MIDI</option>
+                        <option value="original">Chỉ âm gốc</option>
+                        <option value="midi">Chỉ MIDI</option>
+                      </select>
+                      <label htmlFor="volume-menu">Âm lượng {Math.round(masterVolume * 100)}%</label>
+                      <input id="volume-menu" type="range" min={0} max={1} step={0.01} value={masterVolume} onChange={event => setMasterVolume(Number(event.target.value))}/>
+                    </div>
+                  )}
+                  {menu.id === 'tools' && (
+                    <div className="menu-settings menu-settings-row">
+                      <label htmlFor="bpm-menu">BPM xuất MIDI</label>
+                      <input id="bpm-menu" type="number" min={40} max={240} value={bpm} onChange={event => setBpm(Math.min(240, Math.max(40, Number(event.target.value) || 120)))}/>
+                      <small>AI: Spotify Basic Pitch</small>
+                    </div>
+                  )}
+                  {menu.id === 'instrument' && <p className="menu-note">Các mục này chỉ lọc dải cao độ. AI chưa phân loại Piano, Guitar hay Drums.</p>}
+                  {menu.id === 'export' && <p className="menu-note">Xuất các nốt đã nhận diện thành tệp MIDI.</p>}
+                </div>
+              )}
+            </div>
+          ))}
+        </nav>
         <div className="os-actions">
           <span className="lunor">LUNOR <b>MUSIC</b></span>
           <a href="https://github.com/Gamevalentine/NeuralNote" target="_blank" rel="noreferrer">Mã nguồn ↗</a>
-          <button className="os-settings" onClick={() => setShowSettings(!showSettings)} title="Cài đặt" aria-label="Cài đặt"><Settings2 size={16} /></button>
+          <button type="button" className="os-settings" onClick={() => { setActiveMenu(null); setShowSettings(!showSettings); }} title="Cài đặt" aria-label="Cài đặt"><Settings2 size={16} /></button>
         </div>
-      </div>
-      <div className="transport" role="toolbar" aria-label="Thanh công cụ NOTIQ">
-        <div className="transport-buttons">
-          <button title="Về đầu" onClick={() => seekTo(0)} disabled={!info}><SkipBack size={16} /></button>
-          <button title={playing ? 'Tạm dừng' : 'Phát'} onClick={togglePlayback} disabled={!info} className="transport-play">{playing ? <Pause size={17} fill="currentColor" /> : <Play size={17} fill="currentColor" />}</button>
-          <button title="Dừng" onClick={stop} disabled={!info}><Square size={12} fill="currentColor" /></button>
-          <button title="Phát lặp" className={loop ? 'is-active' : ''} onClick={() => setLoop(!loop)}><RotateCcw size={17} /></button>
-        </div>
-        <div className="transport-time"><strong>{fmt(time)}</strong><span>/ {fmt(info?.duration || 0)}</span></div>
-        <div className="model-token"><Sparkles size={15} /><span>AI: BASIC PITCH</span></div>
-        <div className="transport-select">
-          <label htmlFor="playmode">NGHE</label>
-          <div className="select-wrap"><select id="playmode" value={playbackMode} onChange={event => setPlaybackMode(event.target.value as PlaybackMode)}><option value="mix">Gốc + MIDI</option><option value="original">Âm gốc</option><option value="midi">MIDI</option></select><ChevronDown size={12} /></div>
-        </div>
-        <div className="master-output"><Volume2 size={17} /><input aria-label="Âm lượng chung" type="range" value={masterVolume} min={0} max={1} step={0.01} onChange={e => setMasterVolume(Number(e.target.value))} /></div>
-        <div className="toolbar-separator" aria-hidden="true" />
-        <div className="toolbar-actions">
-          {selection && <span className="toolbar-file" title={selection.name}><FileAudio2 size={15} /><span>{selection.name}</span><button type="button" className="remove-file" onClick={reset} title="Xóa tệp đang mở" aria-label="Xóa tệp đang mở" disabled={phase === 'analyzing'}><X size={14}/></button></span>}
-          <button className="action-outline" onClick={() => fileInput.current?.click()} disabled={busyLoading || phase === 'analyzing'}><FolderOpen size={15}/> Mở tệp</button>
-          <button className="action-outline" onClick={() => void setAudio(generateDemo(), 'NOTIQ - giai điệu mẫu.wav')} disabled={busyLoading || phase === 'analyzing'}><Music size={15}/> Nhạc mẫu</button>
-          <label className="tempo-chip">BPM <input type="number" min={40} max={240} value={bpm} onChange={e => setBpm(Math.min(240, Math.max(40, Number(e.target.value) || 120)))} /></label>
-          <button className="primary-action" onClick={startInference} disabled={!selection || phase === 'analyzing'}>{phase === 'analyzing' ? <LoaderCircle className="spin" size={15}/> : <Sparkles size={15}/>} {phase === 'analyzing' ? 'Đang nhận diện' : 'Nhận diện'}</button>
-          <button className="export-action" onClick={exportFile} disabled={!visibleNotes.length}><Download size={15}/> Xuất MIDI</button>
-        </div>
-      </div>
+      </header>
       {showSettings && <div className="settings-popup">
         <div className="popup-head"><strong><Gauge size={17} /> Tùy chọn NOTIQ</strong><button aria-label="Đóng" onClick={() => setShowSettings(false)}><X size={16} /></button></div>
         <label>Tempo xuất MIDI (BPM)<input type="number" min={40} max={240} value={bpm} onChange={e => setBpm(Math.min(240, Math.max(40, Number(e.target.value) || 120)))} /></label>
