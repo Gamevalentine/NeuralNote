@@ -1,0 +1,10 @@
+{
+  "app": "NOTIQ Web Studio",
+  "version": "0.2.0",
+  "target_host": "Cloudflare Pages",
+  "source_repository": "Gamevalentine/NeuralNote",
+  "source_branch": "feature/notiq-web-neuralnote-layout",
+  "engine": "Spotify Basic Pitch",
+  "engine_note": "MuScriptor desktop not yet available in browser",
+  "build_marker": "cloudflare-git-autodeploy-2026-10-19"
+}
