@@ -220,21 +220,21 @@ void TranscriptionManager::_handleFinishedJob()
     }
 
     if (mJobOutcome == Outcome::Failed) {
-        String message = reason.isEmpty() ? String("The transcription model could not be loaded or run.")
-                                          : "The transcription model could not be loaded or run: " + reason + ".";
+        String message = reason.isEmpty() ? String("Không thể tải hoặc chạy mô hình nhận diện.")
+                                          : "Không thể tải hoặc chạy mô hình nhận diện: " + reason + ".";
 
         if (keep) {
-            message += " What was transcribed so far is kept, and can be resumed.";
+            message += " Các nốt đã nhận diện vẫn được giữ và có thể tiếp tục.";
         }
 
-        NativeMessageBox::showMessageBoxAsync(MessageBoxIconType::NoIcon, "Transcription failed.", message);
+        NativeMessageBox::showMessageBoxAsync(MessageBoxIconType::NoIcon, "Nhận diện thất bại.", message);
     }
 
     if (mJobOutcome == Outcome::CannotResume) {
         NativeMessageBox::showMessageBoxAsync(MessageBoxIconType::NoIcon,
-                                              "Transcription could not be resumed.",
-                                              "The paused transcription does not match the loaded audio. "
-                                              "Transcribe again to start over.");
+                                              "Không thể tiếp tục nhận diện.",
+                                              "Dữ liệu nhận diện đang tạm dừng không khớp tệp âm thanh hiện tại. "
+                                              "Hãy chạy nhận diện mới để bắt đầu lại.");
     }
 }
 
@@ -438,11 +438,11 @@ void TranscriptionManager::resumeTranscription()
 
     // Another checkpoint would continue another model's transcription.
     if (!NNFileUtils::isModelInstalled(*mTranscriptionModelSize)) {
-        const String message = "This transcription was started with the "
+        const String message = "Lượt nhận diện này đã dùng mô hình "
                                + String(modelSizeToDisplayName(*mTranscriptionModelSize))
-                               + " model. Download it from the model menu to resume.";
+                               + " . Hãy tải mô hình này trong menu AI để tiếp tục.";
         NnLogger::write(NnLogger::Level::Warning, "TranscriptionManager: Model not installed. " + message);
-        NativeMessageBox::showMessageBoxAsync(MessageBoxIconType::NoIcon, "Model not installed.", message);
+        NativeMessageBox::showMessageBoxAsync(MessageBoxIconType::NoIcon, "Chưa cài mô hình AI.", message);
         return;
     }
 
