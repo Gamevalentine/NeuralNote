@@ -2,3 +2,15 @@
 .app-menu-items{display:flex;flex:1}
 .menu-trigger{background:transparent;color:#ddd;border:0;padding:9px}
 .menu-dropdown{position:fixed;background:#20242d;z-index:9999}
+
+.osbar{height:44px;min-height:44px;max-height:44px;gap:14px;padding:0 14px;background:#171a21;position:relative;z-index:110}
+.os-title{display:flex;align-items:center;flex:none;gap:8px;white-space:nowrap}
+.os-title strong{font-size:16px;letter-spacing:1px}
+.os-title b{font-size:9px;padding:3px 6px}
+.app-menu-items{display:flex;align-items:center;align-self:stretch;flex:1;min-width:0;gap:1px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+.app-menu-items::-webkit-scrollbar{display:none}
+.menu-slot{display:flex;align-items:center;flex:none}
+.menu-trigger{height:36px;min-height:36px;padding:0 11px;background:transparent;border:1px solid transparent;border-radius:4px;color:#e0e4f1;font-size:12px;font-weight:500;white-space:nowrap}
+.menu-trigger:hover,.menu-trigger.active{background:#2d3140;color:#fff;border-color:#424a60}
+.menu-trigger.active{box-shadow:inset 0 -2px 0 #a49af9}
+.menu-dropdown{position:fixed;z-index:9999;width:266px;max-width:calc(100vw - 16px);max-height:calc(100vh - 65px);overflow-y:auto;background:#20242d;border:1px solid #475064;border-radius:7px;padding:6px;box-shadow:0 15px 45px #000b}
