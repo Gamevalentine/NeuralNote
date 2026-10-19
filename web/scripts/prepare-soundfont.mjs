@@ -16,3 +16,10 @@ if (!existsSync(built)) {
 const worker = resolve(root, 'node_modules/spessasynth_lib/dist/spessasynth_processor.min.js');
 if (!existsSync(worker)) throw new Error('Missing SpessaSynth audio worklet.');
 copyFileSync(built, resolve(dest, 'NeuralNote_GM.sf3'));
+for (const name of ['MuseScore_General_License.md', 'FluidR3Mono_License.md']) {
+  const src = resolve(output, name);
+  if (!existsSync(src)) throw new Error('Missing license: '+name);
+  copyFileSync(src, resolve(dest, name));
+}
+copyFileSync(worker, resolve(root, 'public/spessasynth_processor.min.js'));
+console.log('SoundFont prepared.');
