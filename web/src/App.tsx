@@ -182,6 +182,11 @@ function App() {
       setPlaying(false);
     } else {
       try {
+        if (playbackMode !== 'original') {
+          const synth = audioCtx.current || new AudioContext();
+          audioCtx.current = synth;
+          await synth.resume();
+        }
         firedNotes.current.clear();
         await audio.play();
         setPlaying(true);
