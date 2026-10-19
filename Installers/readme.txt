@@ -1,13 +1,11 @@
-You're about to install NOTIQ on your computer.
+Bạn chuẩn bị cài đặt NOTIQ trên máy tính.
 
-NOTIQ is an audio-to-MIDI plugin that uses MuScriptor, a Kyutai/Mirelo neural network, for transcription.
+NOTIQ thuộc hệ sinh thái LUNOR MUSIC, phát triển từ mã nguồn NeuralNote của Damien Ronssin theo giấy phép Apache-2.0.
 
-Everything in NOTIQ runs locally on your computer. No audio data is sent to any server, and NOTIQ does not collect any data from you.
+NOTIQ sử dụng mô hình MuScriptor của Kyutai/Mirelo để chuyển âm thanh thành nốt MIDI. Âm thanh được xử lý trực tiếp trên máy của bạn; NOTIQ không tải bản nhạc lên máy chủ.
 
-For more information about NOTIQ, to report issues, request features, contribute, or download the source code, visit:
-- https://github.com/Gamevalentine/NeuralNote
+Mã nguồn NOTIQ: https://github.com/Gamevalentine/NeuralNote
+Mã nguồn NeuralNote gốc: https://github.com/DamRsn/NeuralNote
+Thông tin mô hình MuScriptor: https://kyutai.org/blog/2026-07-10-muscriptor/
 
-For more information about MuScriptor, visit:
-- https://kyutai.org/blog/2026-07-10-muscriptor/
-NOTIQ is based on NeuralNote by Damien Ronssin. Original project: https://github.com/DamRsn/NeuralNote
-The MuScriptor model weights are under CC BY-NC 4.0; non-commercial use only unless separately licensed.
+QUAN TRỌNG: Trọng số AI MuScriptor được cấp phép theo CC BY-NC 4.0, chỉ cho phép sử dụng phi thương mại nếu không có giấy phép riêng. Việc cài đặt bản này không thay thế giấy phép của JUCE, VST3 và các thành phần bên thứ ba.
