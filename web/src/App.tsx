@@ -1,9 +1,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent } from 'react';
-import { AudioWaveform, ChevronDown, CircleHelp, Download, FileAudio2, FolderOpen,
-  Gauge, Headphones, Info, LoaderCircle, Music, Pause, Play, RotateCcw,
-  Settings2, Sparkles, Upload, X, ZoomIn, ZoomOut } from 'lucide-react';
+import { AudioWaveform, CircleHelp, Gauge, Headphones, Info, LoaderCircle,
+  Music, Settings2, Upload, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { fmt, generateDemo, groupFor, GROUPS, makeMidi, noteName, readAudio, transcribe } from './audio';
 import type { Note, AudioInfo, PitchGroup } from './audio';
 
@@ -297,7 +296,7 @@ function App() {
     },
     {
       id: 'play', label: 'Phát lại', commands: [
-        { label: playing ? 'Tạm dừng' : 'Phát', run: () => void togglePlayback(), disabled: !info, shortcut: 'Space' },
+        { label: playing ? 'Tạm dừng' : 'Phát', run: () => void togglePlayback(), disabled: !info },
         { label: 'Dừng và về đầu', run: stop, disabled: !info },
         { label: 'Phát lặp', run: () => setLoop(v => !v), checked: loop },
       ],
@@ -493,6 +492,7 @@ function App() {
             <span>{status}</span>
             {phase === 'analyzing' && <div className="progress-track"><div style={{width: progress+'%'}}/></div>}
             <span>{phase === 'analyzing' ? progress+'%' : summary}</span>
+            <span className="compact-clock">{fmt(time)} / {fmt(info?.duration || 0)}</span>
             <div className="zoom-controls"><button onClick={()=>setZoom(Math.max(0.5,zoom/1.25))} title="Thu nhỏ"><ZoomOut size={15}/></button><span>{Math.round(zoom*100)}%</span><button onClick={()=>setZoom(Math.min(4,zoom*1.25))} title="Phóng to"><ZoomIn size={15}/></button></div>
           </div>
           {error && <div className="error-banner" role="alert"><Info size={15}/>{error}<button aria-label="Đóng lỗi" onClick={()=>setError('')}><X size={15}/></button></div>}
