@@ -4,7 +4,7 @@ set -euo pipefail
 
 # First argument gives the path to the dir containing the Standalone, AU and VST3 subdirectories.
 # Typically cmake-build-release/NeuralNote_artefacts/Release or build/NeuralNote_artefacts/Release
-# The optional second one is the installer's file name, NeuralNote_Installer_Mac_<arm64|x64>.pkg by default.
+# The optional second one is the installer's file name, NOTIQ_Installer_Mac_<arm64|x64>.pkg by default.
 PLUG_DIR=${1:-}
 PKG_NAME=${2:-}
 
@@ -12,7 +12,7 @@ if [[ $# -eq 0 ]]; then
 	>&2 echo "usage: $0 <release_dir> [installer_name.pkg]"; exit 1
 fi
 
-for dir in "$PLUG_DIR"/{Standalone/NeuralNote.app,AU/NeuralNote.component,VST3/NeuralNote.vst3}; do
+for dir in "$PLUG_DIR"/{Standalone/NOTIQ.app,AU/NOTIQ.component,VST3/NOTIQ.vst3}; do
 	if ! test -d "$dir"; then
 		>&2 echo "Could not find $dir"
 		exit 1
@@ -25,16 +25,16 @@ for dir in "$PLUG_DIR"/{Standalone/NeuralNote.app,AU/NeuralNote.component,VST3/N
 	fi
 done
 
-ARCH=$(lipo -archs "$PLUG_DIR"/Standalone/NeuralNote.app/Contents/MacOS/NeuralNote)
-for dir in "$PLUG_DIR"/{AU/NeuralNote.component,VST3/NeuralNote.vst3}; do
-	if [[ "$(lipo -archs "$dir/Contents/MacOS/NeuralNote")" != "$ARCH" ]]; then
+ARCH=$(lipo -archs "$PLUG_DIR"/Standalone/NOTIQ.app/Contents/MacOS/NOTIQ)
+for dir in "$PLUG_DIR"/{AU/NOTIQ.component,VST3/NOTIQ.vst3}; do
+	if [[ "$(lipo -archs "$dir/Contents/MacOS/NOTIQ")" != "$ARCH" ]]; then
 		>&2 echo "$dir is not built for $ARCH like the Standalone"
 		exit 1
 	fi
 done
 
 # x64, as the release assets spell it.
-PKG_NAME=${PKG_NAME:-NeuralNote_Installer_Mac_${ARCH/x86_64/x64}.pkg}
+PKG_NAME=${PKG_NAME:-NOTIQ_Installer_Mac_${ARCH/x86_64/x64}.pkg}
 if [[ "$PKG_NAME" != *.pkg || "$PKG_NAME" == */* ]]; then
 	>&2 echo "The installer name must be a file name ending in .pkg: $PKG_NAME"
 	exit 1
@@ -76,13 +76,13 @@ if test -z "$APPLE_APP_PASSWORD"; then
 	echo
 fi
 
-chmod +x "$PLUG_DIR"/{Standalone/NeuralNote.app,AU/NeuralNote.component,VST3/NeuralNote.vst3}/Contents/MacOS/NeuralNote
+chmod +x "$PLUG_DIR"/{Standalone/NOTIQ.app,AU/NOTIQ.component,VST3/NOTIQ.vst3}/Contents/MacOS/NOTIQ
 
 # Crash reports are read against the dSYMs, so each must match its binary before the binary is
 # stripped, and they are kept beside the installer.
 echo "Stripping Standalone, AU and VST3"
-for bundle in Standalone/NeuralNote.app AU/NeuralNote.component VST3/NeuralNote.vst3; do
-	binary=$PLUG_DIR/$bundle/Contents/MacOS/NeuralNote
+for bundle in Standalone/NOTIQ.app AU/NOTIQ.component VST3/NOTIQ.vst3; do
+	binary=$PLUG_DIR/$bundle/Contents/MacOS/NOTIQ
 	dsym=$PLUG_DIR/$bundle.dSYM
 
 	if [[ "$(dwarfdump --uuid "$binary" | awk '{print $2, $3}')" != "$(dwarfdump --uuid "$dsym" | awk '{print $2, $3}')" ]]; then
@@ -96,22 +96,22 @@ done
 SYMBOLS_ZIP=$PWD/${PKG%.pkg}_dSYMs.zip
 mkdir -p "$(dirname "$SYMBOLS_ZIP")"
 rm -f "$SYMBOLS_ZIP"
-(cd "$PLUG_DIR" && zip -qr "$SYMBOLS_ZIP" Standalone/NeuralNote.app.dSYM AU/NeuralNote.component.dSYM VST3/NeuralNote.vst3.dSYM)
+(cd "$PLUG_DIR" && zip -qr "$SYMBOLS_ZIP" Standalone/NOTIQ.app.dSYM AU/NOTIQ.component.dSYM VST3/NOTIQ.vst3.dSYM)
 echo "dSYMs saved to $SYMBOLS_ZIP"
 
 echo "Signing Standalone, AU and VST3"
-codesign --remove-signature "$PLUG_DIR"/{Standalone/NeuralNote.app,AU/NeuralNote.component,VST3/NeuralNote.vst3} || true
-codesign --entitlements entitlements.plist --options=runtime -s "$signingID" "$PLUG_DIR"/{Standalone/NeuralNote.app,AU/NeuralNote.component,VST3/NeuralNote.vst3}
+codesign --remove-signature "$PLUG_DIR"/{Standalone/NOTIQ.app,AU/NOTIQ.component,VST3/NOTIQ.vst3} || true
+codesign --entitlements entitlements.plist --options=runtime -s "$signingID" "$PLUG_DIR"/{Standalone/NOTIQ.app,AU/NOTIQ.component,VST3/NOTIQ.vst3}
 
 # Check signature
 printf "\nVerifying signature app\n"
-codesign -dv --verbose=4 "$PLUG_DIR"/Standalone/NeuralNote.app
+codesign -dv --verbose=4 "$PLUG_DIR"/Standalone/NOTIQ.app
 
 printf "\nVerifying signature VST3\n"
-codesign -dv --verbose=4 "$PLUG_DIR"/VST3/NeuralNote.vst3
+codesign -dv --verbose=4 "$PLUG_DIR"/VST3/NOTIQ.vst3
 
 printf "\nVerifying signature AU\n"
-codesign -dv --verbose=4 "$PLUG_DIR"/AU/NeuralNote.component
+codesign -dv --verbose=4 "$PLUG_DIR"/AU/NOTIQ.component
 
 # Build installer
 echo "Building installer"
@@ -122,7 +122,7 @@ packagesbuild -F "$PLUG_DIR" --build-folder "$UNSIGNED_DIR" Installers/Mac/Neura
 # Sign installer
 echo "Signing installer"
 product_sign_ID=$(security find-identity -v -p basic | grep "Developer ID Installer" | head -1 | cut -d'"' -f2)
-productsign --sign "$product_sign_ID" "$UNSIGNED_DIR/NeuralNote.pkg" "$PKG"
+productsign --sign "$product_sign_ID" "$UNSIGNED_DIR/NOTIQ.pkg" "$PKG"
 rm -r "$UNSIGNED_DIR"
 
 # Notarize the pkg and staple it
