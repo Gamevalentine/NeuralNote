@@ -38,7 +38,7 @@
 									<key>GID</key>
 									<integer>80</integer>
 									<key>PATH</key>
-									<string>Standalone/NeuralNote.app</string>
+									<string>Standalone/NOTIQ.app</string>
 									<key>PATH_TYPE</key>
 									<integer>3</integer>
 									<key>PERMISSIONS</key>
@@ -484,11 +484,11 @@
 				<key>FOLLOW_SYMBOLIC_LINKS</key>
 				<false/>
 				<key>IDENTIFIER</key>
-				<string>com.draudiopkg.NeuralNoteApp</string>
+				<string>com.lunor.music.NOTIQApp</string>
 				<key>LOCATION</key>
 				<integer>0</integer>
 				<key>NAME</key>
-				<string>NeuralNote Standalone</string>
+				<string>NOTIQ Standalone</string>
 				<key>OVERWRITE_PERMISSIONS</key>
 				<false/>
 				<key>PAYLOAD_SIZE</key>
@@ -582,7 +582,7 @@
 															<key>GID</key>
 															<integer>0</integer>
 															<key>PATH</key>
-															<string>VST3/NeuralNote.vst3</string>
+															<string>VST3/NOTIQ.vst3</string>
 															<key>PATH_TYPE</key>
 															<integer>3</integer>
 															<key>PERMISSIONS</key>
@@ -1052,11 +1052,11 @@
 				<key>FOLLOW_SYMBOLIC_LINKS</key>
 				<false/>
 				<key>IDENTIFIER</key>
-				<string>com.draudiopkg.NeuralNoteVST3</string>
+				<string>com.lunor.music.NOTIQVST3</string>
 				<key>LOCATION</key>
 				<integer>0</integer>
 				<key>NAME</key>
-				<string>NeuralNote VST3</string>
+				<string>NOTIQ VST3</string>
 				<key>OVERWRITE_PERMISSIONS</key>
 				<false/>
 				<key>PAYLOAD_SIZE</key>
@@ -1150,7 +1150,7 @@
 															<key>GID</key>
 															<integer>0</integer>
 															<key>PATH</key>
-															<string>AU/NeuralNote.component</string>
+															<string>AU/NOTIQ.component</string>
 															<key>PATH_TYPE</key>
 															<integer>3</integer>
 															<key>PERMISSIONS</key>
@@ -1620,11 +1620,11 @@
 				<key>FOLLOW_SYMBOLIC_LINKS</key>
 				<false/>
 				<key>IDENTIFIER</key>
-				<string>com.draudiopkg.NeuralNoteAU</string>
+				<string>com.lunor.music.NOTIQAU</string>
 				<key>LOCATION</key>
 				<integer>0</integer>
 				<key>NAME</key>
-				<string>NeuralNote AU</string>
+				<string>NOTIQ AU</string>
 				<key>OVERWRITE_PERMISSIONS</key>
 				<false/>
 				<key>PAYLOAD_SIZE</key>
@@ -1870,7 +1870,7 @@
 						<key>LANGUAGE</key>
 						<string>English</string>
 						<key>VALUE</key>
-						<string>NeuralNote</string>
+						<string>NOTIQ</string>
 					</dict>
 				</array>
 			</dict>
@@ -2064,7 +2064,7 @@
 				</dict>
 			</array>
 			<key>NAME</key>
-			<string>NeuralNote</string>
+			<string>NOTIQ</string>
 			<key>PAYLOAD_ONLY</key>
 			<false/>
 			<key>TREAT_MISSING_PRESENTATION_DOCUMENTS_AS_WARNING</key>
