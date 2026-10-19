@@ -440,7 +440,7 @@ void TranscriptionManager::resumeTranscription()
     if (!NNFileUtils::isModelInstalled(*mTranscriptionModelSize)) {
         const String message = "Lượt nhận diện này đã dùng mô hình "
                                + String(modelSizeToDisplayName(*mTranscriptionModelSize))
-                               + " . Hãy tải mô hình này trong menu AI để tiếp tục.";
+                               + ". Hãy tải mô hình này trong menu AI để tiếp tục.";
         NnLogger::write(NnLogger::Level::Warning, "TranscriptionManager: Model not installed. " + message);
         NativeMessageBox::showMessageBoxAsync(MessageBoxIconType::NoIcon, "Chưa cài mô hình AI.", message);
         return;
