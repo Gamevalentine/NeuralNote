@@ -30,3 +30,24 @@
 .os-settings{padding:5px}
 .settings-popup{top:47px}
 .compact-clock{color:#a1aac1;font-family:ui-monospace,Consolas,monospace;font-size:11px;white-space:nowrap}
+
+@media(max-width:1080px){
+  .osbar{gap:9px;padding:0 9px}
+  .menu-trigger{padding:0 8px}
+  .os-actions{gap:8px}
+  .os-actions a{display:none}
+}
+@media(max-width:760px){
+  .osbar{height:42px;min-height:42px;max-height:42px}
+  .os-title{gap:5px}
+  .os-title strong{font-size:13px}
+  .os-title b{display:none}
+  .os-actions .lunor{display:none}
+  .menu-trigger{padding:0 7px;font-size:11px}
+  .compact-clock{display:none}
+}
+@media(max-width:450px){
+  .osbar{padding:0 6px;gap:6px}
+  .os-actions{display:none}
+  .menu-trigger{padding:0 6px}
+}
