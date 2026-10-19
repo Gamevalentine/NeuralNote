@@ -40,7 +40,7 @@ bool isNewerVersion(const juce::String& inCandidate, const juce::String& inCurre
 
 UpdateCheck::UpdateCheck()
 {
-    mSeeUpdateButton.setLabel("See update", nn::fonts::buttonLabel());
+    mSeeUpdateButton.setLabel("Xem bản mới", nn::fonts::buttonLabel());
     mSeeUpdateButton.setPadding(12, 12, 0);
 
     // Accent-outlined, like Drag MIDI out: it is the one thing this notification is asking for.
@@ -55,7 +55,7 @@ UpdateCheck::UpdateCheck()
     // second timer is generous, and there is no reason to wait it out.
     mDismissButton.setIcon(nn::icons::crossStroked, NnFlatButton::IconStyle::stroked, nn::metrics::cancelGlyphSize);
     mDismissButton.setCornerRadius(4.0f);
-    mDismissButton.setTooltip("Dismiss");
+    mDismissButton.setTooltip("Đóng");
     mDismissButton.setWantsKeyboardFocus(false);
     mDismissButton.onClick = [this] { _hideNotification(); };
     addAndMakeVisible(mDismissButton);
@@ -63,8 +63,8 @@ UpdateCheck::UpdateCheck()
 
 juce::String UpdateCheck::_message() const
 {
-    return mUpdateAvailable ? "A new version of NOTIQ is available"
-                            : "You are on the latest version of NOTIQ";
+    return mUpdateAvailable ? "Đã có phiên bản NOTIQ mới"
+                            : "Bạn đang dùng NOTIQ mới nhất";
 }
 
 juce::Rectangle<int> UpdateCheck::_panelBounds() const
