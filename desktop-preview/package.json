@@ -1,0 +1,14 @@
+{
+  "name": "notiq-web-desktop-preview",
+  "version": "0.3.0",
+  "private": true,
+  "description": "Portable Windows UI review wrapper for NOTIQ Web Studio, not the native MuScriptor app.",
+  "main": "main.cjs",
+  "scripts": {
+    "pack:win": "electron-packager . NOTIQ-Web-Preview --platform=win32 --arch=x64 --out=release --overwrite --asar --prune=true --ignore=^/release$"
+  },
+  "devDependencies": {
+    "@electron/packager": "19.0.0",
+    "electron": "38.0.0"
+  }
+}
