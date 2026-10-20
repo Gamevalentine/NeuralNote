@@ -114,6 +114,56 @@ function App() {
     return notes.length.toLocaleString('vi-VN') + ' nốt · ' + noteName(Math.min(...pitches)) + ' – ' + noteName(Math.max(...pitches));
   }, [notes]);
 
+  const clearHistory = (next: Note[] = []) => {
+    undoRef.current = [];
+    redoRef.current = [];
+    gestureRef.current = null;
+    notesRef.current = next;
+    setNotes(next);
+    setSelectedNote(null);
+    setHistoryTick(tick => tick + 1);
+  };
+
+  const commitNotes = (next: Note[]) => {
+    if (phase === 'analyzing' || sameNotes(next, notesRef.current)) return;
+    undoRef.current = [...undoRef.current.slice(-49), copyNotes(notesRef.current)];
+    redoRef.current = [];
+    notesRef.current = next;
+    setNotes(next);
+    firedNotes.current.clear();
+    setHistoryTick(tick => tick + 1);
+  };
+
+  const undoEdit = () => {
+    if (phase === 'analyzing') return;
+    const previous = undoRef.current.pop();
+    if (!previous) return;
+    redoRef.current.push(copyNotes(notesRef.current));
+    notesRef.current = previous;
+    setNotes(previous);
+    setSelectedNote(null);
+    firedNotes.current.clear();
+    setHistoryTick(tick => tick + 1);
+  };
+
+  const redoEdit = () => {
+    if (phase === 'analyzing') return;
+    const next = redoRef.current.pop();
+    if (!next) return;
+    undoRef.current.push(copyNotes(notesRef.current));
+    notesRef.current = next;
+    setNotes(next);
+    setSelectedNote(null);
+    firedNotes.current.clear();
+    setHistoryTick(tick => tick + 1);
+  };
+
+  const deleteSelected = () => {
+    if (selectedNote === null || phase === 'analyzing') return;
+    commitNotes(removeNote(notesRef.current, selectedNote));
+    setSelectedNote(null);
+  };
+
   const setAudio = async (file: Blob, name: string) => {
     if (phase === 'analyzing' || busyLoading) return;
     if (!/\.(wav|mp3|flac|ogg|m4a|aac|aiff)$/i.test(name)) {
@@ -132,7 +182,7 @@ function App() {
     setSelection(null);
     setError('');
     setPlaying(false);
-    setNotes([]);
+    clearHistory();
     setInfo(null);
     setTime(0);
     setProgress(0);
@@ -168,7 +218,7 @@ function App() {
         setStatus(message);
         setProgress(percentage);
       });
-      setNotes(detected);
+      clearHistory(detected);
       setProgress(100);
       setPhase('complete');
       setStatus(detected.length ? 'Đã nhận diện ' + detected.length + ' nốt' : 'Không tìm thấy nốt rõ ràng trong âm thanh');
@@ -277,7 +327,7 @@ function App() {
     stop();
     setSelection(null);
     setInfo(null);
-    setNotes([]);
+    clearHistory();
     setTime(0);
     setPhase('empty');
     setError('');
@@ -307,7 +357,10 @@ function App() {
     },
     {
       id: 'edit', label: 'Chỉnh sửa', commands: [
-        { label: 'Xóa kết quả nhận diện', run: () => { setNotes([]); setPhase(selection ? 'ready' : 'empty'); setStatus('Đã xóa kết quả MIDI'); firedNotes.current.clear(); }, disabled: notes.length === 0 || phase === 'analyzing' },
+        { label: 'Hoàn tác (Undo)', run: undoEdit, disabled: !canUndo || phase === 'analyzing', shortcut: 'Ctrl+Z' },
+        { label: 'Làm lại (Redo)', run: redoEdit, disabled: !canRedo || phase === 'analyzing', shortcut: 'Ctrl+Y' },
+        { label: 'Xóa nốt đã chọn', run: deleteSelected, disabled: selectedNote === null || phase === 'analyzing', shortcut: 'Del' },
+        { label: 'Xóa kết quả nhận diện', run: () => { commitNotes([]); setSelectedNote(null); setPhase(selection ? 'ready' : 'empty'); setStatus('Đã xóa kết quả MIDI'); }, disabled: notes.length === 0 || phase === 'analyzing' },
         { label: 'Về đầu bản nhạc', run: () => seekTo(0), disabled: !info },
       ],
     },
