@@ -4,7 +4,7 @@
 
 ## Đã phát triển
 - C++ adapter riêng `src/notiq_core.cpp` mang thương hiệu NOTIQ; chỉ gọi **MuScriptor nguyên bản** (`msl::Transcriber::load` và `transcribe`), trả JSON MIDI cùng cấu trúc đã dùng trong NOTIQ.
-- `scripts/snapshot_source.py` **sao chép toàn bộ nguồn C++** (bao gồm header, phần FFT và mã nguồn) của MuScriptor từ submodule `ThirdParty/muscriptor.cpp` vốn đã được ghim trong NeuralNote vào `notiq-ai-core/vendor/muscriptor`, ghi rõ SHA. File ở thư mục snapshot bị .gitignore để tránh trùng lặp source và thao tác sửa nhầm; khi cần phát hành độc lập phải đóng băng một source snapshot đã kiểm thử và giữ đầy đủ MIT/pffft notices.
+- `vendor/muscriptor/cpp/` **đã chứa và theo dõi trong GitHub 38 tệp C++ gốc** cần để biên dịch MuScriptor, bao gồm header, model, bộ giải mã và FFT. `vendor/muscriptor/LICENSE` giữ nguyên giấy phép MIT/PFFFT; `SOURCE_REVISION` và `SOURCE_MANIFEST.json` ghim đúng SHA và các hash của mã nguồn. `scripts/snapshot_source.py` chỉ là công cụ khôi phục khi thiếu bản sao, không còn là bước cần làm khi checkout NOTIQ AI Core.
 - `CMakeLists.txt` và `scripts/build-wasm.sh` dùng Emscripten, ggml CPU (không Metal/Vulkan/GPU), C++23, WebAssembly SIMD. Đây là **cấu hình thử biên dịch, không phải bằng chứng biên dịch thành công**.
 - `web/worker.mjs`: nhận mô hình GGUF do chính người dùng chọn, chạy bộ nhận diện thật trong Worker tách biệt luồng giao diện; từ chối mô hình/ràng buộc thời gian hoặc kết quả không hợp lệ.
 - Không gửi âm thanh tới máy chủ, không dùng Basic Pitch, không lấy kết quả từ ảnh mẫu hay trả nốt ngẫu nhiên.
@@ -49,3 +49,11 @@ Các cập nhật thực tế trên nhánh thử nghiệm:
 - `tests/toolchain-preflight.mjs` kiểm tra CMake, Ninja, Python, `emcc`, `emcmake` trước khi build. Đã **chạy thực tế tại container làm việc**: CMake 3.31.6/Ninja 1.12.1/Python 3.13.5 đủ; `emcc`, `emcmake` **không tồn tại**, exit code 2. Container không có DNS tải Emscripten từ bên ngoài.
 
 **CHƯA XONG:** chưa sinh `notiq-ai-core.wasm` và `notiq-ai-core.js`, chưa xác minh load GGUF và nhận diện âm thanh. Không có browser Preview AI, không dùng GitHub Actions/Codespaces, không chạm production hoặc tốn phí. Giai đoạn 2 chỉ được nghiệm thu sau khi builder có Emscripten thực, chạy `scripts/build-wasm.sh` thành công, binary verify PASS và browser diagnostic nạp đúng GGUF PASS.
+
+## Giai đoạn 2 — sao chép nguồn thực tế (21/10/2026)
+
+- Đã đưa **38 tệp nguồn C++ cần thiết để biên dịch** từ MuScriptor commit `c8adc019677ed3479fa3c22c1a117d662382f347` vào GitHub NOTIQ, không còn chỉ có script hứa hẹn sao chép. Không sao chép trọng số GGUF phi thương mại. Không bao gồm bench/test sources của upstream vì đây là snapshot thành phần engine.
+- Đã xác minh bằng GitHub Git Trees: **38/38 blob SHA trùng upstream** và nguyên bản LICENSE cũng trùng. `tests/source-integrity.test.mjs` kiểm chứng Git blob SHA-1 trực tiếp trên từng tệp để ngăn drift sau này.
+- CMake NOTIQ **chỉ ở wasm32** bật `PFFFT_SIMD_DISABLE=1`. Lý do: PFFFT gốc chọn nhánh ARM NEON khi thấy `__wasm_simd128__`, rồi `#include <arm_neon.h>`; nhánh này không phù hợp với target wasm32. Dùng FFT scalar có sẵn của PFFFT cho lần biên dịch đầu, giữ nguyên nguồn native/Windows.
+- Đã xác minh trên Clang WebAssembly target: `-target wasm32 -msimd128` định nghĩa `__wasm_simd128__`. Đó là chứng cứ tương thích **mức tiền xử lý**, chưa phải bản build MuScriptor WASM.
+- Trở ngại vẫn còn: thiếu Emscripten/emsdk, không có mạng tại runtime. **CHƯA** sinh `.wasm`, chưa nạp GGUF và chưa nhận diện Audio → MIDI thật. Không dùng Codespaces, GitHub Actions hoặc dịch vụ trả phí.
