@@ -95,7 +95,7 @@ if (NOT NEURALNOTE_SOUNDFONT_SHA256 STREQUAL "6152b329bfb7c57c73112e26452e6b6190
   message(FATAL_ERROR
           "The cached NeuralNote_GM.sf3 has the wrong SHA-256.\n"
           "The existing file was NOT deleted: ${NEURALNOTE_SOUNDFONT}\n"
-          "Please rebuild it from verified sources with Tools/fetch_soundfont.py --force.")
+          "Rebuild with Tools/fetch_soundfont.py (reuses any verified source files).")
 endif ()
 
 # muscriptor.cpp pins CMake >=3.24 and forces itself + ggml to build as
