@@ -3,10 +3,8 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 MODULE="$ROOT/notiq-ai-core"
-if ! command -v emcmake >/dev/null 2>&1; then
-  echo "Emscripten/emcmake is not installed in this build environment." >&2
-  exit 2
-fi
+# Fail early on an incomplete toolchain instead of starting a false build.
+node "$MODULE/tests/toolchain-preflight.mjs"
 if [ ! -f "$MODULE/vendor/muscriptor/cpp/CMakeLists.txt" ]; then
   python3 "$MODULE/scripts/snapshot_source.py"
 fi
