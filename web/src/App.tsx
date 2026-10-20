@@ -637,20 +637,32 @@ function App() {
                 <div className="ruler">
                   {markers.map(n => <button type="button" key={n} className="tick" style={{ left: n/totalSeconds*100 + '%' }} onClick={() => seekTo(n)}>{n}s</button>)}
                 </div>
-                <div className="roll" style={{ height: gridHeight }}>
+                <div className={'roll piano-editable' + (phase === 'analyzing' ? ' editing-disabled' : '')}
+                  style={{ height: gridHeight }} onPointerDown={addNoteAtPointer}
+                  role="group" aria-label="Piano Roll: nhấn lưới để thêm nốt, kéo nốt để di chuyển">
                   {pitches.map(pitch => <div className={'pitch-grid ' + (pitch%12 === 0 ? 'octave' : '')} key={pitch} style={{top:(pitchTop-pitch)*PITCH_ROW,height:PITCH_ROW}}/>)}
                   {markers.map(n => <div key={n} className="beat-grid" style={{left: n/totalSeconds*100 + '%'}}/>)}
-                  {visibleNotes.map((n,i) => (
-                    <button className="note" key={i} title={noteName(n.pitchMidi) + ' · ' + fmt(n.startTimeSeconds) + ' · ' + n.durationSeconds.toFixed(2) + 's'}
-                      onClick={() => void oscPreview(n.pitchMidi, Math.min(0.45,n.durationSeconds))}
+                  {visibleIndexedNotes.map(({note:n,index}) => (
+                    <button type="button" className={'note editable-note' + (selectedNote === index ? ' selected-note' : '')}
+                      key={index} aria-label={'Nốt ' + noteName(n.pitchMidi) + ', bắt đầu ' + fmt(n.startTimeSeconds)}
+                      aria-pressed={selectedNote === index}
+                      title={noteName(n.pitchMidi) + ' · ' + fmt(n.startTimeSeconds) + ' · ' + n.durationSeconds.toFixed(2) + 's · Kéo để chuyển nốt, kéo mép phải để đổi độ dài'}
+                      onPointerDown={event => beginNoteGesture(event, index,
+                        event.target instanceof HTMLElement && event.target.closest('.note-resize-handle') ? 'resize' : 'move')}
+                      onPointerMove={moveNoteGesture}
+                      onPointerUp={event => endNoteGesture(event)}
+                      onPointerCancel={event => endNoteGesture(event, true)}
                       style={{
                         top:(pitchTop-n.pitchMidi)*PITCH_ROW + 1,
                         left:n.startTimeSeconds/totalSeconds*100 + '%',
-                        width:Math.max(3,n.durationSeconds/totalSeconds*timelineWidth-1),
+                        width:Math.max(6,n.durationSeconds/totalSeconds*timelineWidth-1),
                         backgroundColor:midiColor(n.pitchMidi),borderColor:midiColor(n.pitchMidi),
-                      }}>{n.durationSeconds/totalSeconds*timelineWidth > 39 ? noteName(n.pitchMidi) : ''}</button>
+                      }}>
+                      {n.durationSeconds/totalSeconds*timelineWidth > 39 ? noteName(n.pitchMidi) : ''}
+                      <span className="note-resize-handle" aria-hidden="true"/>
+                    </button>
                   ))}
-                  {!notes.length && <div className="empty-roll">{phase === 'analyzing' ? <><LoaderCircle className="spin" size={26}/><strong>AI đang nhận diện nốt...</strong></> : <><Music size={27}/><strong>{selection ? 'Đã tải âm thanh — nhấn Nhận diện' : 'Piano Roll đang trống'}</strong><small>Chỉ hiển thị nốt thật sau khi chạy AI</small></>}</div>}
+                  {!notes.length && <div className="empty-roll">{phase === 'analyzing' ? <><LoaderCircle className="spin" size={26}/><strong>AI đang nhận diện nốt...</strong></> : <><Music size={27}/><strong>Piano Roll đang trống</strong><small>Nhấn vào lưới để thêm nốt, hoặc tải âm thanh để nhận diện bằng AI</small></>}</div>}
                 </div>
                 {info && <div className="playhead" style={{left:cursorX,height:28+gridHeight}}/>}
               </div>
@@ -658,6 +670,7 @@ function App() {
           </div>
           <div className="editor-status">
             <span>{status}</span>
+            <span className="piano-edit-hint" title="Thêm nốt: nhấn vào lưới · Di chuyển: kéo nốt · Đổi độ dài: kéo mép phải · Xóa: Del · Hoàn tác: Ctrl+Z">✎ Sửa MIDI · Snap ${SNAP_SECONDS}s · Ctrl+Z</span>
             {phase === 'analyzing' && <div className="progress-track"><div style={{width: progress+'%'}}/></div>}
             <span>{phase === 'analyzing' ? progress+'%' : summary}</span>
             <span className="compact-clock">{fmt(time)} / {fmt(info?.duration || 0)}</span>
