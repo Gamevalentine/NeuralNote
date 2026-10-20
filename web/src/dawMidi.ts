@@ -18,7 +18,7 @@ const MIDI_DRUM_CHANNEL = 9;
 const MELODIC_CHANNELS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15];
 
 const constrain = (x: number, min: number, max: number) => Math.min(max, Math.max(min, x));
-const midiBuffer = (midi: Midi): Uint8Array => midi.toArray();
+const midiBuffer = (midi: MidiType): Uint8Array => midi.toArray();
 
 export function extractDawTracks(notes: Note[], programs: DawPrograms, includedGroups: Set<PitchGroup>): DawTrack[] {
   const map = new Map<string, DawTrack>();
@@ -69,7 +69,7 @@ export function extractDawTracks(notes: Note[], programs: DawPrograms, includedG
   });
 }
 
-function addNotes(midi: Midi, group: DawTrack, channel: number) {
+function addNotes(midi: MidiType, group: DawTrack, channel: number) {
   const track = midi.addTrack();
   track.name = group.name;
   track.channel = channel;
