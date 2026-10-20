@@ -438,7 +438,12 @@ function App() {
   };
   const exportFile = () => {
     if (!visibleNotes.length) return;
-    const blob = makeMidi(notes, bpm, activeGroups);
+    const programs: Record<PitchGroup, number> = {
+      high: instrumentProgram(instrumentSelection.high),
+      mid: instrumentProgram(instrumentSelection.mid),
+      low: instrumentProgram(instrumentSelection.low),
+    };
+    const blob = makeMidi(notes, bpm, activeGroups, programs);
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -649,6 +654,14 @@ function App() {
                   <button className={'tiny-toggle ' + (solo === group.id ? 'selected' : '')} onClick={() => setSolo(solo === group.id ? null : group.id)} title="Chỉ nghe dải này">S</button>
                 </div>
                 <div className="track-slider-row"><span style={{ color: group.color }}>▰</span><input aria-label={'Âm lượng ' + group.name} type="range" min={0} max={1} step={0.01} value={gain[group.id]} onChange={e => setGain(prev => ({...prev, [group.id]: Number(e.target.value)}))}/><span>{Math.round(gain[group.id] * 100)}%</span></div>
+                <div className="track-preset-row">
+                  <select aria-label={'Chọn tiếng nhạc cụ cho ' + group.name}
+                    value={instrumentSelection[group.id]}
+                    onChange={event => changeInstrument(group.id, event.target.value as InstrumentId)}>
+                    {INSTRUMENTS.map(instrument => <option key={instrument.id} value={instrument.id}>{instrument.label}</option>)}
+                  </select>
+                  <button type="button" title="Tải tiếng và nghe thử nốt C4 bằng SoundFont" onClick={() => void warmInstrument(instrumentSelection[group.id])}>↻</button>
+                </div>
               </div>
             );
           })}
@@ -697,7 +710,7 @@ function App() {
             </div>
           </div>
           <div className="editor-status">
-            <span>{status}</span>
+            <span title={soundfontStatus}>{loadingSoundfont ? '◌ Đang tải SoundFont' : '♪ ' + soundfontStatus}</span>
             <span className="piano-edit-hint" title="Thêm nốt: nhấn vào lưới · Di chuyển: kéo nốt · Đổi độ dài: kéo mép phải · Xóa: Del · Hoàn tác: Ctrl+Z">✎ Sửa MIDI · Snap ${SNAP_SECONDS}s · Ctrl+Z</span>
             {phase === 'analyzing' && <div className="progress-track"><div style={{width: progress+'%'}}/></div>}
             <span>{phase === 'analyzing' ? progress+'%' : summary}</span>
@@ -707,7 +720,7 @@ function App() {
           {error && <div className="error-banner" role="alert"><Info size={15}/>{error}<button aria-label="Đóng lỗi" onClick={()=>setError('')}><X size={15}/></button></div>}
         </section>
       </div>
-      <footer className="app-footer"><span><Headphones size={13}/> Nhận diện Audio → MIDI thực tế · xử lý trong trình duyệt</span><span><CircleHelp size={13}/> Basic Pitch không phân loại nhạc cụ · <a href="https://github.com/spotify/basic-pitch-ts" target="_blank" rel="noreferrer">Apache-2.0</a></span></footer>
+      <footer className="app-footer"><span><Headphones size={13}/> Piano/Guitar/Bass… từ mẫu FluidR3 SoundFont · xử lý bằng Web Audio</span><span><CircleHelp size={13}/> FluidR3_GM samples: <a href="https://gleitz.github.io/midi-js-soundfonts/" target="_blank" rel="noreferrer">CC BY 3.0 · Frank Wen</a> · Basic Pitch không phân loại nhạc cụ</span></footer>
       <input ref={fileInput} type="file" accept=".wav,.mp3,.flac,.ogg,.m4a,.aac,.aiff,audio/*" className="hidden" onChange={e => {if(e.target.files?.[0])void setAudio(e.target.files[0],e.target.files[0].name);e.target.value='';}}/>
     </main>
   );
