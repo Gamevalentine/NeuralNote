@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import { request } from 'node:http';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -70,7 +71,14 @@ test('private API rejects missing key, wrong origin, wrong type, oversized audio
     headers: { ...headers, 'content-type': 'application/json', 'x-notiq-key': accessKey },
     body: wav })).status, 413);
   assert.ok(MAX_UPLOAD_BYTES > 15 * 60 * 16000 * 4);
-  assert.equal((await fetch(url + '/api/jobs', { method: 'POST',
-    headers: { ...headers, 'content-length': String(MAX_UPLOAD_BYTES + 1), 'x-notiq-key': accessKey },
-    body: wav })).status, 413);
+  const oversizedStatus = await new Promise((resolve, reject) => {
+    // Bare http.request is intentional: browsers will not let fetch forge Content-Length.
+    const req = request(url + '/api/jobs', {
+      method: 'POST', headers: { ...headers, 'content-length': MAX_UPLOAD_BYTES + 1,
+        'x-notiq-key': accessKey },
+    }, res => { res.resume(); res.on('end', () => resolve(res.statusCode)); });
+    req.on('error', reject);
+    req.end();
+  });
+  assert.equal(oversizedStatus, 413);
 });
