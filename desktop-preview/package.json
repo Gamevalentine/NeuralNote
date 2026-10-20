@@ -1,11 +1,11 @@
 {
-  "name": "notiq-desktop-stage5-daw-preview",
-  "version": "0.5.0",
+  "name": "notiq-desktop-stage5-fullsong-preview",
+  "version": "0.5.1",
   "private": true,
-  "description": "NOTIQ Windows portable: MuScriptor CPU + Piano Roll + SoundFont + DAW/Kontakt MIDI export",
+  "description": "NOTIQ Windows: full songs up to 15 min, MuScriptor CPU, Piano Roll, SoundFont, Cubase/Cakewalk MIDI",
   "main": "main.cjs",
   "scripts": {
-    "pack:win": "electron-packager . NOTIQ-Stage5 --platform=win32 --arch=x64 --out=release --overwrite --asar --prune=true --ignore=^/release$ --extra-resource=bridge-bin"
+    "pack:win": "electron-packager . NOTIQ-Stage5-FullSong --platform=win32 --arch=x64 --out=release --overwrite --asar --prune=true --ignore=^/release$ --extra-resource=bridge-bin"
   },
   "devDependencies": {
     "electron": "38.0.0",
