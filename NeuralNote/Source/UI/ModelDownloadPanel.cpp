@@ -48,7 +48,7 @@ constexpr float ICON_SIZE = 13.0f;
 constexpr float BAR_CORNER = 2.0f;
 constexpr int POLL_HZ = 10;
 
-const juce::String VERIFYING_CAPTION = "ĐANG KIỂM TRA";
+const juce::String VERIFYING_CAPTION = juce::String::fromUTF8("ĐANG KIỂM TRA");
 constexpr float CAPTION_TRACKING = 0.06f;
 
 /** Relative to the other sizes: they are the same model at three scales. */
@@ -56,11 +56,11 @@ juce::String hintFor(ModelSize inModelSize)
 {
     switch (inModelSize) {
         case ModelSize::Small:
-            return "Nhanh nhất";
+            return juce::String::fromUTF8("Nhanh nhất");
         case ModelSize::Medium:
-            return "Khuyên dùng";
+            return juce::String::fromUTF8("Khuyên dùng");
         case ModelSize::Large:
-            return "Lớn, chậm nhất";
+            return juce::String::fromUTF8("Lớn, chậm nhất");
     }
 
     return {};
@@ -129,7 +129,7 @@ ModelDownloadPanel::ModelDownloadPanel(NeuralNoteAudioProcessor& inProcessor)
 
     mCloseButton.setIcon(nn::icons::crossStroked, NnFlatButton::IconStyle::stroked, nn::metrics::cancelGlyphSize);
     mCloseButton.setCornerRadius(4.0f);
-    mCloseButton.setTooltip("Đóng");
+    mCloseButton.setTooltip(juce::String::fromUTF8("Đóng"));
     mCloseButton.setWantsKeyboardFocus(false);
     mCloseButton.onClick = [this] {
         if (onCloseRequested != nullptr) {
@@ -139,7 +139,7 @@ ModelDownloadPanel::ModelDownloadPanel(NeuralNoteAudioProcessor& inProcessor)
     addAndMakeVisible(mCloseButton);
 
     mOpenFolderButton.setIcon(nn::icons::folderStroked, NnFlatButton::IconStyle::stroked, ICON_SIZE);
-    mOpenFolderButton.setLabel("Mở thư mục mô hình", nn::fonts::buttonLabel());
+    mOpenFolderButton.setLabel(juce::String::fromUTF8("Mở thư mục mô hình"), nn::fonts::buttonLabel());
     mOpenFolderButton.setPadding(10, 12, 7);
     mOpenFolderButton.setCornerRadius(static_cast<float>(nn::metrics::controlCorner));
     mOpenFolderButton.setColour(NnFlatButton::backgroundColourId, nn::colours::popupRowHover);
@@ -219,9 +219,9 @@ bool ModelDownloadPanel::_updateRows(bool inForce)
     for (auto& row: mRows) {
         const ModelDownloader::Status& status = row->status;
 
-        row->downloadButton.setLabel(status.phase == ModelDownloader::Phase::Failed ? "Thử lại"
-                                     : status.downloadedBytes > 0                   ? "Tiếp tục"
-                                                                                    : "Tải xuống",
+        row->downloadButton.setLabel(status.phase == ModelDownloader::Phase::Failed ? juce::String::fromUTF8("Thử lại")
+                                     : status.downloadedBytes > 0                   ? juce::String::fromUTF8("Tiếp tục")
+                                                                                    : juce::String::fromUTF8("Tải xuống"),
                                      nn::fonts::buttonLabel());
         row->downloadButton.setVisible(!row->isInstalled && !status.isBusy());
         row->cancelButton.setVisible(!row->isInstalled && status.phase == ModelDownloader::Phase::Downloading);
@@ -277,14 +277,14 @@ void ModelDownloadPanel::paint(juce::Graphics& g)
 
     g.setColour(nn::colours::textPrimary);
     g.setFont(nn::fonts::filename());
-    g.drawText(mHasInstalledModel ? "Mô hình AI nhận diện" : "Chưa cài mô hình AI",
+    g.drawText(mHasInstalledModel ? juce::String::fromUTF8("Mô hình AI nhận diện") : juce::String::fromUTF8("Chưa cài mô hình AI"),
                header.removeFromTop(TITLE_HEIGHT).withTrimmedRight(nn::metrics::cancelHitSize + CONTROL_GAP),
                juce::Justification::centredLeft,
                true);
 
     g.setColour(nn::colours::textLabel);
     g.setFont(nn::fonts::menuItem());
-    g.drawText(mHasInstalledModel ? "Chọn mô hình để nhận diện nốt." : "Tải mô hình để bắt đầu nhận diện.",
+    g.drawText(mHasInstalledModel ? juce::String::fromUTF8("Chọn mô hình để nhận diện nốt.") : juce::String::fromUTF8("Tải mô hình để bắt đầu nhận diện."),
                header.removeFromTop(SUBTITLE_HEIGHT),
                juce::Justification::centredLeft,
                true);
