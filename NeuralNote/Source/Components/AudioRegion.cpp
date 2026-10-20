@@ -32,7 +32,7 @@ AudioRegion::AudioRegion(NeuralNoteAudioProcessor* processor, double inBaseNumPi
     addAndMakeVisible(mPlayhead);
 
     mLoadButton.setIcon(nn::icons::folderStroked, NnFlatButton::IconStyle::stroked, 14.0f);
-    mLoadButton.setLabel("Mở tệp âm thanh", nn::fonts::buttonLabel());
+    mLoadButton.setLabel(juce::String::fromUTF8("Mở tệp âm thanh"), nn::fonts::buttonLabel());
     mLoadButton.setPadding(nn::metrics::loadPadX, nn::metrics::loadPadX, nn::metrics::loadGap);
     mLoadButton.setCornerRadius(nn::metrics::controlCorner);
     mLoadButton.setColour(NnFlatButton::backgroundColourId, nn::colours::accentFillButton());
@@ -93,7 +93,7 @@ void AudioRegion::paint(Graphics& g)
 
     g.setColour(nn::colours::textScale);
     nn::drawTrackedText(g,
-                        "DẠNG SÓNG ÂM",
+                        juce::String::fromUTF8("DẠNG SÓNG ÂM"),
                         nn::fonts::meta(),
                         juce::Rectangle<float>(CORNER_LABEL_INSET, CORNER_LABEL_INSET, 200.0f, 12.0f),
                         juce::Justification::topLeft,
@@ -187,7 +187,7 @@ void AudioRegion::_paintDropZone(Graphics& g) const
 
     g.setColour(nn::colours::textScale);
     nn::drawTrackedText(
-        g, "HOẶC THẢ TỆP VÀO ĐÂY", nn::fonts::meta(), hint.toFloat(), juce::Justification::centred, DROP_HINT_TRACKING);
+        g, juce::String::fromUTF8("HOẶC THẢ TỆP VÀO ĐÂY"), nn::fonts::meta(), hint.toFloat(), juce::Justification::centred, DROP_HINT_TRACKING);
 }
 
 void AudioRegion::openFileChooser()
@@ -206,7 +206,7 @@ void AudioRegion::_openFileChooser()
     }
 
     mFileChooser = std::make_shared<juce::FileChooser>(
-        "Chọn tệp âm thanh", juce::File {}, patterns.joinIntoString(";"), true, false, this);
+        juce::String::fromUTF8("Chọn tệp âm thanh"), juce::File {}, patterns.joinIntoString(";"), true, false, this);
 
     mFileChooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
                               [this](const juce::FileChooser& fc) {
