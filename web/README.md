@@ -1,38 +1,24 @@
-# NOTIQ Web Studio · LUNOR MUSIC
+# NOTIQ Web · LUNOR MUSIC
 
-Bản thử nghiệm web độc lập, bố cục lấy cảm hứng từ ứng dụng [NeuralNote v2](https://github.com/DamRsn/NeuralNote), **không** phải bản biên dịch NeuralNote C++ sang trình duyệt.
+Bản thử nghiệm trên trình duyệt kế thừa giao diện NOTIQ đã duyệt, Piano Roll chỉnh sửa nốt, waveform, audio player, SoundFont, nhiều track và xuất MIDI cho DAW/Kontakt.
 
-## Chức năng đã viết trong mã nguồn
+## Nhận diện Audio → MIDI (trạng thái nhánh này)
+- **Động cơ duy nhất được gọi từ giao diện là MuScriptor C++ gốc của NeuralNote.** Không dùng kết quả nốt giả và không lặng lẽ thay bằng Basic Pitch.
+- **Windows:** chạy qua IPC native bridge cũ của Electron.
+- **Web:** chạy qua backend MuScriptor riêng trong thư mục `notiq-api/` khi `VITE_NOTIQ_MUSCRIPTOR_API` trỏ tới API HTTPS thực và kiểm tra /api/health đạt. Audio WAV được gửi lên backend thử nghiệm để inference, kết quả trả về Piano Roll; chỉ lưu tệp tạm trong thời gian xử lý.
+- **Nếu chưa có API đang chạy:** giao diện, nghe nhạc và Piano Roll vẫn dùng được; NOTIQ không báo nhận diện giả.
+- Nhập âm thanh tối đa 15 phút và 200 MB tệp nguồn (browser cần decode được); nén WAV nội bộ về 16kHz mono float32 để gửi backend (~57.6 MB cho 15 phút).
+- Mô hình MuScriptor Small không nằm trong source/website. Backend tải theo yêu cầu, kiểm tra SHA-256; trọng số **CC BY-NC 4.0** chỉ phi thương mại.
+- Khi bắt đầu nhận diện trên Web, người dùng nhập mã truy cập backend riêng; mã chỉ giữ theo phiên trong sessionStorage và không được hardcode vào bản dựng hay đưa lên GitHub.
 
-- Nhập âm thanh WAV, MP3, FLAC, OGG, M4A (phụ thuộc hỗ trợ của trình duyệt), tối đa 45 giây / 50 MB.
-- Đọc waveform thực từ tệp âm thanh đã chọn, timeline, nhấn mốc thời gian để tìm vị trí và con trỏ chạy theo âm thanh.
-- Nhận diện cao độ và trường độ bằng [Spotify Basic Pitch](https://github.com/spotify/basic-pitch-ts), chạy AI trong trình duyệt.
-- Piano Roll theo từng nốt thực tế; bàn phím phát thử từng nốt; phân nhóm nốt theo **dải cao độ** (trầm / trung / cao).
-- Phát bản gốc, nghe thử nốt MIDI bằng bộ tổng hợp sóng cơ bản hoặc kết hợp; phát/tạm dừng, về đầu, lặp, seek.
-- Mute, solo và âm lượng của từng dải cao độ; phóng to/thu nhỏ timeline; điều chỉnh BPM và xuất MIDI với các track dải cao độ.
-- Giao diện và thông báo tiếng Việt.
+## Phát triển, kiểm thử và triển khai
+- Repo: `Gamevalentine/NeuralNote`. Nhánh thử nghiệm: `feature/notiq-web-muscriptor-api-preview`.
+- Build giao diện `web/package.json` dùng React/Vite, giữ nguyên bố cục CSS và chức năng biên tập.
+- Chạy kiểm tra code API riêng qua script `notiq-api/package.json`. Các test HTTP dùng mock worker **chỉ trong test**; không phải bằng chứng AI đã nhận diện thật.
+- Cấu hình API thông qua môi trường Vite của **bản Preview**: `VITE_NOTIQ_MUSCRIPTOR_API=https://<domain-api>`. Không đưa token bí mật vào biến `VITE_*`.
+- Chưa có triển khai thực tế thành công hoặc link Preview nhận diện MuScriptor end-to-end được xác nhận từ mã này. **Không chuyển sang Production, không merge main** khi chưa thử inference bằng file nhạc thật.
 
-**Giới hạn quan trọng:** Basic Pitch không nhận dạng được nhạc cụ cụ thể và không tách riêng Piano, Guitar, Bass hay Drum như engine MuScriptor đa nhạc cụ của NeuralNote v2. Các nút `M/S` chỉ điều khiển dải cao độ, **không phải stem/instrument separation**. Synth chỉ là sóng triangle thử nốt, không phải nhạc cụ SoundFont từ NeuralNote. Bản web chưa được chạy QA nghiệm thu.
+Thông tin backend, cài đặt model, giới hạn, bảo mật: xem [notiq-api/README.md](../notiq-api/README.md).
 
-## Cách xây dựng
-
-Từ thư mục `web`: cài dependencies theo `package.json`, chạy `npm run build`, hoặc `npm run dev` trong môi trường phát triển miễn phí. Không yêu cầu chạy lệnh trên máy thật của người dùng.
-
-Ứng dụng cần HTTPS và kết nối mạng để tải mô hình từ jsDelivr trong lần chạy AI đầu tiên. Chưa dùng cơ sở dữ liệu, không tải audio của người dùng lên máy chủ.
-
-## Phát hành
-
-- Phát triển trên nhánh `feature/notiq-web-neuralnote-layout`; không merge vào `main`.
-- Link NOTIQ Web đang chạy trước đó **không tự động nhận thay đổi** từ thư mục này.
-- Chỉ triển khai bản test và kiểm tra thực tế trước khi chuyển từ link test sang bản người dùng đang dùng.
-- Dữ liệu và tính năng desktop NOTIQ (fork NeuralNote + MuScriptor) trong PR #1/#2 không bị thay thế.
-- Giữ giấy phép và ghi công của mã gốc: NeuralNote code Apache-2.0, Spotify Basic Pitch Apache-2.0; trọng số MuScriptor CC BY-NC 4.0 không được phép sử dụng thương mại nếu thiếu giấy phép.
-
-## Nghiệm thu cần làm
-
-- [ ] Build Vite + TypeScript thành công.
-- [ ] Dùng âm thanh mẫu, kiểm tra waveform, thời lượng, nút phát/tạm dừng.
-- [ ] Chạy AI ra nốt thực tế, xem Piano Roll và nghe từng nốt.
-- [ ] Mute/solo dải nốt, thay BPM, tải tệp MIDI và mở trong DAW.
-- [ ] Kiểm tra file hỏng, file dài hơn 45 giây, lỗi mạng CDN.
-- [ ] Kiểm tra màn hình nhỏ, kéo/phóng timeline và vị trí bàn phím khi cuộn.
+## Giấy phép và ghi công
+UI + nhận diện kế thừa dự án [NeuralNote](https://github.com/DamRsn/NeuralNote) (Apache-2.0) và [muscriptor.cpp](https://github.com/DamRsn/muscriptor.cpp) (MIT), phần model MuScriptor GGUF theo CC BY-NC 4.0; SoundFont FluidR3 theo giấy phép phân phối tương ứng.

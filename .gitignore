@@ -35,3 +35,9 @@ Makefile
 
 # Fetched by Tools/fetch_soundfont.py, not committed
 /NeuralNote/Assets/SoundFont/
+
+# NOTIQ private Codespaces preview: never commit local secret/model/build artifacts
+/.notiq-preview/
+/.notiq-build/
+/web/node_modules/
+/web/dist/
