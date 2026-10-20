@@ -9,7 +9,7 @@ on:
       - .github/workflows/notiq-core-wasm-once.yml
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: notiq-core-wasm-one-shot
@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          persist-credentials: false
+          persist-credentials: true
           submodules: false
 
       - name: Verify pinned NOTIQ C++ source before compiling
@@ -101,3 +101,17 @@ jobs:
             await browser.close();
           }
           JS
+
+      - name: Preserve only verified NOTIQ JS and WASM on isolated test branch
+        if: success()
+        run: |
+          mkdir -p notiq-ai-core/dist/web
+          cp notiq-ai-core/.build-wasm/notiq-ai-core.js notiq-ai-core/dist/notiq-ai-core.js
+          cp notiq-ai-core/.build-wasm/notiq-ai-core.wasm notiq-ai-core/dist/notiq-ai-core.wasm
+          cp notiq-ai-core/web/worker.mjs notiq-ai-core/dist/web/worker.mjs
+          cp notiq-ai-core/web/diagnostic.html notiq-ai-core/dist/web/diagnostic.html
+          git add -f notiq-ai-core/dist/notiq-ai-core.js notiq-ai-core/dist/notiq-ai-core.wasm notiq-ai-core/dist/web/worker.mjs notiq-ai-core/dist/web/diagnostic.html
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "test(notiq): verified local WASM and GGUF browser load [skip ci]"
+          git push origin HEAD:refs/heads/test/notiq-ai-core-wasm-final-20261021
