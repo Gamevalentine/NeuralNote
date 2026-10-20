@@ -38,6 +38,9 @@ public:
     /** Shows the load button only while there is nothing to draw a waveform from. */
     void updateEnablements();
 
+    /** File picker remains accessible when the waveform panel is hidden. */
+    void openFileChooser();
+
 private:
     /**
      * One bar per WaveformBars pitch, over the exposed part of the region only. The vertical scale
