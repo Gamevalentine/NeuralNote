@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOTIQ AI Core — Kiểm tra nạp MuScriptor thật</title>
+<style>
+:root{font:15px system-ui,sans-serif;color:#e7e9f2;background:#12151d}main{max-width:650px;margin:9vh auto;padding:24px;border:1px solid #3a4253;border-radius:14px;background:#1b202b}h1{font-size:22px}p{line-height:1.55;color:#b9c3d6}input,button{margin:12px 0;padding:12px;border-radius:8px;max-width:100%}button{background:#677de6;color:white;border:0}button:disabled{opacity:.45}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#111720;padding:12px;border-radius:8px}small{color:#bdc7dc}
+</style>
+</head>
+<body>
+<main>
+<h1>NOTIQ AI Core — Kiểm tra WebAssembly</h1>
+<p>Đây chỉ là công cụ kiểm thử kỹ thuật nội bộ, <strong>không phải website NOTIQ</strong>. Chỉ khi file <code>notiq-ai-core.wasm</code> đã biên dịch thật, bạn mới có thể nạp mô hình MuScriptor GGUF vào bộ nhớ trình duyệt. Không gửi mô hình hoặc nhạc lên máy chủ.</p>
+<label for="model">Chọn MuScriptor Small GGUF (chỉ dùng phi thương mại)</label>
+<input id="model" type="file" accept=".gguf">
+<button id="run" disabled>Nạp mô hình vào NOTIQ AI Core</button>
+<pre id="status" role="status" aria-live="polite">Đang kiểm tra tệp WebAssembly thực…</pre>
+<small>Kết quả “sẵn sàng” mới chứng minh mô hình đã được nạp, <em>không</em> chứng minh nhận diện âm thanh đạt.</small>
+</main>
+<script type="module">
+const status = document.querySelector('#status');
+const picker = document.querySelector('#model');
+const button = document.querySelector('#run');
+const workerUrl = new URL('./worker.mjs', import.meta.url);
+const moduleUrl = new URL('../notiq-ai-core.js', import.meta.url);
+const wasmUrl = new URL('../notiq-ai-core.wasm', import.meta.url);
+let worker;
+function log(message) { status.textContent = message; }
+try {
+  const response = await fetch(wasmUrl, {cache:'no-store'});
+  if (!response.ok) throw new Error('WASM chưa được build/triển khai (' + response.status + ')');
+  const bytes = await response.arrayBuffer();
+  if (bytes.byteLength < 1024 || !WebAssembly.validate(bytes))
+    throw new Error('Đường dẫn không trả về WebAssembly thật (có thể là trang HTML dự phòng).');
+  log('WASM đã qua kiểm tra định dạng. Chọn GGUF MuScriptor Small để thử nạp.');
+  picker.onchange = () => {button.disabled = !picker.files?.length;};
+} catch(error) {
+  log('Chưa sẵn sàng: ' + (error?.message || error));
+}
+button.onclick = async () => {
+  button.disabled = true;
+  if (worker) worker.terminate();
+  log('Đang đọc GGUF từ máy của bạn…');
+  try {
+    const buffer = await picker.files[0].arrayBuffer();
+    worker = new Worker(workerUrl,{type:'module'});
+    worker.onmessage = ({data}) => {
+      if (data.type === 'progress') log('MuScriptor C++ đang thực thi: ' + data.percent + '%');
+      else if (data.type === 'ready') log('NẠP MÔ HÌNH THẬT THÀNH CÔNG: ' + data.message);
+      else if (data.type === 'error') {log('KHÔNG NẠP ĐƯỢC: ' + data.message);button.disabled=false;}
+      else if (data.message) log(data.message);
+    };
+    worker.onerror = event => {log('Lỗi module hoặc WASM: ' + event.message);button.disabled=false;};
+    worker.postMessage({type:'init',moduleUrl:moduleUrl.href,model:buffer},[buffer]);
+  } catch(error) {
+    log('Không thể đọc mô hình: ' + (error?.message||error));
+    button.disabled=false;
+  }
+};
+</script>
+</body>
+</html>
