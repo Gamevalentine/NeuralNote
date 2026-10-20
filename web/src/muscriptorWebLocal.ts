@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 // NOTIQ browser preview: MIT MuScriptor C++ WASM only. No Basic Pitch fallback,
 // server-side recognition, fake MIDI or modification to NOTIQ Desktop.
 import type { Note } from './audio';
