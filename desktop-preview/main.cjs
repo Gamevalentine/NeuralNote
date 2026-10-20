@@ -101,8 +101,8 @@ async function transcribeViaNative(input) {
   if (!bridgeStatus().modelInstalled)
     throw new Error('Chưa tải MuScriptor Small (209 MB). Vui lòng bấm Tải mô hình trước.');
   const raw = input instanceof Uint8Array ? input : new Uint8Array(input);
-  if (raw.byteLength < 44 || raw.byteLength > 46*16000*4+4096)
-    throw new Error('Tệp âm thanh chuẩn bị cho MuScriptor phải ngắn hơn 45 giây.');
+  if (raw.byteLength < 44 || raw.byteLength > 15*60*16000*4+4096)
+    throw new Error('MuScriptor hỗ trợ tệp đã chuyển đổi tối đa 15 phút.');
   if (String.fromCharCode(...raw.slice(0,4)) !== 'RIFF')
     throw new Error('Dữ liệu âm thanh chuyển sang native không phải WAV.');
   transcriptionJob = (async () => {
@@ -146,7 +146,7 @@ async function transcribeViaNative(input) {
 
 function createWindow() {
   window = new BrowserWindow({
-    title: 'NOTIQ — Giai đoạn 5 · DAW / Kontakt', width: 1440, height: 900,
+    title: 'NOTIQ — Giai đoạn 5 · Toàn bài hát / DAW / Kontakt', width: 1440, height: 900,
     minWidth: 980, minHeight: 620, backgroundColor: '#111318',
     autoHideMenuBar: true, show: false,
     webPreferences: {
