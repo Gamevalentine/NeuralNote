@@ -1,4 +1,4 @@
-NOTIQ WINDOWS PORTABLE — GIAI ĐOẠN 5 (CẢ BÀI HÁT / MIDI / DAW)
+NOTIQ WINDOWS PORTABLE — KHÔI PHỤC NEURALNOTE MUSCRIPTOR NATIVE
 ==============================================================
 NOTIQ Stage 5 bao gồm: giao diện Piano Roll đã duyệt, SoundFont,
 MuScriptor C++ native CPU và xuất MIDI cho Cubase, Cakewalk, Kontakt.
@@ -6,14 +6,16 @@ MuScriptor C++ native CPU và xuất MIDI cho Cubase, Cakewalk, Kontakt.
 CÁCH MỞ — KHÔNG CẦN CMD
 1. Tải ZIP từ GitHub Actions / Artifacts rồi giải nén TOÀN BỘ
    vào E:\LUNOR\NOTIQ-Stage5 (hoặc ổ khác, ưu tiên không phải C:).
-2. Nhấp đúp NOTIQ-Stage5-FullSong.exe. Giữ nguyên các file resources
+2. Nhấp đúp NOTIQ-NeuralNote-Core.exe. Giữ nguyên các file resources
    và thư viện DLL đi kèm EXE.
 3. Bấm Tải bài hát ở thanh trên cùng, chọn MP3/WAV/M4A/FLAC/OGG,
    hoặc mở Tệp → Tải bài hát / mở âm thanh.
-4. Nếu dùng engine MuScriptor: Công cụ → AI: MuScriptor C++
-   (Windows), sau đó Công cụ → Tải mô hình MuScriptor Small
-   khi cần (209 MB, tải và lưu bên cạnh EXE).
-5. Nhấn Nhận diện Audio → MIDI, chỉnh nốt trong Piano Roll.
+   Khi model MuScriptor Small đã có, ứng dụng tự chạy nhận diện.
+4. MuScriptor là engine nhận diện duy nhất trong NOTIQ Windows.
+   Lần đầu nhấn Tải mô hình AI để lấy MuScriptor Small (209 MB)
+   từ nguồn NeuralNote đã pin SHA-256; lưu cạnh EXE trên ổ chọn.
+5. Sau khi nhận diện, chỉnh nốt trong Piano Roll; nếu gặp lỗi,
+   dùng nút Nhận diện nốt để chạy lại.
 
 XUẤT FILE DÙNG VỚI CUBASE / CAKEWALK / KONTAKT
 Vào menu Xuất:
@@ -27,7 +29,7 @@ Vào menu Xuất:
 
 Nếu đã tải MuScriptor Small ở bản Stage 4, có thể chép tệp
 models\muscriptor-small-f16.gguf từ thư mục NOTIQ-Stage4
-sang thư mục models\ tương ứng bên cạnh NOTIQ-Stage5.exe.
+sang thư mục models\ tương ứng bên cạnh NOTIQ-NeuralNote-Core.exe.
 Lưu ý model phải đúng phiên bản, không đổi tên tệp.
 
 GIỚI HẠN
@@ -47,3 +49,14 @@ GIỚI HẠN
 
 MÃ NGUỒN
 https://github.com/Gamevalentine/NeuralNote
+
+KHÔI PHỤC ENGINE TỪ NEURALNOTE GỐC
+- Native C++ dùng msl::Transcriber trong ThirdParty/muscriptor.cpp,
+  cùng thư viện nhận diện được NeuralNote gọi từ Lib/Model/MuscriptorEngine.cpp.
+- NOTIQ vẫn giữ giao diện và MIDI export riêng, không sửa NeuralNote C++ gốc.
+- Trang Web Cloudflare là nơi DUYỆT GIAO DIỆN và biên tập MIDI.
+  Trang web không chạy MuScriptor C++ hoặc Basic Pitch bằng WebGL.
+- Kiểm thử tự động chỉ xác nhận build, EXE khởi động (self-test),
+  WAV 3 phút hợp lệ và giao thức MIDI. Chưa xác minh inference
+  end-to-end với GGUF trên máy người dùng.
+- Không có phiên bản thương mại của MuScriptor Small: CC BY-NC 4.0.

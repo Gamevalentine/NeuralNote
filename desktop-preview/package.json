@@ -1,11 +1,11 @@
 {
-  "name": "notiq-desktop-stage5-fullsong-preview",
-  "version": "0.5.1",
+  "name": "notiq-desktop-neuralnote-core-preview",
+  "version": "0.5.2",
   "private": true,
-  "description": "NOTIQ Windows: full songs up to 15 min, MuScriptor CPU, Piano Roll, SoundFont, Cubase/Cakewalk MIDI",
+  "description": "NOTIQ restored: original NeuralNote MuScriptor native engine and approved Piano Roll/MIDI UI",
   "main": "main.cjs",
   "scripts": {
-    "pack:win": "electron-packager . NOTIQ-Stage5-FullSong --platform=win32 --arch=x64 --out=release --overwrite --asar --prune=true --ignore=^/release$ --extra-resource=bridge-bin"
+    "pack:win": "electron-packager . NOTIQ-NeuralNote-Core --platform=win32 --arch=x64 --out=release --overwrite --asar --prune=true --ignore=^/release$ --extra-resource=bridge-bin"
   },
   "devDependencies": {
     "electron": "38.0.0",
