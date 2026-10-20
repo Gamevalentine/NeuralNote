@@ -43,15 +43,15 @@ InstrumentStrip::InstrumentStrip(InstrumentMixer& inMixer, int inProgram)
     setup_toggle(mMuteButton, nn::colours::muteFill(), nn::colours::warn);
     setup_toggle(mSoloButton, nn::colours::accentFillToggle(), nn::colours::accentText);
 
-    mMuteButton.setTooltip("Tắt tiếng nhạc cụ này");
+    mMuteButton.setTooltip(juce::String::fromUTF8("Tắt tiếng nhạc cụ này"));
     mMuteButton.onClick = [this] { mMixer.setMuted(mProgram, mMuteButton.getToggleState()); };
 
-    mSoloButton.setTooltip("Chỉ phát nhạc cụ này");
+    mSoloButton.setTooltip(juce::String::fromUTF8("Chỉ phát nhạc cụ này"));
     mSoloButton.onClick = [this] { mMixer.setSoloed(mProgram, mSoloButton.getToggleState()); };
 
     mFader.setRange(MIN_INF_GAIN_DB, MAX_GAIN_DB, 0.1);
     mFader.setDoubleClickReturnValue(true, 0.0);
-    mFader.setTooltip("Âm lượng nhạc cụ này");
+    mFader.setTooltip(juce::String::fromUTF8("Âm lượng nhạc cụ này"));
     // Repainted here rather than off a mixer change message: gain does not broadcast, and this
     // strip's dB readout is the only thing in the window that draws it.
     mFader.onValueChange = [this] {
@@ -205,11 +205,11 @@ void InstrumentStrip::paint(juce::Graphics& g)
     juce::String meta;
 
     if (!mEntry.hasNotes()) {
-        meta = mTranscriptionFinished ? "chưa có nốt" : juce::String();
+        meta = mTranscriptionFinished ? juce::String::fromUTF8("chưa có nốt") : juce::String();
     } else if (mEntry.program == msl::DRUM_PROGRAM) {
-        meta = juce::String(mEntry.noteCount) + " tiếng" + separator + "bộ trống";
+        meta = juce::String(mEntry.noteCount) + juce::String::fromUTF8(" tiếng") + separator + juce::String::fromUTF8("bộ trống");
     } else {
-        meta = juce::String(mEntry.noteCount) + " nốt" + separator + nn::midiNoteName(mEntry.lowestPitch) + "-"
+        meta = juce::String(mEntry.noteCount) + juce::String::fromUTF8(" nốt") + separator + nn::midiNoteName(mEntry.lowestPitch) + "-"
                + nn::midiNoteName(mEntry.highestPitch);
     }
 
