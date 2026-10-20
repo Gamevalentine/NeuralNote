@@ -1,0 +1,147 @@
+name: NOTIQ Stage 5 Windows DAW / Kontakt Preview
+
+on:
+  push:
+    branches:
+      - feature/notiq-stage5-windows-preview
+    paths:
+      - .github/workflows/notiq-stage5-windows-preview.yml
+      - desktop-preview/**
+      - notiq-native/**
+      - web/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notiq-stage5-windows-preview
+  cancel-in-progress: true
+
+jobs:
+  build-windows-app:
+    runs-on: windows-latest
+    timeout-minutes: 150
+    steps:
+      - name: Check out NOTIQ with native MuScriptor C++ submodule
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Test and build approved NOTIQ Web / DAW export interface
+        working-directory: web
+        shell: pwsh
+        run: |
+          npm install --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw 'Web dependencies could not be installed' }
+          npm run test:daw
+          if ($LASTEXITCODE -ne 0) { throw 'DAW multitrack MIDI and ZIP tests failed' }
+          npm run test:piano
+          if ($LASTEXITCODE -ne 0) { throw 'Piano Roll tests failed' }
+          node --experimental-strip-types --test tests/muscriptor-protocol.test.mts
+          if ($LASTEXITCODE -ne 0) { throw 'MuScriptor protocol tests failed' }
+          npm run test:soundfont
+          if ($LASTEXITCODE -ne 0) { throw 'SoundFont tests failed' }
+          npm run build
+          if ($LASTEXITCODE -ne 0) { throw 'Web TypeScript/Vite build failed' }
+
+      - name: Choose installed Visual Studio C++ generator
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ([Environment]::GetFolderPath('ProgramFilesX86')) 'Microsoft Visual Studio\Installer\vswhere.exe'
+          if (-not (Test-Path $vswhere)) { throw 'Visual Studio Build Tools are missing' }
+          $installation = & $vswhere -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $installation) { throw 'MSVC C++ compiler missing' }
+          $cmakeHelp = cmake --help | Out-String
+          if (($installation -match '[\\/]18[\\/]') -and ($cmakeHelp -match 'Visual Studio 18 2026')) {
+            $generator = 'Visual Studio 18 2026'
+          } elseif (($installation -match '[\\/]17[\\/]') -and ($cmakeHelp -match 'Visual Studio 17 2022')) {
+            $generator = 'Visual Studio 17 2022'
+          } else {
+            throw "Unsupported MSVC generator $installation"
+          }
+          "NOTIQ_CMAKE_GENERATOR=$generator" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Build real MuScriptor C++ CPU engine
+        shell: pwsh
+        run: |
+          cmake -S notiq-native -B build-native -G "$env:NOTIQ_CMAKE_GENERATOR" -A x64 -DMUSCRIPTOR_VULKAN=OFF
+          if ($LASTEXITCODE -ne 0) { throw 'Native configure failed' }
+          cmake --build build-native --config Release --target notiq-muscriptor-cli --parallel 2
+          if ($LASTEXITCODE -ne 0) { throw 'Native C++ compile failed' }
+
+      - name: Bundle Electron GUI and engine as separate executable
+        shell: pwsh
+        run: |
+          $gui = Join-Path $env:GITHUB_WORKSPACE 'desktop-preview'
+          $www = Join-Path $gui 'www'
+          $bin = Join-Path $gui 'bridge-bin'
+          New-Item -ItemType Directory -Force -Path $www, $bin | Out-Null
+          Copy-Item -Recurse -Force -Path (Join-Path $env:GITHUB_WORKSPACE 'web/dist/*') -Destination $www
+          $native = Get-ChildItem build-native -Recurse -File -Filter notiq-muscriptor-cli.exe | Select-Object -First 1
+          if (-not $native) { throw 'Missing native C++ executable' }
+          $dest = Join-Path $bin 'notiq-muscriptor-cli.exe'
+          Copy-Item $native.FullName $dest
+          $result = & $dest --self-test
+          if ($LASTEXITCODE -ne 0 -or $result -notmatch '"ready":true') { throw 'Native engine cannot start on Windows' }
+          if (-not (Test-Path (Join-Path $www 'index.html'))) { throw 'Missing NOTIQ Web user interface' }
+          Write-Host "Actual native MuScriptor CLI starts successfully: $dest"
+
+      - name: Syntax-check native Electron IPC and preload
+        shell: pwsh
+        run: |
+          node --check desktop-preview/main.cjs
+          if ($LASTEXITCODE -ne 0) { throw 'Electron main process syntax failed' }
+          node --check desktop-preview/preload.cjs
+          if ($LASTEXITCODE -ne 0) { throw 'Electron secure preload syntax failed' }
+
+      - name: Install Windows Electron packaging dependencies
+        working-directory: desktop-preview
+        shell: pwsh
+        run: |
+          npm install --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw 'Electron installation failed' }
+
+      - name: Package complete NOTIQ Stage 5 Windows application
+        working-directory: desktop-preview
+        shell: pwsh
+        run: |
+          npm run pack:win
+          if ($LASTEXITCODE -ne 0) { throw 'Electron Windows packaging failed' }
+
+      - name: Verify executable GUI, embedded app and native C++ bridge
+        shell: pwsh
+        run: |
+          $out = 'desktop-preview/release/NOTIQ-Stage5-win32-x64'
+          $gui = Join-Path $out 'NOTIQ-Stage5.exe'
+          $native = Join-Path $out 'resources/bridge-bin/notiq-muscriptor-cli.exe'
+          $asar = Join-Path $out 'resources/app.asar'
+          if (-not (Test-Path $gui)) { throw 'NOTIQ Windows EXE missing' }
+          if (-not (Test-Path $native)) { throw 'Native MuScriptor binary missing from Electron resources' }
+          if (-not (Test-Path $asar)) { throw 'Bundled Web/Piano Roll app missing' }
+          $output = & $native --self-test
+          if ($LASTEXITCODE -ne 0 -or $output -notmatch '"ready":true') { throw 'Packaged native C++ engine does not start' }
+          if ((Get-Item $gui).Length -lt 1000000) { throw 'Suspiciously small app executable' }
+          Copy-Item desktop-preview/README-STAGE5.txt (Join-Path $out 'README-STAGE5.txt')
+          Write-Host "Verified: $gui"
+          Write-Host "Verified: $native"
+          Write-Host "Verified: $asar"
+          $unpacked = Get-ChildItem (Join-Path $out 'resources') -Recurse -File | Measure-Object
+          Write-Host "Validated bundled resources file count: $($unpacked.Count)"
+          Write-Host 'DAW ZIP + multitrack Type 1 roundtrip tests already passed; files included in Web build.'
+          Write-Host 'Checkpoint weights deliberately excluded (CC BY-NC 4.0).'
+
+      - name: Upload NOTIQ Windows Stage 5 portable ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: NOTIQ-Stage5-MuScriptor-DAW-Windows-x64-Preview
+          path: desktop-preview/release/NOTIQ-Stage5-win32-x64/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 6
