@@ -28,9 +28,12 @@ export function updateNote(
 ): Note[] {
   if (!notes[index]) return notes;
   const old = notes[index];
-  const startTimeSeconds = clamp(snapSeconds(next.startTimeSeconds ?? old.startTimeSeconds),
+  // Keep the exact timing of AI notes unless that timing field is edited.
+  const startTimeSeconds = clamp(
+    next.startTimeSeconds === undefined ? old.startTimeSeconds : snapSeconds(next.startTimeSeconds),
     0, Math.max(0, totalSeconds - MIN_NOTE_SECONDS));
-  const durationSeconds = clamp(snapSeconds(next.durationSeconds ?? old.durationSeconds),
+  const durationSeconds = clamp(
+    next.durationSeconds === undefined ? old.durationSeconds : snapSeconds(next.durationSeconds),
     MIN_NOTE_SECONDS, Math.max(MIN_NOTE_SECONDS, totalSeconds - startTimeSeconds));
   const pitchMidi = clamp(Math.round(next.pitchMidi ?? old.pitchMidi), 0, 127);
   const result = notes.slice();
