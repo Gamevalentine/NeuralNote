@@ -375,7 +375,21 @@ function App() {
   useEffect(() => {
     if (!playing || !notes.length || playbackMode === 'original') return;
     const interval = window.setInterval(() => {
-      const now = audioEl.current?.currentTime || 0;
+      const now = info ? (audioEl.current?.currentTime || 0)
+        : Math.max(0, (audioCtx.current?.currentTime || 0) - (midiOnlyStart.current || 0));
+      if (!info) {
+        setTime(now);
+        if (now >= totalSeconds) {
+          if (loop) {
+            midiOnlyStart.current = audioCtx.current?.currentTime || null;
+            firedNotes.current.clear();
+          } else {
+            setPlaying(false);
+            midiOnlyStart.current = null;
+          }
+          return;
+        }
+      }
       if (now + 0.25 < previousTime.current || Math.abs(now - previousTime.current) > 0.5) firedNotes.current.clear();
       previousTime.current = now;
       for (let i = 0; i < notes.length; i++) {
@@ -389,7 +403,7 @@ function App() {
       }
     }, 45);
     return () => window.clearInterval(interval);
-  }, [playing, notes, playbackMode, activeGroups, gain, masterVolume]);
+  }, [playing, notes, playbackMode, activeGroups, gain, masterVolume, info, totalSeconds, loop, instrumentSelection]);
 
   useEffect(() => {
     if (audioEl.current) audioEl.current.volume = playbackMode === 'midi' ? 0 : masterVolume * (playbackMode === 'mix' ? 0.65 : 1);
@@ -397,29 +411,42 @@ function App() {
 
   const togglePlayback = async () => {
     const audio = audioEl.current;
-    if (!audio || !info) return;
+    if (!info && !visibleNotes.length) return;
     if (playing) {
-      audio.pause();
+      audio?.pause();
+      midiOnlyStart.current = null;
       setPlaying(false);
     } else {
       try {
-        if (playbackMode !== 'original') {
-          const synth = audioCtx.current || new AudioContext();
-          audioCtx.current = synth;
-          await synth.resume();
+        const ctx = getAudioContext();
+        if (ctx.state !== 'running') await ctx.resume();
+        if (playbackMode !== 'original' || !info) {
+          const needed = [...new Set(visibleNotes.map(n => instrumentSelection[groupFor(n.pitchMidi)]))];
+          if (needed.length) {
+            setLoadingSoundfont(true);
+            setSoundfontStatus('Đang chuẩn bị các tiếng SoundFont để phát MIDI...');
+            await Promise.all(needed.map(instrument => prepareInstrument(ctx, instrument)));
+            setSoundfontStatus('Đã tải xong ' + needed.length + ' bộ tiếng SoundFont');
+          }
         }
         firedNotes.current.clear();
-        await audio.play();
+        previousTime.current = info ? (audio?.currentTime || 0) : 0;
+        if (info && audio) await audio.play();
+        else { midiOnlyStart.current = ctx.currentTime; setTime(0); }
         setPlaying(true);
-      } catch {
-        setError('Không thể phát âm thanh. Hãy cho phép trình duyệt phát media.');
+      } catch (cause) {
+        setSoundfontStatus('Lỗi SoundFont / phát lại');
+        setError('Không thể chuẩn bị bộ tiếng: ' + (cause instanceof Error ? cause.message : 'Kiểm tra mạng hoặc thử chọn lại nhạc cụ.'));
+      } finally {
+        setLoadingSoundfont(false);
       }
     }
   };
   const seekTo = (seconds: number) => {
-    if (!audioEl.current) return;
-    const clamped = Math.max(0, Math.min(info?.duration || 0, seconds));
-    audioEl.current.currentTime = clamped;
+    const clamped = Math.max(0, Math.min(info?.duration || totalSeconds, seconds));
+    if (info && audioEl.current) audioEl.current.currentTime = clamped;
+    else if (midiOnlyStart.current !== null && audioCtx.current)
+      midiOnlyStart.current = audioCtx.current.currentTime - clamped;
     setTime(clamped);
     previousTime.current = clamped;
     firedNotes.current.clear();
@@ -427,6 +454,7 @@ function App() {
   const stop = () => {
     if (audioEl.current) audioEl.current.pause();
     setPlaying(false);
+    midiOnlyStart.current = null;
     seekTo(0);
   };
   const toggleMute = (id: PitchGroup) => {
@@ -491,13 +519,13 @@ function App() {
         { label: 'Làm lại (Redo)', run: redoEdit, disabled: !canRedo || phase === 'analyzing', shortcut: 'Ctrl+Y' },
         { label: 'Xóa nốt đã chọn', run: deleteSelected, disabled: selectedNote === null || phase === 'analyzing', shortcut: 'Del' },
         { label: 'Xóa kết quả nhận diện', run: () => { commitNotes([]); setSelectedNote(null); setPhase(selection ? 'ready' : 'empty'); setStatus('Đã xóa kết quả MIDI'); }, disabled: notes.length === 0 || phase === 'analyzing' },
-        { label: 'Về đầu bản nhạc', run: () => seekTo(0), disabled: !info },
+        { label: 'Về đầu bản nhạc', run: () => seekTo(0), disabled: !info && !notes.length },
       ],
     },
     {
       id: 'play', label: 'Phát lại', commands: [
-        { label: playing ? 'Tạm dừng' : 'Phát', run: () => void togglePlayback(), disabled: !info },
-        { label: 'Dừng và về đầu', run: stop, disabled: !info },
+        { label: playing ? 'Tạm dừng' : 'Phát', run: () => void togglePlayback(), disabled: !info && !notes.length },
+        { label: 'Dừng và về đầu', run: stop, disabled: !info && !notes.length },
         { label: 'Phát lặp', run: () => setLoop(v => !v), checked: loop },
       ],
     },
