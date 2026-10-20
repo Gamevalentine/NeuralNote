@@ -1,7 +1,8 @@
 import { Midi } from '@tonejs/midi';
 import { zipSync, strToU8 } from 'fflate';
 import type { Note, PitchGroup } from './audio';
-import { GROUPS, groupFor } from './audio';
+// Match NOTIQ's existing pitch boundaries without pulling the AI runtime into MIDI tests.
+const groupFor = (pitch: number): PitchGroup => pitch < 60 ? 'low' : pitch < 72 ? 'mid' : 'high';
 
 export type DawTrack = {
   key: string;
@@ -57,7 +58,7 @@ export function extractDawTracks(notes: Note[], programs: DawPrograms, includedG
       map.get(key)!.notes.push(note);
     }
   }
-  const groupOrder = GROUPS.map(g => 'pitch-' + g.id);
+  const groupOrder = ['pitch-high', 'pitch-mid', 'pitch-low'];
   return [...map.values()].sort((a,b) => {
     if (a.isDrum !== b.isDrum) return a.isDrum ? 1 : -1;
     const aIdx = groupOrder.indexOf(a.key), bIdx = groupOrder.indexOf(b.key);
