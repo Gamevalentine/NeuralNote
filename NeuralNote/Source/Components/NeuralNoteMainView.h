@@ -39,6 +39,9 @@ public:
      */
     void clear();
 
+    /** Open the native audio picker from the toolbar or the menu bar. */
+    void openAudioFile();
+
     bool keyPressed(const KeyPress& key) override;
 
 private:
