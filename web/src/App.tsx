@@ -39,6 +39,7 @@ function App() {
   const [nativeDownloading, setNativeDownloading] = useState(false);
   const [nativeMuted, setNativeMuted] = useState<Set<number>>(new Set());
   const [nativeSolo, setNativeSolo] = useState<number | null>(null);
+  const [nativeSelectedProgram, setNativeSelectedProgram] = useState<number | null>(null);
   const [nativeGain, setNativeGain] = useState<Record<number, number>>({});
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState('Chưa tải tệp âm thanh');
@@ -292,6 +293,7 @@ function App() {
       clearHistory(detected);
       setNativeMuted(new Set());
       setNativeSolo(null);
+      setNativeSelectedProgram(detected.find(n => n.program !== undefined)?.program ?? null);
       setProgress(100);
       setPhase('complete');
       setStatus(engineMode === 'muscriptor'
@@ -334,10 +336,22 @@ function App() {
     void warmInstrument(instrument);
   };
 
-  const previewNote = async (pitch: number, length = 0.35, volume = 0.65) => {
+  const previewNote = async (pitch: number, length = 0.35, volume = 0.65, program?: number) => {
+    if (program === 128) {
+      setSoundfontStatus('Đã nhận diện trống GM; tiếng trống cần bộ sample percussion riêng.');
+      return;
+    }
+    const nativePreset: InstrumentId | undefined = program === undefined ? undefined
+      : program < 8 ? 'acoustic_grand_piano'
+      : program >= 24 && program < 32 ? 'acoustic_guitar_nylon'
+      : program >= 32 && program < 40 ? 'electric_bass_finger'
+      : program >= 40 && program < 52 ? 'violin'
+      : program >= 72 && program < 80 ? 'flute'
+      : program >= 8 && program < 16 ? 'marimba'
+      : 'acoustic_grand_piano';
     try {
       const ctx = getAudioContext();
-      await playSoundfontNote(ctx, instrumentSelection[groupFor(pitch)], pitch, length, volume);
+      await playSoundfontNote(ctx, nativePreset || instrumentSelection[groupFor(pitch)], pitch, length, volume);
     } catch (cause) {
       setSoundfontStatus('Lỗi tải / phát SoundFont');
       setError('Không thể nghe tiếng nhạc cụ. '
@@ -352,6 +366,10 @@ function App() {
     const y = clamp(event.clientY - rect.top, 0, rect.height - 1);
     const pitch = clamp(pitchTop - Math.floor(y / PITCH_ROW), pitchBottom, pitchTop);
     const next = addNote(notesRef.current, pitch, x / rect.width * totalSeconds, totalSeconds);
+    if (hasNativeTracks) {
+      const program = nativeSelectedProgram ?? nativePrograms[0];
+      next[next.length-1] = { ...next[next.length-1], program, isDrum: program === 128 };
+    }
     commitNotes(next);
     setSelectedNote(next.length - 1);
     setStatus('Đã thêm nốt ' + noteName(pitch) + ' · có thể kéo nốt hoặc kéo mép phải');
@@ -372,7 +390,7 @@ function App() {
       before: copyNotes(notesRef.current), startX: event.clientX, startY: event.clientY,
     };
     setSelectedNote(index);
-    void previewNote(original.pitchMidi, Math.min(0.36, original.durationSeconds));
+    void previewNote(original.pitchMidi, Math.min(0.36, original.durationSeconds), 0.65, original.program);
   };
 
   const moveNoteGesture = (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -413,7 +431,7 @@ function App() {
         setStatus((gesture.kind === 'resize' ? 'Đã đổi độ dài: ' : 'Đã chuyển nốt: ')
           + noteName(result.pitchMidi) + ' · ' + fmt(result.startTimeSeconds));
         if (gesture.kind === 'move' && result.pitchMidi !== gesture.original.pitchMidi)
-          void previewNote(result.pitchMidi, 0.25);
+          void previewNote(result.pitchMidi, 0.25, 0.65, result.program);
       }
     }
   };
@@ -465,15 +483,16 @@ function App() {
       for (let i = 0; i < notes.length; i++) {
         const n = notes[i];
         const group = groupFor(n.pitchMidi);
-        if (!activeGroups.has(group) || firedNotes.current.has(i)) continue;
+        if (!isNoteAudible(n) || firedNotes.current.has(i)) continue;
         if (n.startTimeSeconds >= now - 0.10 && n.startTimeSeconds <= now + 0.055) {
           firedNotes.current.add(i);
-          void previewNote(n.pitchMidi, Math.min(0.85, n.durationSeconds), gain[group] * masterVolume);
+          const level = n.program === undefined ? gain[group] : (nativeGain[n.program] ?? 0.7);
+          void previewNote(n.pitchMidi, Math.min(0.85, n.durationSeconds), level * masterVolume, n.program);
         }
       }
     }, 45);
     return () => window.clearInterval(interval);
-  }, [playing, notes, playbackMode, activeGroups, gain, masterVolume, info, totalSeconds, loop, instrumentSelection]);
+  }, [playing, notes, playbackMode, activeGroups, gain, masterVolume, info, totalSeconds, loop, instrumentSelection, nativeGain, nativeMuted, nativeSolo]);
 
   useEffect(() => {
     if (audioEl.current) audioEl.current.volume = playbackMode === 'midi' ? 0 : masterVolume * (playbackMode === 'mix' ? 0.65 : 1);
