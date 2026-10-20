@@ -3,7 +3,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { AudioWaveform, CircleHelp, Gauge, Headphones, Info, LoaderCircle,
   Music, Settings2, X, ZoomIn, ZoomOut } from 'lucide-react';
-import { fmt, generateDemo, groupFor, GROUPS, makeMidi, noteName, readAudio, transcribe } from './audio';
+import { fmt, generateDemo, groupFor, GROUPS, noteName, readAudio, transcribe } from './audio';
+import { createDawMidi, createDawBundle, extractDawTracks, midiChannelLimitExceeded } from './dawMidi';
 import { addNote, copyNotes, removeNote, sameNotes, SNAP_SECONDS, snapSeconds, updateNote, clamp } from './pianoEdit';
 import type { Note, AudioInfo, PitchGroup } from './audio';
 import { DEFAULT_INSTRUMENTS, INSTRUMENTS, instrumentProgram, playSoundfontNote, prepareInstrument } from './soundfont';
@@ -69,6 +70,7 @@ function App() {
   const [loadingSoundfont, setLoadingSoundfont] = useState(false);
   const [masterVolume, setMasterVolume] = useState(0.65);
   const [showSettings, setShowSettings] = useState(false);
+  const [showDawHelp, setShowDawHelp] = useState(false);
   const [showDesktopReview, setShowDesktopReview] = useState(false);
   const [reviewArea, setReviewArea] = useState<'menu' | 'tracks' | 'roll' | null>(null);
   const [activeMenu, setActiveMenu] = useState<MenuKey | null>(null);
@@ -556,22 +558,48 @@ function App() {
       return next;
     });
   };
-  const exportFile = () => {
-    if (!visibleNotes.length) return;
+  const downloadResult = (bytes: Uint8Array, filename: string, type: string) => {
+    const buffer = new ArrayBuffer(bytes.byteLength);
+    new Uint8Array(buffer).set(bytes);
+    const blob = new Blob([buffer], { type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+  };
+
+  const exportFile = (kind: 'multitrack' | 'bundle' = 'multitrack', scope: 'all' | 'audible' = 'all') => {
+    const source = scope === 'all' ? notes : visibleNotes;
+    if (!source.length) {
+      setStatus('Không có nốt MIDI để xuất.');
+      return;
+    }
     const programs: Record<PitchGroup, number> = {
       high: instrumentProgram(instrumentSelection.high),
       mid: instrumentProgram(instrumentSelection.mid),
       low: instrumentProgram(instrumentSelection.low),
     };
-    const blob = makeMidi(notes, bpm, activeGroups, programs);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = (selection?.name.replace(/\.[^.]+$/, '') || 'NOTIQ') + '.mid';
-    document.body.append(a);
-    a.click();
-    a.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+    const tracks = extractDawTracks(source, programs, scope === 'all'
+      ? new Set<PitchGroup>(['high', 'mid', 'low']) : activeGroups);
+    if (!tracks.length) {
+      setStatus('Không có track MIDI hợp lệ.');
+      return;
+    }
+    const basename = (selection?.name.replace(/\.[^.]+$/, '') || 'NOTIQ')
+      .replace(/[\\/:*?"<>|]/g, '_').slice(0, 90);
+    if (kind === 'bundle') {
+      downloadResult(createDawBundle(tracks, bpm), basename + '_DAW_KONTAKT.zip', 'application/zip');
+      setStatus('Đã xuất ' + tracks.length + ' track MIDI riêng + hướng dẫn Kontakt');
+    } else {
+      downloadResult(createDawMidi(tracks, bpm), basename + '_MULTITRACK.mid', 'audio/midi');
+      setStatus('Đã xuất MIDI Type 1: ' + tracks.length + ' track');
+    }
+    if (midiChannelLimitExceeded(tracks))
+      setError('Vượt 15 nhạc cụ giai điệu trên 1 cổng GM. Dùng gói ZIP MIDI riêng từng track để tránh trùng kênh trong DAW.');
   };
   const reset = () => {
     stop();
@@ -666,7 +694,11 @@ function App() {
     },
     {
       id: 'export', label: 'Xuất', commands: [
-        { label: 'Xuất MIDI (.mid)', run: exportFile, disabled: !visibleNotes.length },
+        { label: 'MIDI đa track (.mid) · Cubase/Cakewalk', run: () => exportFile('multitrack'), disabled: !notes.length },
+        { label: 'Gói MIDI từng track (.zip) · Kontakt', run: () => exportFile('bundle'), disabled: !notes.length },
+        { label: 'Chỉ xuất track đang bật (.mid)', run: () => exportFile('multitrack', 'audible'), disabled: !visibleNotes.length },
+        { label: 'Chỉ đóng gói track đang bật (.zip)', run: () => exportFile('bundle', 'audible'), disabled: !visibleNotes.length },
+        { label: 'Hướng dẫn sử dụng Kontakt', run: () => setShowDawHelp(true) },
       ],
     },
   ];
