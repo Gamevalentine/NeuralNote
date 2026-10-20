@@ -16,7 +16,7 @@ RUN cmake -S notiq-native -B /build -G Ninja -DCMAKE_BUILD_TYPE=Release -DMUSCRI
 FROM node:22-bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libgomp1 && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY --from=builder /build/native-bin/notiq-muscriptor-cli /usr/local/bin/notiq-muscriptor-cli
+COPY --from=builder /build/notiq-muscriptor-cli /usr/local/bin/notiq-muscriptor-cli
 COPY notiq-api/ /app/
 ENV NOTIQ_CLI_PATH=/usr/local/bin/notiq-muscriptor-cli
 ENV NOTIQ_MODEL_PATH=/app/models/muscriptor-small-f16.gguf
