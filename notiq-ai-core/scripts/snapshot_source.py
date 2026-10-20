@@ -14,9 +14,12 @@ if not (source / "cpp" / "CMakeLists.txt").is_file():
     raise SystemExit("Missing MuScriptor submodule checkout. See NOTIQ AI Core README.")
 if dest.exists():
     raise SystemExit("NOTIQ copy already exists; refusing to overwrite local changes.")
+revision = subprocess.check_output(["git", "-C", str(source), "rev-parse", "HEAD"], text=True).strip()
+expected = "c8adc019677ed3479fa3c22c1a117d662382f347"
+if revision != expected:
+    raise SystemExit("MuScriptor submodule revision differs from pinned source; no files copied.")
 dest.mkdir(parents=True)
 copytree(source / "cpp", dest / "cpp")
 copy2(source / "LICENSE", dest / "LICENSE")
-revision = subprocess.check_output(["git", "-C", str(source), "rev-parse", "HEAD"], text=True).strip()
 (dest / "SOURCE_REVISION").write_text(revision + "\n", encoding="utf-8")
 print(f"NOTIQ AI Core C++ snapshot created from commit {revision}")
