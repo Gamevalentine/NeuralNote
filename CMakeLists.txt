@@ -88,6 +88,15 @@ if (NOT EXISTS "${NEURALNOTE_SOUNDFONT}")
           "Missing ${NEURALNOTE_SOUNDFONT}.\n"
           "Run Tools/fetch_soundfont.py, or configure with -DNEURALNOTE_FETCH_SOUNDFONT=ON.")
 endif ()
+# Guard against incomplete or corrupted downloads left by a failed previous run.
+# The upstream builder pins and verifies this deterministic output digest too.
+file(SHA256 "${NEURALNOTE_SOUNDFONT}" NEURALNOTE_SOUNDFONT_SHA256)
+if (NOT NEURALNOTE_SOUNDFONT_SHA256 STREQUAL "6152b329bfb7c57c73112e26452e6b61909b19df1f146351bab85a5f3b0ea0aa")
+  message(FATAL_ERROR
+          "The cached NeuralNote_GM.sf3 has the wrong SHA-256.\n"
+          "The existing file was NOT deleted: ${NEURALNOTE_SOUNDFONT}\n"
+          "Rebuild with Tools/fetch_soundfont.py (reuses any verified source files).")
+endif ()
 
 # muscriptor.cpp pins CMake >=3.24 and forces itself + ggml to build as
 # static libraries (required inside a plugin bundle). BUILD_TESTING=OFF avoids
