@@ -14,7 +14,9 @@ import argparse
 import hashlib
 import shutil
 import ssl
+import subprocess
 import sys
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -62,15 +64,11 @@ DEST_DIR = make_soundfont.SOUNDFONT_DIR
 
 
 def ssl_context() -> ssl.SSLContext:
-    """A verifying context, with certifi's bundle when OpenSSL has no usable store.
-
-    Conda-style Pythons on Windows ship an OpenSSL whose compiled-in CA path
-    (C:/Program Files/Common Files/ssl) does not exist, so the default context
-    verifies nothing successfully. certifi ships with those distributions.
-    """
+    """Use a verified trust bundle; never disable certificate checks."""
     paths = ssl.get_default_verify_paths()
-
-    if paths.cafile or paths.capath:
+    if (paths.cafile and Path(paths.cafile).is_file()) or (
+        paths.capath and Path(paths.capath).is_dir()
+    ):
         return ssl.create_default_context()
 
     try:
@@ -79,6 +77,34 @@ def ssl_context() -> ssl.SSLContext:
         return ssl.create_default_context()
 
     return ssl.create_default_context(cafile=certifi.where())
+
+
+def download_verified_tls(url: str, partial: Path) -> None:
+    """Retry an SSL verification failure via Windows' native certificate store.
+
+    Windows curl.exe normally uses Schannel / the Windows trust store. Both
+    urllib and curl verify HTTPS certificates; neither turns off verification.
+    The caller still verifies SHA-256 against the pinned upstream digest.
+    """
+    try:
+        with urllib.request.urlopen(url, timeout=60, context=ssl_context()) as response, partial.open("wb") as out:
+            shutil.copyfileobj(response, out)
+        return
+    except (urllib.error.URLError, ssl.SSLError) as error:
+        reason = getattr(error, "reason", error)
+        if sys.platform != "win32" or not isinstance(reason, ssl.SSLCertVerificationError):
+            raise
+        print("Python SSL trust failed; retrying securely with Windows curl.exe", file=sys.stderr)
+
+    partial.unlink(missing_ok=True)
+    process = subprocess.run(
+        ["curl.exe", "--fail", "--location", "--retry", "2", "--connect-timeout", "30",
+         "--max-time", "300", "--output", str(partial), url],
+        check=False,
+    )
+    if process.returncode != 0:
+        raise RuntimeError(f"Windows curl.exe could not download the file (exit {process.returncode})")
+
 
 
 def sha256(path: Path) -> str:
@@ -110,8 +136,7 @@ def fetch(name: str, base_url: str, expected: str, force: bool) -> bool:
     partial = destination.with_suffix(destination.suffix + ".partial")
 
     try:
-        with urllib.request.urlopen(url, timeout=60, context=ssl_context()) as response, partial.open("wb") as out:
-            shutil.copyfileobj(response, out)
+        download_verified_tls(url, partial)
     except Exception as error:  # noqa: BLE001 -- reported to the user, not handled
         partial.unlink(missing_ok=True)
         print(f"{name}: download failed: {error}", file=sys.stderr)
