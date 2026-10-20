@@ -27,6 +27,7 @@ export NOTIQ_MODEL_DOWNLOAD=1
 export NOTIQ_CODESPACE_PREVIEW=1
 export VITE_NOTIQ_MUSCRIPTOR_API=self
 export PORT=8080
+export NOTIQ_BIND_ADDRESS=127.0.0.1
 # Restart only previously created preview processes; don't affect unrelated apps.
 for name in api web; do
   pidfile="$ROOT/.notiq-preview/$name.pid"
