@@ -12,6 +12,8 @@ function apiBase(): string | null {
   const configured = (import.meta as ImportMeta & { env?: Record<string, string | undefined> })
     .env?.VITE_NOTIQ_MUSCRIPTOR_API?.trim().replace(/\/+$/, '');
   if (!configured) return null;
+  // For a private GitHub Codespace: one HTTPS port, with server-side Vite proxy authentication.
+  if (configured === 'self') return window.location.origin;
   try {
     const parsed = new URL(configured);
     if (!/^https:$/.test(parsed.protocol) &&
@@ -28,6 +30,9 @@ async function parseJson(response: Response): Promise<Record<string, unknown>> {
   return json as Record<string, unknown>;
 }
 function accessKey(): string {
+  // Credentials stay on the Codespace's server: Vite injects the real private key.
+  // This mode is only for the private forwarded Codespaces port.
+  if (import.meta.env.VITE_NOTIQ_MUSCRIPTOR_API === 'self') return 'private-forwarded-port';
   let key = '';
   try { key = sessionStorage.getItem(KEY_NAME) || ''; } catch { /* private mode */ }
   if (!key) {
