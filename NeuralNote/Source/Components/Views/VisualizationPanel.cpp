@@ -223,10 +223,10 @@ void VisualizationPanel::_layOutTranscribeButton()
     const auto instrument_count =
         state == AudioLoaded ? static_cast<int>(InstrumentSelection::get(mProcessor->getValueTree()).size()) : 0;
 
-    mTranscribeButton.setLabel(instrument_count == 0 ? juce::String("Nhận diện nốt")
+    mTranscribeButton.setLabel(instrument_count == 0 ? juce::String(juce::String::fromUTF8("Nhận diện nốt"))
                                : instrument_count == 1
-                                   ? juce::String("Nhận diện 1 nhạc cụ")
-                                   : "Nhận diện " + juce::String(instrument_count) + " nhạc cụ",
+                                   ? juce::String(juce::String::fromUTF8("Nhận diện 1 nhạc cụ"))
+                                   : juce::String::fromUTF8("Nhận diện ") + juce::String(instrument_count) + juce::String::fromUTF8(" nhạc cụ"),
                                nn::fonts::buttonLabel());
 
     mTranscribeButton.setBounds(roll.withSizeKeepingCentre(mTranscribeButton.getIdealWidth(), nn::metrics::ctaHeight));
