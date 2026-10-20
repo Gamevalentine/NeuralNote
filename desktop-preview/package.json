@@ -8,7 +8,7 @@
     "pack:win": "electron-packager . NOTIQ-Web-Preview --platform=win32 --arch=x64 --out=release --overwrite --asar --prune=true --ignore=^/release$"
   },
   "devDependencies": {
-    "@electron/packager": "19.0.0",
-    "electron": "38.0.0"
+    "electron": "38.0.0",
+    "electron-packager": "17.1.2"
   }
 }
