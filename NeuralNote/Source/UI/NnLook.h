@@ -27,10 +27,10 @@ inline juce::Colour rgb(juce::uint32 hex)
 
 // ---- surfaces -----------------------------------------------------------
 inline const juce::Colour windowBorder = rgb(0x26282e);
-inline const juce::Colour bgRoot = rgb(0x131417); // main content / piano roll bg
-inline const juce::Colour bgTopBar = rgb(0x17181c);
-inline const juce::Colour bgSidebar = rgb(0x161719);
-inline const juce::Colour bgPanel = rgb(0x15161a); // waveform, ruler, status bar
+inline const juce::Colour bgRoot = rgb(0x141820); // main content / piano roll bg
+inline const juce::Colour bgTopBar = rgb(0x161920);
+inline const juce::Colour bgSidebar = rgb(0x171a21);
+inline const juce::Colour bgPanel = rgb(0x191d27); // waveform, ruler, status bar
 inline const juce::Colour bgGutter = bgSidebar; // key column, amplitude scale
 inline const juce::Colour bgControl = rgb(0x1c1e23); // top bar pills
 inline const juce::Colour bgControlAlt = rgb(0x1b1d21); // toolbar pills
@@ -38,9 +38,9 @@ inline const juce::Colour bgControlSubtle = rgb(0x1f2126); // M/S off, "+" butto
 inline const juce::Colour bgControlActive = rgb(0x22242a); // pause active, meter unlit
 
 // ---- dividers -----------------------------------------------------------
-inline const juce::Colour divStrong = rgb(0x24262c); // top bar / sidebar edges
-inline const juce::Colour divSoft = rgb(0x202227); // section separators
-inline const juce::Colour divRow = rgb(0x1e2024); // between instrument strips
+inline const juce::Colour divStrong = rgb(0x303747); // top bar / sidebar edges
+inline const juce::Colour divSoft = rgb(0x272d3b); // section separators
+inline const juce::Colour divRow = rgb(0x242b38); // between instrument strips
 inline const juce::Colour divTick = rgb(0x22242a); // ruler ticks
 inline const juce::Colour divOctave = rgb(0x232529); // C-row separator in the grid
 
@@ -137,8 +137,8 @@ inline juce::Colour waveCentreLine()
 inline const juce::Colour keyWhite = rgb(0xe2e4e8);
 inline const juce::Colour keyBlack = rgb(0x0e0f11);
 inline const juce::Colour keyLabel = textLabel;
-inline const juce::Colour laneBlack = rgb(0x141519);
-inline const juce::Colour laneWhite = rgb(0x191a1e);
+inline const juce::Colour laneBlack = rgb(0x131720);
+inline const juce::Colour laneWhite = rgb(0x191e28);
 
 inline juce::Colour noteOnsetEdge()
 {
@@ -238,13 +238,13 @@ inline const juce::Colour zoomThumb = rgb(0xc2c6cc);
 
 namespace nn::metrics
 {
-constexpr int topBarHeight = 54;
-constexpr int toolbarHeight = 44;
-constexpr int waveformHeight = 126;
+constexpr int topBarHeight = 46;
+constexpr int toolbarHeight = 40;
+constexpr int waveformHeight = 0; // NOTIQ Web layout: ruler begins immediately above the Piano Roll
 constexpr int rulerHeight = 22;
 constexpr int statusBarHeight = 26;
 
-constexpr int sidebarWidth = 262;
+constexpr int sidebarWidth = 250;
 constexpr int sidebarHeader = 38;
 constexpr int stripHeight = 76;
 
