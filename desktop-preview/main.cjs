@@ -146,7 +146,7 @@ async function transcribeViaNative(input) {
 
 function createWindow() {
   window = new BrowserWindow({
-    title: 'NOTIQ — Giai đoạn 5 · Toàn bài hát / DAW / Kontakt', width: 1440, height: 900,
+    title: 'NOTIQ — NeuralNote MuScriptor Core (Windows)', width: 1440, height: 900,
     minWidth: 980, minHeight: 620, backgroundColor: '#111318',
     autoHideMenuBar: true, show: false,
     webPreferences: {
