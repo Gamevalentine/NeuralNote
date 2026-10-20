@@ -1,0 +1,15 @@
+/* Stage 3 — compact SoundFont preset selectors, keep approved NOTIQ palette. */
+.track-card{height:137px;min-height:137px}
+.track-preset-row{display:flex;align-items:center;gap:6px;margin:8px 0 0 35px;height:27px}
+.track-preset-row select{width:100%;min-width:0;min-height:25px;border:1px solid #404658;border-radius:5px;background:#212633;color:#d9e1f1;padding:2px 6px;font-size:11px;cursor:pointer}
+.track-preset-row select:focus-visible{outline:1px solid #a8afff}
+.track-preset-row button{height:25px;width:26px;flex:none;border:1px solid #414a5e;border-radius:5px;background:#242b39;color:#c1caf1;font-size:14px}
+.track-preset-row button:hover{background:#323b50}
+.editor-status>span[title^="SoundFont"]{max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:none}
+@media(max-width:620px){
+ .track-card{height:141px;min-height:141px}
+ .track-preset-row{margin-left:0;gap:3px}
+ .track-preset-row select{font-size:9px;padding:1px 2px}
+ .track-preset-row button{width:19px}
+ .editor-status>span[title^="SoundFont"]{max-width:110px}
+}
