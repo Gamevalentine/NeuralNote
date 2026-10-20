@@ -1,0 +1,12 @@
+{
+  "name": "notiq-ai-core-wasm-poc",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:contract": "node --test tests/core-contract.test.mjs",
+    "verify:wasm": "node tests/verify-wasm.mjs",
+    "test:source": "node --test tests/source-integrity.test.mjs",
+    "test:stage2": "node --test tests/core-contract.test.mjs tests/source-integrity.test.mjs"
+  }
+}
