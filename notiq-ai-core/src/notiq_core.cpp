@@ -49,10 +49,13 @@ std::string serialize(const std::vector<msl::Note>& notes) {
             note.program < 0 || note.program > 128) continue;
         if (!first) stream << ',';
         first = false;
+        // NeuralNote's web MIDI protocol reserves program 128 for drums.
+        // MuScriptor may mark program 96 as a drum while keeping its duration.
+        const int midiProgram = note.is_drum ? 128 : note.program;
         stream << R"({"startTimeSeconds":)" << note.onset
                << R"(,"durationSeconds":)" << note.offset - note.onset
                << R"(,"pitchMidi":)" << note.pitch
-               << R"(,"program":)" << note.program
+               << R"(,"program":)" << midiProgram
                << R"(,"isDrum":)" << (note.is_drum ? "true" : "false")
                << R"(,"amplitude":0.7874015748})";
     }
