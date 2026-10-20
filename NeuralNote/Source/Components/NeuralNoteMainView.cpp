@@ -38,11 +38,14 @@ NeuralNoteMainView::NeuralNoteMainView(NeuralNoteAudioProcessor& processor)
         "Nhạc cụ", "Công cụ", "Hiển thị", "Xuất"
     };
     for (std::size_t i = 0; i < titles.size(); ++i) {
-        auto button = std::make_unique<juce::TextButton>(juce::String::fromUTF8(titles[i]));
-        button->setColour(juce::TextButton::buttonColourId, nn::colours::bgTopBar);
-        button->setColour(juce::TextButton::buttonOnColourId, nn::colours::bgControlActive);
-        button->setColour(juce::TextButton::textColourOffId, nn::colours::textPrimary);
-        button->setColour(juce::TextButton::textColourOnId, nn::colours::textBright);
+        auto button = std::make_unique<NnFlatButton>(juce::String::fromUTF8(titles[i]));
+        button->setLabel(juce::String::fromUTF8(titles[i]), nn::fonts::buttonLabel());
+        button->setPadding(8, 8, 0);
+        button->setCornerRadius(0.0f);
+        button->setColour(NnFlatButton::backgroundColourId, nn::colours::bgTopBar);
+        button->setColour(NnFlatButton::backgroundOnColourId, nn::colours::bgControlActive);
+        button->setColour(NnFlatButton::textColourId, nn::colours::textPrimary);
+        button->setColour(NnFlatButton::textOnColourId, nn::colours::textBright);
         button->setWantsKeyboardFocus(false);
         button->onClick = [this, index = static_cast<int>(i)] { _showWebStyleMenu(index); };
         addAndMakeVisible(*button);
