@@ -290,48 +290,48 @@ void NeuralNoteMainView::_showWebStyleMenu(int index)
     const bool hasMidi = state == PopulatedAudioAndMidiRegions;
     switch (index) {
         case 0: // Tệp
-            menu.addItem(101, "Mở tệp âm thanh...", canLoad);
-            menu.addItem(102, "Đóng tệp / xóa dữ liệu", hasAudio);
+            menu.addItem(101, juce::String::fromUTF8("Mở tệp âm thanh..."), canLoad);
+            menu.addItem(102, juce::String::fromUTF8("Đóng tệp / xóa dữ liệu"), hasAudio);
             break;
         case 1: // Chỉnh sửa
-            menu.addItem(201, "Xóa nốt / kết quả nhận diện", hasAudio);
-            menu.addItem(202, "Về đầu bản nhạc", mProcessor.canPlay());
+            menu.addItem(201, juce::String::fromUTF8("Xóa nốt / kết quả nhận diện"), hasAudio);
+            menu.addItem(202, juce::String::fromUTF8("Về đầu bản nhạc"), mProcessor.canPlay());
             break;
         case 2: // Phát lại
-            menu.addItem(301, "Phát / Tạm dừng", mProcessor.canPlay());
-            menu.addItem(302, "Về đầu", mProcessor.canPlay());
-            menu.addItem(303, "Phát lặp", true, mTopBar.getLoopButton().getToggleState());
+            menu.addItem(301, juce::String::fromUTF8("Phát / Tạm dừng"), mProcessor.canPlay());
+            menu.addItem(302, juce::String::fromUTF8("Về đầu"), mProcessor.canPlay());
+            menu.addItem(303, juce::String::fromUTF8("Phát lặp"), true, mTopBar.getLoopButton().getToggleState());
             menu.addSeparator();
-            menu.addItem(304, "Hiện bộ điều khiển âm thanh...", true);
+            menu.addItem(304, juce::String::fromUTF8("Hiện bộ điều khiển âm thanh..."), true);
             break;
         case 3: // Track MIDI
-            menu.addItem(401, "Thêm / chọn nhạc cụ", true);
-            menu.addItem(402, "Xóa nốt đang nhận diện", hasAudio);
+            menu.addItem(401, juce::String::fromUTF8("Thêm / chọn nhạc cụ"), true);
+            menu.addItem(402, juce::String::fromUTF8("Xóa nốt đang nhận diện"), hasAudio);
             break;
         case 4: // Nhạc cụ
-            menu.addItem(501, "Chọn nhạc cụ cần nhận diện...", true);
-            menu.addItem(502, "Điều chỉnh âm lượng / Solo / Mute...", true);
+            menu.addItem(501, juce::String::fromUTF8("Chọn nhạc cụ cần nhận diện..."), true);
+            menu.addItem(502, juce::String::fromUTF8("Điều chỉnh âm lượng / Solo / Mute..."), true);
             break;
         case 5: // Công cụ
-            menu.addItem(601, "Nhận diện Audio → MIDI", state == AudioLoaded);
-            menu.addItem(602, "Chọn / tải mô hình AI...");
-            menu.addItem(603, "Cài đặt NOTIQ...");
+            menu.addItem(601, juce::String::fromUTF8("Nhận diện Audio → MIDI"), state == AudioLoaded);
+            menu.addItem(602, juce::String::fromUTF8("Chọn / tải mô hình AI..."));
+            menu.addItem(603, juce::String::fromUTF8("Cài đặt NOTIQ..."));
             break;
         case 6: // Hiển thị
-            menu.addItem(701, "Thanh điều khiển nâng cao", true, mShowAdvancedControls);
-            menu.addItem(702, "Đặt lại thu phóng Piano Roll");
+            menu.addItem(701, juce::String::fromUTF8("Thanh điều khiển nâng cao"), true, mShowAdvancedControls);
+            menu.addItem(702, juce::String::fromUTF8("Đặt lại thu phóng Piano Roll"));
             break;
         case 7: // Xuất
-            menu.addItem(801, "Xuất tệp MIDI (.mid)...", hasMidi);
+            menu.addItem(801, juce::String::fromUTF8("Xuất tệp MIDI (.mid)..."), hasMidi);
             {
                 juce::PopupMenu bpm;
                 const double currentBpm = mProcessor.getValueTree().getProperty(NnId::ExportTempoId, 120.0);
                 bpm.addItem(811, "90 BPM", true, juce::approximatelyEqual(currentBpm, 90.0));
                 bpm.addItem(812, "120 BPM", true, juce::approximatelyEqual(currentBpm, 120.0));
                 bpm.addItem(813, "140 BPM", true, juce::approximatelyEqual(currentBpm, 140.0));
-                menu.addSubMenu("BPM xuất MIDI", bpm);
+                menu.addSubMenu(juce::String::fromUTF8("BPM xuất MIDI"), bpm);
             }
-            menu.addItem(802, "Hiện nút kéo MIDI ra...", true);
+            menu.addItem(802, juce::String::fromUTF8("Hiện nút kéo MIDI ra..."), true);
             break;
         default:
             return;
@@ -397,7 +397,7 @@ void NeuralNoteMainView::_buildSettingsMenu()
 
     // Applies from the next transcription: the model is loaded per run.
     PopupMenu device_menu;
-    String device_menu_name = "Thiết bị xử lý";
+    String device_menu_name = juce::String::fromUTF8("Thiết bị xử lý");
 
     if (const std::vector<msl::Device>* devices = ComputeDevices::tryGet()) {
         const auto is_selected = [devices](std::optional<std::size_t> inIndex) {
@@ -419,7 +419,7 @@ void NeuralNoteMainView::_buildSettingsMenu()
                 device_menu.addItem(device_item);
             };
 
-        const String auto_label = "Tự động (" + String(ComputeDevices::label(*devices, msl::autoDevice(*devices))) + ")";
+        const String auto_label = juce::String::fromUTF8("Tự động (") + String(ComputeDevices::label(*devices, msl::autoDevice(*devices))) + ")";
         const auto selected = ComputeDevices::resolve(*devices, NnGlobalSettings::getComputeDevice());
         device_menu_name +=
             ": " + (selected.has_value() ? String(ComputeDevices::label(*devices, *selected)) : auto_label);
@@ -433,7 +433,7 @@ void NeuralNoteMainView::_buildSettingsMenu()
     }
 
     else {
-        auto detecting_item = PopupMenu::Item("Đang tìm thiết bị...");
+        auto detecting_item = PopupMenu::Item(juce::String::fromUTF8("Đang tìm thiết bị..."));
         detecting_item.setID(++item_id);
         detecting_item.setEnabled(false);
         mSettingsMenuItemsShouldBeEnabled.emplace_back(detecting_item.itemID, [] { return false; });
@@ -443,7 +443,7 @@ void NeuralNoteMainView::_buildSettingsMenu()
     mSettingsMenu->addSubMenu(device_menu_name, device_menu);
     mSettingsMenu->addSeparator();
 
-    auto tooltip_visibility_item = PopupMenu::Item("Hiện chú thích");
+    auto tooltip_visibility_item = PopupMenu::Item(juce::String::fromUTF8("Hiện chú thích"));
     tooltip_visibility_item.setID(++item_id);
     tooltip_visibility_item.setEnabled(true);
     mSettingsMenuItemsShouldBeTicked.emplace_back(tooltip_visibility_item.itemID,
@@ -480,9 +480,9 @@ void NeuralNoteMainView::_buildSettingsMenu()
         scale_menu.addItem(scale_item);
     }
 
-    mSettingsMenu->addSubMenu("Kích thước cửa sổ", scale_menu);
+    mSettingsMenu->addSubMenu(juce::String::fromUTF8("Kích thước cửa sổ"), scale_menu);
 
-    auto reset_zoom_item = PopupMenu::Item("Đặt lại thu phóng Piano Roll");
+    auto reset_zoom_item = PopupMenu::Item(juce::String::fromUTF8("Đặt lại thu phóng Piano Roll"));
     reset_zoom_item.setID(++item_id);
     reset_zoom_item.setTicked(false);
     reset_zoom_item.setAction([this] {
@@ -517,14 +517,14 @@ void NeuralNoteMainView::_buildSettingsMenu()
         overflow_menu.addItem(overflow_item);
     }
 
-    mSettingsMenu->addSubMenu("Xuất MIDI khi hết kênh", overflow_menu);
+    mSettingsMenu->addSubMenu(juce::String::fromUTF8("Xuất MIDI khi hết kênh"), overflow_menu);
 
 #if JUCE_WINDOWS
     mSettingsMenu->addSeparator();
 
     PopupMenu crash_menu;
 
-    auto crash_reports_item = PopupMenu::Item("Bật báo cáo sự cố");
+    auto crash_reports_item = PopupMenu::Item(juce::String::fromUTF8("Bật báo cáo sự cố"));
     crash_reports_item.setID(++item_id);
     crash_reports_item.setEnabled(true);
     mSettingsMenuItemsShouldBeTicked.emplace_back(crash_reports_item.itemID,
@@ -537,13 +537,13 @@ void NeuralNoteMainView::_buildSettingsMenu()
     });
     crash_menu.addItem(crash_reports_item);
 
-    auto open_crash_reports_item = PopupMenu::Item("Mở thư mục báo cáo sự cố");
+    auto open_crash_reports_item = PopupMenu::Item(juce::String::fromUTF8("Mở thư mục báo cáo sự cố"));
     open_crash_reports_item.setID(++item_id);
     open_crash_reports_item.setEnabled(true);
     open_crash_reports_item.setAction([] { NNFileUtils::openDirectory(NNFileUtils::getCrashReportsDirectory()); });
     crash_menu.addItem(open_crash_reports_item);
 
-    mSettingsMenu->addSubMenu("Báo cáo sự cố", crash_menu);
+    mSettingsMenu->addSubMenu(juce::String::fromUTF8("Báo cáo sự cố"), crash_menu);
 #endif
 
     mSettingsMenu->addSeparator();
@@ -569,17 +569,17 @@ void NeuralNoteMainView::_buildSettingsMenu()
         log_level_menu.addItem(level_item);
     }
 
-    logs_menu.addSubMenu("Mức ghi nhật ký", log_level_menu);
+    logs_menu.addSubMenu(juce::String::fromUTF8("Mức ghi nhật ký"), log_level_menu);
 
-    auto open_logs_item = PopupMenu::Item("Mở thư mục nhật ký");
+    auto open_logs_item = PopupMenu::Item(juce::String::fromUTF8("Mở thư mục nhật ký"));
     open_logs_item.setID(++item_id);
     open_logs_item.setEnabled(true);
     open_logs_item.setAction([] { NNFileUtils::openDirectory(NNFileUtils::getLogsDirectory()); });
     logs_menu.addItem(open_logs_item);
 
-    mSettingsMenu->addSubMenu("Nhật ký", logs_menu);
+    mSettingsMenu->addSubMenu(juce::String::fromUTF8("Nhật ký"), logs_menu);
 
-    auto check_updates_item = PopupMenu::Item("Kiểm tra cập nhật");
+    auto check_updates_item = PopupMenu::Item(juce::String::fromUTF8("Kiểm tra cập nhật"));
     check_updates_item.setID(++item_id);
     check_updates_item.setEnabled(true);
     check_updates_item.setTicked(false);
