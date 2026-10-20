@@ -1,0 +1,37 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 24,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "notiq-windows-cpu",
+      "displayName": "NOTIQ Desktop CPU-only (MSVC, x64)",
+      "description": "Portable Windows CPU fallback: without Vulkan SDK, ASIO, LTO or debug symbols.",
+      "generator": "Visual Studio 18 2026",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build-cpu",
+      "cacheVariables": {
+        "NEURALNOTE_ASIO": "OFF",
+        "MUSCRIPTOR_VULKAN": "OFF",
+        "NEURALNOTE_SYMBOLS": "OFF",
+        "LTO": "OFF",
+        "MUSCRIPTOR_BUILD_TESTS": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "notiq-windows-cpu",
+      "configurePreset": "notiq-windows-cpu",
+      "configuration": "Release",
+      "jobs": 2,
+      "targets": [
+        "NeuralNote_Standalone",
+        "NeuralNote_VST3"
+      ]
+    }
+  ]
+}
