@@ -124,7 +124,10 @@ export async function recognizeWeb(source:Blob,onProgress:(p:Progress)=>void):Pr
     const wav=await convertAudioToNativeWav(source,percent=>
       onProgress({kind:'transcribe',percent:Math.max(1,Math.round(percent*.08)),
         message:'Chuẩn bị âm thanh: '+percent+'%'}));
-    pcm=wav.buffer.slice(wav.byteOffset+44,wav.byteOffset+wav.byteLength);
+    // Explicit ArrayBuffer avoids SharedArrayBuffer typings and is transferable.
+    const plainPcm=new ArrayBuffer(wav.byteLength-44);
+    new Uint8Array(plainPcm).set(wav.subarray(44));
+    pcm=plainPcm;
   }
   onProgress({kind:'transcribe',percent:10,message:'MuScriptor C++ đang nhận diện âm thanh thật…'});
   const response=await send('transcribe',{type:'transcribe',pcm,sampleRate:16000},[pcm],onProgress);
