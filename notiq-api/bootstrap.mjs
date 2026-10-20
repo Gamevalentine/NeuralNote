@@ -74,7 +74,7 @@ async function realInferenceSmokeTest() {
       const timeout = setTimeout(() => child.kill('SIGKILL'), 20 * 60 * 1000);
       child.stderr.on('data', chunk => {
         tail = (tail + String(chunk)).slice(-800);
-        const recent = [...String(chunk).matchAll(/PROGRESS\\s+(\\d+)/g)];
+        const recent = [...String(chunk).matchAll(/PROGRESS\s+(\d+)/g)];
         if (recent.length) console.log('Native fixture inference: ' + recent.at(-1)[1] + '%');
       });
       child.once('error', error => { clearTimeout(timeout); reject(error); });
@@ -89,7 +89,7 @@ async function realInferenceSmokeTest() {
         !Array.isArray(decoded.notes) || decoded.notes.length === 0)
       throw new Error('Native inference produced no valid notes on the audio fixture.');
     console.log('REAL MuScriptor Audio→MIDI smoke test PASS; notes=' + decoded.notes.length);
-    if (marker) await writeFile(marker, 'MuScriptor CLI real fixture pass; notes=' + decoded.notes.length + '\\n');
+    if (marker) await writeFile(marker, 'MuScriptor CLI real fixture pass; notes=' + decoded.notes.length + '\n');
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
