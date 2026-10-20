@@ -7,7 +7,7 @@ COPY notiq-native/ /src/notiq-native/
 COPY .gitmodules /src/.gitmodules
 # The Docker provider may not fetch git submodules from the selected branch.
 # A specific git commit can be supplied via MUSCRIPTOR_COMMIT at build time.
-ARG MUSCRIPTOR_COMMIT
+ARG MUSCRIPTOR_COMMIT=c8adc019677ed3479fa3c22c1a117d662382f347
 RUN test -n "$MUSCRIPTOR_COMMIT" || (echo "Set pinned MUSCRIPTOR_COMMIT from the NeuralNote gitlink" >&2; exit 1)
 RUN mkdir -p /src/ThirdParty && git clone https://github.com/DamRsn/muscriptor.cpp.git /src/ThirdParty/muscriptor.cpp && \
     git -C /src/ThirdParty/muscriptor.cpp checkout "$MUSCRIPTOR_COMMIT"
