@@ -1,0 +1,96 @@
+name: NOTIQ Desktop Web UI Parity V2
+
+on:
+  push:
+    branches:
+      - fix/notiq-desktop-web-ui-parity-v2
+    paths:
+      - .github/workflows/notiq-desktop-web-ui-parity-v2.yml
+      - CMakePresets.json
+      - CMakeLists.txt
+      - Tools/**
+      - NeuralNote/**
+      - Lib/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notiq-desktop-web-ui-parity-v2
+  cancel-in-progress: true
+
+jobs:
+  windows-cpu:
+    runs-on: windows-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout NOTIQ source and submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Select installed Visual Studio C++ generator
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ([Environment]::GetFolderPath('ProgramFilesX86')) 'Microsoft Visual Studio\Installer\vswhere.exe'
+          if (-not (Test-Path $vswhere)) { throw 'MSVC tools not available on Windows runner.' }
+          $vsPath = & $vswhere -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $vsPath) { throw 'Visual Studio C++ toolchain not installed on this runner.' }
+          $generators = cmake --help | Out-String
+          if (($vsPath -match '[\\/]18[\\/]') -and ($generators -match 'Visual Studio 18 2026')) {
+            $generator = 'Visual Studio 18 2026'
+          } elseif (($vsPath -match '[\\/]17[\\/]') -and ($generators -match 'Visual Studio 17 2022')) {
+            $generator = 'Visual Studio 17 2022'
+          } else {
+            throw "Unsupported Windows runner toolchain: $vsPath"
+          }
+          "NOTIQ_CMAKE_GENERATOR=$generator" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "Using $generator at $vsPath"
+
+      - name: Configure NOTIQ CPU-only (no Vulkan or ASIO)
+        shell: pwsh
+        run: |
+          cmake -S . -B build-cpu -G "$env:NOTIQ_CMAKE_GENERATOR" -A x64 -DNEURALNOTE_ASIO=OFF -DMUSCRIPTOR_VULKAN=OFF -DNEURALNOTE_SYMBOLS=OFF -DLTO=OFF -DMUSCRIPTOR_BUILD_TESTS=OFF
+          if ($LASTEXITCODE -ne 0) { throw 'NOTIQ CMake configure failed.' }
+
+      - name: Build Standalone and VST3 (2 concurrent jobs)
+        shell: pwsh
+        run: |
+          cmake --build build-cpu --config Release --target NeuralNote_Standalone NeuralNote_VST3 --parallel 2
+          if ($LASTEXITCODE -ne 0) { throw 'NOTIQ Windows compilation failed.' }
+
+      - name: Check binaries and prepare portable preview
+        shell: pwsh
+        run: |
+          $app = Get-ChildItem -Path build-cpu -Recurse -File -Filter NOTIQ.exe | Where-Object { $_.FullName -match '[\\/]Standalone[\\/]' } | Select-Object -First 1
+          $vst = Get-ChildItem -Path build-cpu -Recurse -Directory -Filter NOTIQ.vst3 | Select-Object -First 1
+          if (-not $app) { throw 'NOTIQ.exe missing after compilation.' }
+          if (-not $vst) { throw 'NOTIQ.vst3 missing after compilation.' }
+          $out = 'NOTIQ-WebParity-v2-Windows-x64-CPU-preview'
+          New-Item -ItemType Directory -Path $out -Force | Out-Null
+          Copy-Item -Path $app.FullName -Destination "$out/NOTIQ.exe"
+          Copy-Item -Path $vst.FullName -Destination "$out/NOTIQ.vst3" -Recurse
+          Copy-Item -Path LICENSE -Destination "$out/LICENSE.txt"
+          Copy-Item -Path Installers/license.txt -Destination "$out/THIRD-PARTY-LICENSES.txt"
+          @'
+          NOTIQ Windows x64 CPU preview
+          ============================
+          This is an untested developer preview, not an installer.
+          Run NOTIQ.exe to try the standalone app.
+          Keep NOTIQ.vst3 as an intact bundle for DAW testing.
+          No MuScriptor model weights are bundled.
+          Model downloads are subject to noncommercial licensing terms.
+          Source: https://github.com/Gamevalentine/NeuralNote
+          '@ | Set-Content -Path "$out/README.txt" -Encoding UTF8
+          Write-Host "Verified NOTIQ.exe: $($app.FullName)"
+          Write-Host "Verified NOTIQ.vst3: $($vst.FullName)"
+
+      - name: Upload ZIP containing NOTIQ.exe and NOTIQ.vst3
+        uses: actions/upload-artifact@v4
+        with:
+          name: NOTIQ-WebParity-v2-Windows-x64-CPU-preview
+          path: NOTIQ-WebParity-v2-Windows-x64-CPU-preview/
+          retention-days: 7
+          if-no-files-found: error
