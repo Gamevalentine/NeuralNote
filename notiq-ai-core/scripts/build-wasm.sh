@@ -18,4 +18,6 @@ emcmake cmake -S "$MODULE" -B "$MODULE/.build-wasm" -G Ninja \
   -DMUSCRIPTOR_BUILD_TESTS=OFF -DMUSCRIPTOR_BUILD_BENCH=OFF
 cmake --build "$MODULE/.build-wasm" --target notiq_ai_core -j 2
 node "$MODULE/tests/verify-wasm.mjs"
-echo "WebAssembly binary validation passed; REAL GGUF inference still remains unverified."
+mkdir -p "$MODULE/.build-wasm/web"
+cp "$MODULE/web/worker.mjs" "$MODULE/web/diagnostic.html" "$MODULE/.build-wasm/web/"
+echo "WASM binary verified and private browser diagnostics prepared; real GGUF inference still unverified."
