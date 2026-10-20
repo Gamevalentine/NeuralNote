@@ -629,7 +629,7 @@ function App() {
   const menus: AppMenu[] = [
     {
       id: 'file', label: 'Tệp', commands: [
-        { label: 'Mở âm thanh…', run: () => fileInput.current?.click(), disabled: busyLoading || phase === 'analyzing' },
+        { label: 'Tải bài hát / mở âm thanh…', run: () => fileInput.current?.click(), disabled: busyLoading || phase === 'analyzing' },
         { label: 'Dùng nhạc mẫu', run: () => void setAudio(generateDemo(), 'NOTIQ - giai điệu mẫu.wav'), disabled: busyLoading || phase === 'analyzing' },
         { label: 'Đóng tệp đang mở', run: reset, disabled: !selection || phase === 'analyzing' },
       ],
@@ -773,6 +773,12 @@ function App() {
           ))}
         </nav>
         <div className="os-actions">
+          <button type="button" className="song-upload-btn"
+            disabled={busyLoading || phase === 'analyzing'}
+            onClick={() => fileInput.current?.click()}
+            title="Mở bài hát đầy đủ (WAV, MP3, FLAC, M4A… · tối đa 15 phút / 200 MB)">
+            <Music size={14}/> Tải bài hát
+          </button>
           <span className="lunor">LUNOR <b>MUSIC</b></span>
           <a href="https://github.com/Gamevalentine/NeuralNote" target="_blank" rel="noreferrer">Mã nguồn ↗</a>
           {desktopReview && <button type="button" className="desktop-review-toggle" aria-expanded={showDesktopReview} onClick={() => { setActiveMenu(null); setShowSettings(false); setShowDesktopReview(value => !value); }}><Info size={14}/> Duyệt Desktop <span>UI v0.3</span></button>}
