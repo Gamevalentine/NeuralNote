@@ -3,8 +3,11 @@
 // Do not wire this into the production NOTIQ GUI until real GGUF inference passes.
 let engine = null;
 let ready = false;
-let memoryPath = '/notiq/model.gguf';
+const memoryPath = '/notiq/model.gguf';
 const MAX_SAMPLES = 15 * 60 * 16000;
+// Same pinned, noncommercial MuScriptor Small model used by original NOTIQ.
+const SMALL_MODEL_BYTES = 209425152;
+const SMALL_MODEL_SHA256 = '925f55af65a20ebc4f8b45ceaf095a12b72493d436cb112623cd0041a1af23d4';
 
 function report(type, details = {}) {
   self.postMessage({ type, ...details });
@@ -32,8 +35,14 @@ function cppString(text) {
 }
 async function loadModel({ moduleUrl, model }) {
   if (ready) throw new Error('MuScriptor đang được nạp. Hãy dùng một Worker mới.');
-  if (!(model instanceof ArrayBuffer) || model.byteLength < 1024)
-    throw new Error('Chưa chọn tệp GGUF hợp lệ.');
+  if (!(model instanceof ArrayBuffer) || model.byteLength !== SMALL_MODEL_BYTES)
+    throw new Error('Giai đoạn thử nghiệm chỉ nhận GGUF MuScriptor Small 209 MB đúng bản gốc.');
+  if (!self.crypto?.subtle) throw new Error('Cần HTTPS để kiểm tra SHA-256 của mô hình.');
+  report('loading', { message: 'Đang xác minh SHA-256 mô hình MuScriptor gốc' });
+  const digest = new Uint8Array(await self.crypto.subtle.digest('SHA-256', model));
+  const checksum = Array.from(digest, value => value.toString(16).padStart(2, '0')).join('');
+  if (checksum !== SMALL_MODEL_SHA256)
+    throw new Error('GGUF không khớp mã SHA-256 của MuScriptor Small gốc.');
   const url = new URL(moduleUrl, self.location.href);
   if (url.origin !== self.location.origin || !url.pathname.endsWith('.js'))
     throw new Error('Chỉ tải mã NOTIQ AI Core từ cùng website.');
@@ -50,6 +59,9 @@ async function loadModel({ moduleUrl, model }) {
       throw new Error(getError());
   } finally {
     engine._free(pointer);
+    // MuScriptor loads the weights into ggml during load; release the duplicate
+    // GGUF file from Emscripten MEMFS even after an inference/load failure.
+    try { engine.FS.unlink(memoryPath); } catch { /* may already be removed */ }
   }
   ready = true;
   report('ready', { message: 'MuScriptor gốc đã sẵn sàng trong trình duyệt' });
@@ -83,7 +95,7 @@ self.onmessage = async ({ data }) => {
     else if (data.type === 'transcribe') transcribe(data);
     else if (data.type === 'unload') {
       engine?._notiq_core_unload();
-      if (engine) engine.FS.unlink(memoryPath);
+      if (engine) { try { engine.FS.unlink(memoryPath); } catch { /* removed after load */ } }
       engine = null;
       ready = false;
       report('unloaded');
