@@ -46,7 +46,7 @@ public:
     /** Re-derives which toolbar controls are live from the processor's state. */
     void updateEnablements();
 
-    /** Opens or closes the model panel. While there is no checkpoint on an idle roll it stays up regardless. */
+    /** Opens or closes the model panel explicitly, without masking the empty Piano Roll. */
     void setModelPanelOpen(bool inOpen);
 
     bool isModelPanelVisible() const;
@@ -102,6 +102,8 @@ private:
     // A child of this panel rather than of the piano roll, which lives inside a horizontally
     // scrolling viewport and would carry the button off screen with it.
     NnFlatButton mTranscribeButton {"Transcribe"};
+
+    juce::Label mEmptyHint; // reference editor hint, no fake notes or tracks
 
     // Same parent and the same place as the transcribe button, which it stands in for.
     ModelDownloadPanel mModelDownloadPanel;
