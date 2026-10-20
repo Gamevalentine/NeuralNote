@@ -1,0 +1,203 @@
+{
+  "source_repository": "DamRsn/muscriptor.cpp",
+  "source_commit": "c8adc019677ed3479fa3c22c1a117d662382f347",
+  "license": "MIT (PFFFT retains BSD-style license)",
+  "weights_included": false,
+  "files": [
+    {
+      "path": "LICENSE",
+      "sha": "2b4be55cb3fc36c0d0ed9e46cc3af6bc1845bb84",
+      "bytes": 2811
+    },
+    {
+      "path": "cpp/CMakeLists.txt",
+      "sha": "fc9769df887c915c0ab20520ba29006435869c3b",
+      "bytes": 16451
+    },
+    {
+      "path": "cpp/CMakePresets.json",
+      "sha": "b8b717e7846f6faca9f529fafe3516c3bc4ab14c",
+      "bytes": 1773
+    },
+    {
+      "path": "cpp/cmake/ggml_metal.cmake",
+      "sha": "454ee70911fe6632bfbf86faed21d306fe1deee7",
+      "bytes": 1540
+    },
+    {
+      "path": "cpp/include/muscriptor/device.hpp",
+      "sha": "cebd40938c045fcda368834c244534619f00fb41",
+      "bytes": 1375
+    },
+    {
+      "path": "cpp/include/muscriptor/error.hpp",
+      "sha": "830b8cd927f1dab78c659b3e1148e91ea2bff618",
+      "bytes": 1679
+    },
+    {
+      "path": "cpp/include/muscriptor/log.hpp",
+      "sha": "3f3da558c5509955c10b018dc9725766b762de67",
+      "bytes": 1195
+    },
+    {
+      "path": "cpp/include/muscriptor/model.hpp",
+      "sha": "975fbba0f3a2d7dbdd17ae631d530cbea2f60f07",
+      "bytes": 9669
+    },
+    {
+      "path": "cpp/include/muscriptor/muscriptor.hpp",
+      "sha": "aea35a7e7bb1bef64b254a5bf77c9877d40066be",
+      "bytes": 862
+    },
+    {
+      "path": "cpp/include/muscriptor/note.hpp",
+      "sha": "de8a887fd61d3a783d12d9eda8191348176ef392",
+      "bytes": 2801
+    },
+    {
+      "path": "cpp/include/muscriptor/stft.hpp",
+      "sha": "e10a3578aafd76ac26bc33320570936e29b26f32",
+      "bytes": 3532
+    },
+    {
+      "path": "cpp/include/muscriptor/transcriber.hpp",
+      "sha": "a3935afe4d049b2da895719a47b0688044394225",
+      "bytes": 7223
+    },
+    {
+      "path": "cpp/src/device.cpp",
+      "sha": "52680799ef8e00485c8df4dd4afeb177f74f8732",
+      "bytes": 6264
+    },
+    {
+      "path": "cpp/src/device_backend.hpp",
+      "sha": "ad7bf2c143956714e792cdc88b4e86a3a9d157a6",
+      "bytes": 488
+    },
+    {
+      "path": "cpp/src/error.cpp",
+      "sha": "bdff5eb60bc91539dc41cb493b013d9e02de4e01",
+      "bytes": 1327
+    },
+    {
+      "path": "cpp/src/format.hpp",
+      "sha": "09cd6d7a9e564ce6a55d75ae467959ae3f7a6ff3",
+      "bytes": 3009
+    },
+    {
+      "path": "cpp/src/gguf_file.cpp",
+      "sha": "d3eba6aff965f6c6ebe5fdf31a77a4da1482e1e4",
+      "bytes": 6433
+    },
+    {
+      "path": "cpp/src/gguf_file.hpp",
+      "sha": "100ce60eb3bd9d483b0098d142e07822d2bd68bc",
+      "bytes": 2718
+    },
+    {
+      "path": "cpp/src/instrument_groups.cpp",
+      "sha": "89c17d969550d3d24c15ce82a16cfd67f894d1d2",
+      "bytes": 5963
+    },
+    {
+      "path": "cpp/src/instrument_groups.hpp",
+      "sha": "0447f2e2974a0ad12e1ff0c769d1ec7d83f28cc0",
+      "bytes": 3227
+    },
+    {
+      "path": "cpp/src/instrument_groups.inc",
+      "sha": "b1e0153c950eb75c2145cef3f99e008ed2cf76a8",
+      "bytes": 2254
+    },
+    {
+      "path": "cpp/src/log.cpp",
+      "sha": "02665d913663438d442bea2d642936dbd2b245ca",
+      "bytes": 1787
+    },
+    {
+      "path": "cpp/src/log.hpp",
+      "sha": "55daaf193d8736d9533e2a0fed4296b2bc8296d4",
+      "bytes": 432
+    },
+    {
+      "path": "cpp/src/model.cpp",
+      "sha": "3c6f28c9e8788ef31a8e2dc021d18c3286ca3ef9",
+      "bytes": 46651
+    },
+    {
+      "path": "cpp/src/note_assembler.cpp",
+      "sha": "3a5c01bc3d4d2d971df10c7bbcdb09ab5f948589",
+      "bytes": 8281
+    },
+    {
+      "path": "cpp/src/note_assembler.hpp",
+      "sha": "e6b46a21686fbdca6de223b4707cc55d12a0fffa",
+      "bytes": 3517
+    },
+    {
+      "path": "cpp/src/open_note_tracker.cpp",
+      "sha": "2f0c0d49824bee76d6ce73158b8fe6d8c34b35cf",
+      "bytes": 6961
+    },
+    {
+      "path": "cpp/src/open_note_tracker.hpp",
+      "sha": "ec181f209a3472883bc38a2037a08eda70d1c77d",
+      "bytes": 3910
+    },
+    {
+      "path": "cpp/src/resume_point.cpp",
+      "sha": "d2b7145d5944654acda65f6417c18ef2fed6093b",
+      "bytes": 6623
+    },
+    {
+      "path": "cpp/src/resume_point.hpp",
+      "sha": "075837320464d340c1a383a5a58f3e3b5d33f5d5",
+      "bytes": 2060
+    },
+    {
+      "path": "cpp/src/stft.cpp",
+      "sha": "31c5477078dfb1dcad172c8cc1469824ab68a914",
+      "bytes": 5470
+    },
+    {
+      "path": "cpp/src/trace.cpp",
+      "sha": "0249aa00328359cfe4b4c4d74f569e8aec3e6af7",
+      "bytes": 2093
+    },
+    {
+      "path": "cpp/src/trace.hpp",
+      "sha": "0702b581a02ea0583249a68a15027736d0d4be3d",
+      "bytes": 2606
+    },
+    {
+      "path": "cpp/src/transcriber.cpp",
+      "sha": "fafd0fa37054f54f73103333a63d6bcf268347c7",
+      "bytes": 15483
+    },
+    {
+      "path": "cpp/src/vocabulary.cpp",
+      "sha": "45ec37368a7d330e1125091cbb7be3cb8dabe59d",
+      "bytes": 2449
+    },
+    {
+      "path": "cpp/src/vocabulary.hpp",
+      "sha": "db5cc3ab8a9546017836ad19135880508b906aa6",
+      "bytes": 3838
+    },
+    {
+      "path": "cpp/third_party/pffft/README.md",
+      "sha": "a2ad6365d1caf49b18076cb7ced7fdeaeb0474bf",
+      "bytes": 1510
+    },
+    {
+      "path": "cpp/third_party/pffft/pffft.c",
+      "sha": "c8a2b863761f2319ccd771c3bb2b6eb86cb4b4fc",
+      "bytes": 68153
+    },
+    {
+      "path": "cpp/third_party/pffft/pffft.h",
+      "sha": "7f62206354db0677830e887a5082228fb888034b",
+      "bytes": 6824
+    }
+  ]
+}
