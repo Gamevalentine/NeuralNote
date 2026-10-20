@@ -1,0 +1,96 @@
+name: NOTIQ Web UI Windows Portable Preview
+
+on:
+  push:
+    branches:
+      - feature/notiq-web-electron-windows-preview
+    paths:
+      - .github/workflows/notiq-web-electron-preview.yml
+      - desktop-preview/**
+      - web/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notiq-web-electron-preview
+  cancel-in-progress: true
+
+jobs:
+  package-windows-preview:
+    runs-on: windows-latest
+    timeout-minutes: 75
+    steps:
+      - name: Checkout NOTIQ Web source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Use Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Web dependencies
+        working-directory: web
+        shell: pwsh
+        run: |
+          npm install --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw 'Web dependency install failed' }
+
+      - name: Build real NOTIQ Web React UI
+        working-directory: web
+        shell: pwsh
+        run: |
+          npm run build
+          if ($LASTEXITCODE -ne 0) { throw 'React/Vite build failed' }
+          if (-not (Test-Path 'dist/index.html')) { throw 'Web build missing index.html' }
+
+      - name: Include built website inside portable app
+        shell: pwsh
+        run: |
+          $dest = Join-Path $env:GITHUB_WORKSPACE 'desktop-preview/www'
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          Copy-Item -Path (Join-Path $env:GITHUB_WORKSPACE 'web/dist/*') -Destination $dest -Recurse -Force
+          if (-not (Test-Path (Join-Path $dest 'index.html'))) { throw 'Bundled NOTIQ UI missing' }
+          $assetCount = (Get-ChildItem (Join-Path $dest 'assets') -File).Count
+          if ($assetCount -eq 0) { throw 'Bundled NOTIQ assets missing' }
+          Write-Host "Bundled website with $assetCount asset files"
+
+      - name: Install Windows packaging dependencies
+        working-directory: desktop-preview
+        shell: pwsh
+        run: |
+          npm install --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw 'Electron install failed' }
+
+      - name: Package standalone Windows EXE
+        working-directory: desktop-preview
+        shell: pwsh
+        run: |
+          npm run pack:win
+          if ($LASTEXITCODE -ne 0) { throw 'Electron packaging failed' }
+
+      - name: Verify executable, resources and preview guidance
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:GITHUB_WORKSPACE 'desktop-preview/release/NOTIQ-Web-Preview-win32-x64'
+          $exe = Join-Path $dir 'NOTIQ-Web-Preview.exe'
+          $asar = Join-Path $dir 'resources/app.asar'
+          if (-not (Test-Path $exe)) { throw 'No EXE found' }
+          if (-not (Test-Path $asar)) { throw 'No app.asar found (NOTIQ UI missing)' }
+          Copy-Item 'desktop-preview/README-PREVIEW.txt' (Join-Path $dir 'README-PREVIEW.txt')
+          $bytes = (Get-Item $exe).Length
+          if ($bytes -lt 1MB) { throw 'EXE is suspiciously small' }
+          Write-Host "Verified EXE: $exe, size: $bytes bytes"
+          Write-Host "Verified UI package: $asar"
+
+      - name: Publish Windows portable preview artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NOTIQ-Web-UI-Preview-Windows-x64
+          path: desktop-preview/release/NOTIQ-Web-Preview-win32-x64/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 6
