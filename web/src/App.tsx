@@ -87,6 +87,7 @@ function App() {
   const firedNotes = useRef<Set<number>>(new Set());
   const previousTime = useRef(0);
   const selectionRef = useRef<Selection | null>(null);
+  const recognitionInFlight = useRef(false);
   const notesRef = useRef<Note[]>([]);
   const undoRef = useRef<Note[][]>([]);
   const redoRef = useRef<Note[][]>([]);
@@ -211,7 +212,7 @@ function App() {
   };
 
   const setAudio = async (file: Blob, name: string) => {
-    if (phase === 'analyzing' || busyLoading) return;
+    if (phase === 'analyzing' || recognitionInFlight.current || busyLoading) return;
     if (!/\.(wav|mp3|flac|ogg|m4a|aac|aiff)$/i.test(name)) {
       setError('Định dạng chưa hỗ trợ. Hãy chọn WAV, MP3, FLAC, OGG hoặc M4A phù hợp với trình duyệt.');
       setPhase('error');
@@ -242,7 +243,15 @@ function App() {
       setSelection(next);
       setInfo(decoded);
       setPhase('ready');
-      setStatus('Đã đọc âm thanh · Sẵn sàng nhận diện');
+      if (engineMode === 'muscriptor' && (!nativeReady || !nativeModelInstalled)) {
+        setStatus('Đã tải bài hát · Cần mô hình MuScriptor để nhận diện');
+        setError('MuScriptor chưa có mô hình 209 MB. Nhấn “Tải mô hình AI” trên thanh trên cùng để tiếp tục.');
+      } else {
+        setStatus('Đã tải bài hát · Đang khởi động AI…');
+        // Start directly with the selected blob, not the previous React selection.
+        // This removes the extra hidden "Tools → Transcribe" step entirely.
+        void runRecognition(next);
+      }
     } catch (cause) {
       setPhase('error');
       setStatus('Không thể mở âm thanh');
@@ -268,6 +277,8 @@ function App() {
       const result = await bridge.downloadModel();
       setNativeModelInstalled(result.modelInstalled);
       setStatus(result.modelInstalled ? 'MuScriptor Small đã sẵn sàng' : 'Model MuScriptor chưa hoàn tất');
+      if (result.modelInstalled && selectionRef.current && engineMode === 'muscriptor')
+        void runRecognition(selectionRef.current, 'muscriptor', true);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Không tải được mô hình MuScriptor');
     } finally {
@@ -276,30 +287,34 @@ function App() {
     }
   };
 
-  const startInference = async () => {
-    if (!selection || phase === 'analyzing') return;
-    if (engineMode === 'muscriptor' && !nativeReady) {
-      setError('MuScriptor chỉ có trên NOTIQ Desktop có cầu nối native, không chạy trực tiếp trên Cloudflare.');
+  const runRecognition = async (
+    target: Selection, mode: 'basic' | 'muscriptor' = engineMode, modelJustInstalled = false,
+  ) => {
+    if (recognitionInFlight.current) return;
+    if (mode === 'muscriptor' && (!nativeReady || (!nativeModelInstalled && !modelJustInstalled))) {
+      setPhase('ready');
+      setStatus('Chưa có mô hình MuScriptor · Cần tải AI để nhận diện');
+      setError('Bạn cần tải mô hình MuScriptor Small trong ứng dụng Windows trước khi nhận diện.');
       return;
     }
-    if (engineMode === 'muscriptor' && !nativeModelInstalled) {
-      setError('Chưa có MuScriptor Small. Mở Công cụ → Tải mô hình MuScriptor (209 MB) trước.');
-      return;
-    }
+    recognitionInFlight.current = true;
     if (audioEl.current) audioEl.current.pause();
     setPlaying(false);
     setPhase('analyzing');
     setError('');
     setProgress(0);
+    setStatus(mode === 'muscriptor'
+      ? 'MuScriptor đang chuẩn bị nhận diện bài hát…'
+      : 'Basic Pitch đang tải mô hình và nhận diện bài hát…');
     try {
-      const detected = engineMode === 'muscriptor'
-        ? await runMuScriptor(selection.file, ({kind, percent, message}) => {
+      const detected = mode === 'muscriptor'
+        ? await runMuScriptor(target.file, ({kind, percent, message}) => {
             if (kind === 'transcribe') {
               setStatus(message);
               setProgress(percent);
             }
           })
-        : await transcribe(selection.file, (message, percentage) => {
+        : await transcribe(target.file, (message, percentage) => {
             setStatus(message);
             setProgress(percentage);
           });
@@ -309,16 +324,22 @@ function App() {
       setNativeSelectedProgram(detected.find(n => n.program !== undefined)?.program ?? null);
       setProgress(100);
       setPhase('complete');
-      setStatus(engineMode === 'muscriptor'
+      setStatus(mode === 'muscriptor'
         ? 'MuScriptor: ' + detected.length + ' nốt · ' + nativeInstrumentPrograms(detected).length + ' nhạc cụ'
-        : 'Basic Pitch: ' + detected.length + ' nốt');
+        : 'Basic Pitch: ' + detected.length + ' nốt · đã hoàn tất');
       firedNotes.current.clear();
     } catch (cause) {
       setPhase('error');
       setError((cause instanceof Error ? cause.message : 'Nhận diện thất bại')
-        + (engineMode === 'muscriptor' ? '' : ' · Kiểm tra mạng khi tải Basic Pitch.'));
-      setStatus('Không thể nhận diện');
+        + (mode === 'muscriptor' ? '' : ' · Kiểm tra mạng khi tải Basic Pitch.'));
+      setStatus('Không thể nhận diện bài hát · có thể thử lại bằng nút Nhận diện');
+    } finally {
+      recognitionInFlight.current = false;
     }
+  };
+
+  const startInference = () => {
+    if (selection) void runRecognition(selection);
   };
 
   const getAudioContext = () => {
