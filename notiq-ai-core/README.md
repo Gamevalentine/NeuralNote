@@ -36,3 +36,16 @@
 - Sau khi Emscripten build thành công, `tests/verify-wasm.mjs` bắt buộc kiểm tra **file .wasm thật** (magic bytes, WebAssembly.compile và đủ exports C ABI), nếu thiếu sẽ báo lỗi và **không** kết luận PASS.
 - Thêm trang chẩn đoán **chỉ dành cho kỹ thuật** `web/diagnostic.html` để thử nạp GGUF cục bộ trong worker, không có nhận diện giả và không đưa lên NOTIQ Web production.
 - Tại thời điểm cập nhật, môi trường thực thi chưa có `emcc/emcmake`, không có network để tải Emscripten/ggml; **chưa build .wasm, chưa chạy nạp GGUF**. Không dùng GitHub Actions, Codespaces, dịch vụ có phí hoặc máy thật của người dùng.
+
+## Giai đoạn 2 — cập nhật 21/10/2026
+
+Các cập nhật thực tế trên nhánh thử nghiệm:
+
+- Đối chiếu trực tiếp `ggml` commit `e91ded11bdcd78c42f9c8d3978ff6686eb4c1226`: có nhánh WASM CPU trong CMake và khóa về một luồng khi `__EMSCRIPTEN__` mà không có pthreads. Đây là cơ sở khả thi, **không phải chứng nhận MuScriptor WASM đã chạy**.
+- Cấu hình CMake chọn CPU wasm32, tắt multi-variant/native, dùng bộ nhớ tăng dần giới hạn 2 GiB, stack 8 MiB và assertions khi thử nghiệm. Build script xuất JS + WASM riêng và kiểm tra binary trước khi công bố.
+- Adapter C++ phát các cập nhật tiến độ **thật** từ `LoadOptions.on_progress` và `TranscriptionUpdate.progress` sang Worker; không dùng timer tạo tiến độ. MIDI đánh dấu trống luôn dùng GM program 128 cho tương thích với protocol hiện hành của NOTIQ.
+- Web Worker chỉ nạp đúng GGUF MuScriptor Small 209425152 byte và SHA-256 `925f55af65a20ebc4f8b45ceaf095a12b72493d436cb112623cd0041a1af23d4` sau khi người kiểm thử chủ động chọn tệp. Không nhúng weights vào website và không gửi dữ liệu đi. Sau khi nạp, bỏ bản sao tệp khỏi MEMFS để giảm bộ nhớ giữ lại.
+- Trang `web/diagnostic.html` kiểm tra `WebAssembly.validate` trên nội dung thật, tránh nhầm phản hồi HTML thành tệp WASM. Hỗ trợ hiển thị tiến độ thực.
+- `tests/toolchain-preflight.mjs` kiểm tra CMake, Ninja, Python, `emcc`, `emcmake` trước khi build. Đã **chạy thực tế tại container làm việc**: CMake 3.31.6/Ninja 1.12.1/Python 3.13.5 đủ; `emcc`, `emcmake` **không tồn tại**, exit code 2. Container không có DNS tải Emscripten từ bên ngoài.
+
+**CHƯA XONG:** chưa sinh `notiq-ai-core.wasm` và `notiq-ai-core.js`, chưa xác minh load GGUF và nhận diện âm thanh. Không có browser Preview AI, không dùng GitHub Actions/Codespaces, không chạm production hoặc tốn phí. Giai đoạn 2 chỉ được nghiệm thu sau khi builder có Emscripten thực, chạy `scripts/build-wasm.sh` thành công, binary verify PASS và browser diagnostic nạp đúng GGUF PASS.
