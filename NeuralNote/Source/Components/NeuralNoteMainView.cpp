@@ -145,6 +145,11 @@ void NeuralNoteMainView::timerCallback()
     }
 }
 
+void NeuralNoteMainView::openAudioFile()
+{
+    mVisualizationPanel.getCombinedAudioMidiRegion().getAudioRegion()->openFileChooser();
+}
+
 void NeuralNoteMainView::repaintPianoRoll()
 {
     mVisualizationPanel.repaintPianoRoll();
