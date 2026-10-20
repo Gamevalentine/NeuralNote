@@ -18,7 +18,7 @@ test('MuScriptor overlapping pitches are preserved as separate real GM tracks', 
   assert.equal(tracks.length, 3);
   const decoded = new Midi(createDawMidi(tracks, 126));
   assert.equal(decoded.tracks.length, 3);
-  assert.equal(decoded.header.tempos[0].bpm, 126);
+  assert.ok(Math.abs(decoded.header.tempos[0].bpm - 126) < 0.002, 'MIDI microseconds-per-beat has finite precision');
   const a = decoded.tracks.find(track => track.instrument.number === 0 && track.channel !== 9);
   const b = decoded.tracks.find(track => track.instrument.number === 40);
   const drums = decoded.tracks.find(track => track.channel === 9);
@@ -28,7 +28,7 @@ test('MuScriptor overlapping pitches are preserved as separate real GM tracks', 
   assert.equal(drums.notes[0].midi, 38);
   assert.equal(drums.notes[0].duration, 0.01);
   assert.notEqual(a.channel, b.channel);
-  assert.equal(a.notes[0].time, 0.125);
+  assert.ok(Math.abs(a.notes[0].time - 0.125) < 0.001, 'MIDI ticks preserve timing within 1 ms');
 });
 
 test('Pitch-only Basic Pitch tracks retain chosen GM program and seconds', () => {
@@ -41,7 +41,8 @@ test('Pitch-only Basic Pitch tracks retain chosen GM program and seconds', () =>
   assert.equal(tracks.length, 3);
   const midi = new Midi(createDawMidi(tracks, 90));
   assert.deepEqual(midi.tracks.map(track => track.instrument.number), [73,24,33]);
-  assert.deepEqual(midi.tracks.map(track => track.notes[0].time), [4.5,3.5,2.5]);
+  midi.tracks.map(track => track.notes[0].time).forEach((seconds, i) =>
+    assert.ok(Math.abs(seconds - [4.5,3.5,2.5][i]) < 0.001, 'MIDI roundtrip timing within 1 ms'));
 });
 
 test('Muted/invisible source tracks can be filtered before export', () => {
