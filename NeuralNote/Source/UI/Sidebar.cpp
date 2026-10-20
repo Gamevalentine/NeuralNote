@@ -5,6 +5,7 @@
 #include "Sidebar.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 #include "InstrumentSelection.h"
@@ -157,7 +158,7 @@ void Sidebar::paintOverChildren(juce::Graphics& g)
     const int sectionHeight = 112;
     const int baseY = mHeaderBounds.getBottom() + 22;
     const std::array<juce::Colour, 3> accents {
-        juce::Colour(0xe3b44b), juce::Colour(0x36bba4), juce::Colour(0x8a77e6)
+        nn::colours::rgb(0xe3b44b), nn::colours::rgb(0x36bba4), nn::colours::rgb(0x8a77e6)
     };
     const std::array<const char*, 3> titles {"Dải cao", "Dải trung", "Dải trầm"};
     const std::array<const char*, 3> ranges {"C5 trở lên", "C4 - B4", "Dưới C4"};
