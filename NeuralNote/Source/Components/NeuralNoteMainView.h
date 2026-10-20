@@ -5,6 +5,9 @@
 #ifndef PluginMainView_h
 #define PluginMainView_h
 
+#include <array>
+#include <memory>
+
 #include <JuceHeader.h>
 
 #include "InstrumentMenu.h"
