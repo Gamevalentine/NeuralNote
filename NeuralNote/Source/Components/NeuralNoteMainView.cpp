@@ -31,7 +31,26 @@ NeuralNoteMainView::NeuralNoteMainView(NeuralNoteAudioProcessor& processor)
     mProcessor.addListenerToStateValueTree(this);
     jassert(mProcessor.getValueTree().hasProperty(NnId::PlayheadCenteredId));
 
+    // The eight compact menus mirror NOTIQ Web. Native commands still call the
+    // original JUCE player, transcriber, mixer and MIDI export implementation.
+    constexpr std::array<const char*, 8> titles {
+        "Tệp", "Chỉnh sửa", "Phát lại", "Track MIDI",
+        "Nhạc cụ", "Công cụ", "Hiển thị", "Xuất"
+    };
+    for (std::size_t i = 0; i < titles.size(); ++i) {
+        auto button = std::make_unique<juce::TextButton>(juce::String::fromUTF8(titles[i]));
+        button->setColour(juce::TextButton::buttonColourId, nn::colours::bgTopBar);
+        button->setColour(juce::TextButton::buttonOnColourId, nn::colours::bgControlActive);
+        button->setColour(juce::TextButton::textColourOffId, nn::colours::textPrimary);
+        button->setColour(juce::TextButton::textColourOnId, nn::colours::textBright);
+        button->setWantsKeyboardFocus(false);
+        button->onClick = [this, index = static_cast<int>(i)] { _showWebStyleMenu(index); };
+        addAndMakeVisible(*button);
+        mWebMenuButtons[i] = std::move(button);
+    }
+
     addAndMakeVisible(mTopBar);
+    mTopBar.setVisible(false);
     addAndMakeVisible(mSidebar);
     addAndMakeVisible(mVisualizationPanel);
 
@@ -93,8 +112,20 @@ void NeuralNoteMainView::resized()
 {
     auto bounds = getLocalBounds();
 
-    mTopBar.setBounds(bounds.removeFromTop(nn::metrics::topBarHeight));
+    mWebMenuBounds = bounds.removeFromTop(40);
+    const int widths[] = {47, 79, 69, 89, 76, 72, 76, 51};
+    int x = 164;
+    for (std::size_t i = 0; i < mWebMenuButtons.size(); ++i) {
+        mWebMenuButtons[i]->setBounds(x, mWebMenuBounds.getY() + 4, widths[i], 32);
+        x += widths[i];
+    }
+
+    // Show the legacy sound/transport controls on demand. Nothing is deleted:
+    // playback, master gain, recording, BPM editing and MIDI drag remain intact.
+    mTopBar.setVisible(mShowAdvancedControls);
+    mTopBar.setBounds(bounds.removeFromTop(mShowAdvancedControls ? nn::metrics::topBarHeight : 0));
     mSidebar.setBounds(bounds.removeFromLeft(nn::metrics::sidebarWidth));
+    mVisualizationPanel.setCompactMode(!mShowAdvancedControls);
     mVisualizationPanel.setBounds(bounds);
 
     // Just above the status bar. Wider than the panel needs -- it sizes itself to its message and
@@ -128,6 +159,21 @@ void NeuralNoteMainView::_setInstrumentMenuOpen(bool inIsOpen)
 void NeuralNoteMainView::paint(Graphics& g)
 {
     g.fillAll(nn::colours::bgRoot);
+    g.setColour(nn::colours::bgTopBar);
+    g.fillRect(mWebMenuBounds);
+    nn::drawBottomBorder(g, mWebMenuBounds, nn::colours::divStrong);
+
+    g.setColour(nn::colours::textBright);
+    g.setFont(nn::fonts::wordmark());
+    g.drawText("NOTIQ", 14, mWebMenuBounds.getY(), 83, mWebMenuBounds.getHeight(),
+               juce::Justification::centredLeft, false);
+    g.setColour(nn::colours::accentText);
+    g.setFont(nn::fonts::pillLabel());
+    g.drawText("DESKTOP", 92, mWebMenuBounds.getY(), 75, mWebMenuBounds.getHeight(),
+               juce::Justification::centredLeft, false);
+    g.setColour(nn::colours::textPrimary);
+    g.drawText("LUNOR MUSIC", getWidth() - 150, mWebMenuBounds.getY(), 135,
+               mWebMenuBounds.getHeight(), juce::Justification::centredRight, false);
 }
 
 void NeuralNoteMainView::timerCallback()
