@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { AudioWaveform, CircleHelp, Gauge, Headphones, Info, LoaderCircle,
   Music, Settings2, X, ZoomIn, ZoomOut } from 'lucide-react';
-import { fmt, generateDemo, groupFor, GROUPS, noteName, readAudio, transcribe } from './audio';
+import { fmt, generateDemo, groupFor, GROUPS, noteName, readAudio } from './audio';
 import { assertSupportedSong, MAX_SONG_BYTES, MAX_SONG_SECONDS } from './longAudio';
 import { createDawMidi, createDawBundle, extractDawTracks, midiChannelLimitExceeded } from './dawMidi';
 import { addNote, copyNotes, removeNote, sameNotes, SNAP_SECONDS, snapSeconds, updateNote, clamp } from './pianoEdit';
@@ -45,7 +45,8 @@ function App() {
   const [selectedNote, setSelectedNote] = useState<number | null>(null);
   const [historyTick, setHistoryTick] = useState(0);
   const [phase, setPhase] = useState<Phase>('empty');
-  const [engineMode, setEngineMode] = useState<'basic' | 'muscriptor'>('basic');
+  // Browser is strictly a GUI preview. The original NeuralNote MuScriptor runs only via Windows native IPC.
+  const [engineMode, setEngineMode] = useState<'preview' | 'muscriptor'>('preview');
   const [nativeReady, setNativeReady] = useState(false);
   const [nativeModelInstalled, setNativeModelInstalled] = useState(false);
   const [nativeDownloading, setNativeDownloading] = useState(false);
@@ -243,13 +244,15 @@ function App() {
       setSelection(next);
       setInfo(decoded);
       setPhase('ready');
-      if (engineMode === 'muscriptor' && (!nativeReady || !nativeModelInstalled)) {
-        setStatus('Đã tải bài hát · Cần mô hình MuScriptor để nhận diện');
-        setError('MuScriptor chưa có mô hình 209 MB. Nhấn “Tải mô hình AI” trên thanh trên cùng để tiếp tục.');
+      if (!nativeReady) {
+        // The Web build has no C++ bridge. Never silently substitute a different AI engine.
+        setStatus('Đã tải bài hát · Bản Web chỉ duyệt giao diện và biên tập MIDI');
+        setError('MuScriptor nguyên gốc từ NeuralNote chỉ chạy trong NOTIQ Windows. Bản Web không có engine nhận diện; hãy mở NOTIQ Desktop để chuyển âm thanh thành MIDI.');
+      } else if (!nativeModelInstalled) {
+        setStatus('Đã tải bài hát · Chờ mô hình MuScriptor từ NeuralNote');
+        setError('Chưa cài MuScriptor Small (209 MB). Nhấn “Tải mô hình AI” trên thanh trên cùng, sau đó nhận diện sẽ tự khởi chạy.');
       } else {
-        setStatus('Đã tải bài hát · Đang khởi động AI…');
-        // Start directly with the selected blob, not the previous React selection.
-        // This removes the extra hidden "Tools → Transcribe" step entirely.
+        setStatus('Đã tải bài hát · Đang chạy MuScriptor nguyên gốc từ NeuralNote…');
         void runRecognition(next);
       }
     } catch (cause) {
@@ -288,10 +291,15 @@ function App() {
   };
 
   const runRecognition = async (
-    target: Selection, mode: 'basic' | 'muscriptor' = engineMode, modelJustInstalled = false,
+    target: Selection, _mode: 'muscriptor' = 'muscriptor', modelJustInstalled = false,
   ) => {
     if (recognitionInFlight.current) return;
-    if (mode === 'muscriptor' && (!nativeReady || (!nativeModelInstalled && !modelJustInstalled))) {
+    if (!nativeReady) {
+      setStatus('MuScriptor không có trên Web — hãy mở NOTIQ Windows');
+      setError('Đây là giao diện Web thử nghiệm. MuScriptor C++ gốc của NeuralNote cần NOTIQ Desktop để chạy trên máy bạn.');
+      return;
+    }
+    if (!nativeModelInstalled && !modelJustInstalled) {
       setPhase('ready');
       setStatus('Chưa có mô hình MuScriptor · Cần tải AI để nhận diện');
       setError('Bạn cần tải mô hình MuScriptor Small trong ứng dụng Windows trước khi nhận diện.');
@@ -303,35 +311,25 @@ function App() {
     setPhase('analyzing');
     setError('');
     setProgress(0);
-    setStatus(mode === 'muscriptor'
-      ? 'MuScriptor đang chuẩn bị nhận diện bài hát…'
-      : 'Basic Pitch đang tải mô hình và nhận diện bài hát…');
+    setStatus('MuScriptor C++ (NeuralNote) đang nhận diện bài hát…');
     try {
-      const detected = mode === 'muscriptor'
-        ? await runMuScriptor(target.file, ({kind, percent, message}) => {
-            if (kind === 'transcribe') {
-              setStatus(message);
-              setProgress(percent);
-            }
-          })
-        : await transcribe(target.file, (message, percentage) => {
-            setStatus(message);
-            setProgress(percentage);
-          });
+      const detected = await runMuScriptor(target.file, ({kind, percent, message}) => {
+        if (kind === 'transcribe') {
+          setStatus(message);
+          setProgress(percent);
+        }
+      });
       clearHistory(detected);
       setNativeMuted(new Set());
       setNativeSolo(null);
       setNativeSelectedProgram(detected.find(n => n.program !== undefined)?.program ?? null);
       setProgress(100);
       setPhase('complete');
-      setStatus(mode === 'muscriptor'
-        ? 'MuScriptor: ' + detected.length + ' nốt · ' + nativeInstrumentPrograms(detected).length + ' nhạc cụ'
-        : 'Basic Pitch: ' + detected.length + ' nốt · đã hoàn tất');
+      setStatus('MuScriptor (NeuralNote): ' + detected.length + ' nốt · ' + nativeInstrumentPrograms(detected).length + ' nhạc cụ');
       firedNotes.current.clear();
     } catch (cause) {
       setPhase('error');
-      setError((cause instanceof Error ? cause.message : 'Nhận diện thất bại')
-        + (mode === 'muscriptor' ? '' : ' · Kiểm tra mạng khi tải Basic Pitch.'));
+      setError(cause instanceof Error ? cause.message : 'MuScriptor nhận diện thất bại');
       setStatus('Không thể nhận diện bài hát · có thể thử lại bằng nút Nhận diện');
     } finally {
       recognitionInFlight.current = false;
@@ -695,10 +693,9 @@ function App() {
     {
       id: 'tools', label: 'Công cụ', commands: [
         { label: phase === 'analyzing' ? 'Đang nhận diện…' : 'Nhận diện Audio → MIDI', run: () => void startInference(), disabled: !selection || phase === 'analyzing' },
-        { label: 'AI: Basic Pitch (Web)', run: () => setEngineMode('basic'), checked: engineMode === 'basic', disabled: phase === 'analyzing' },
-        { label: nativeReady ? 'AI: MuScriptor C++ (Windows)' : 'MuScriptor C++ (chỉ có trên NOTIQ Windows)',
-          run: () => setEngineMode('muscriptor'), disabled: !nativeReady || phase === 'analyzing',
-          checked: engineMode === 'muscriptor' },
+        { label: nativeReady ? 'AI: MuScriptor (NeuralNote gốc) — đang sử dụng'
+            : 'MuScriptor gốc NeuralNote — yêu cầu NOTIQ Windows',
+          run: () => {}, disabled: true, checked: nativeReady },
         ...(nativeReady ? [{
           label: nativeModelInstalled ? 'MuScriptor Small — đã tải (209 MB)' :
             nativeDownloading ? 'Đang tải mô hình MuScriptor…' : 'Tải mô hình MuScriptor Small (209 MB)',
@@ -783,7 +780,7 @@ function App() {
                     <div className="menu-settings menu-settings-row">
                       <label htmlFor="bpm-menu">BPM xuất MIDI</label>
                       <input id="bpm-menu" type="number" min={40} max={240} value={bpm} onChange={event => setBpm(Math.min(240, Math.max(40, Number(event.target.value) || 120)))}/>
-                      <small>AI: Spotify Basic Pitch</small>
+                      <small>{nativeReady ? 'Engine: NeuralNote MuScriptor C++' : 'Web chỉ xem giao diện · AI cần Windows'}</small>
                     </div>
                   )}
                   {menu.id === 'instrument' && <p className="menu-note">Các mục này chỉ lọc dải cao độ. AI chưa phân loại Piano, Guitar hay Drums.</p>}
@@ -807,7 +804,7 @@ function App() {
             <span>Đang nhận diện {progress}%</span>
             <div className="ai-running-meter"><div style={{width: progress + '%'}}/></div>
           </div>}
-          {(phase === 'ready' || phase === 'error') && selection && <button type="button"
+          {nativeReady && (phase === 'ready' || phase === 'error') && selection && <button type="button"
             className="ai-retry-button" disabled={busyLoading || nativeDownloading}
             title="Chạy AI nhận diện âm thanh thành các nốt MIDI"
             onClick={startInference}>Nhận diện nốt</button>}
@@ -825,7 +822,7 @@ function App() {
       </header>
       {desktopReview && showDesktopReview && <section className="desktop-review-panel" aria-label="Duyệt giao diện NOTIQ Desktop">
         <div className="desktop-review-head"><strong>NOTIQ Desktop · Bản duyệt giao diện</strong><button type="button" aria-label="Đóng bảng duyệt" onClick={() => { setShowDesktopReview(false); setReviewArea(null); }}><X size={16}/></button></div>
-        <p>Trang này là bản mẫu giao diện để bạn xem trước khi tải Desktop. Các nút, nhóm nốt và Piano Roll bên dưới vẫn hoạt động theo engine Web.</p>
+        <p>Trang này là bản mẫu giao diện. Piano Roll, SoundFont và xuất MIDI hoạt động; việc tự động nhận diện nốt dùng engine MuScriptor gốc NeuralNote trên Windows.</p>
         <strong className="desktop-review-subtitle">Chọn vùng muốn kiểm tra</strong>
         <div className="desktop-review-areas">
           {([
@@ -834,7 +831,7 @@ function App() {
             ['roll', 'Piano Roll'],
           ] as const).map(([id, label]) => <button key={id} type="button" className={reviewArea === id ? 'selected' : ''} aria-pressed={reviewArea === id} onClick={() => setReviewArea(current => current === id ? null : id)}>{label}</button>)}
         </div>
-        <p className="desktop-review-note"><strong>Chưa nghiệm thu bản Windows.</strong> Web dùng Basic Pitch; bản Desktop dùng MuScriptor và SoundFont. Khi giao diện được bạn duyệt, mình mới đóng gói bản Windows để kiểm thử âm thanh và AI.</p>
+        <p className="desktop-review-note">Đây chỉ là bản Web duyệt giao diện. Nhận diện đa nhạc cụ dùng engine MuScriptor C++ gốc NeuralNote trong ứng dụng Windows; không chạy bằng WebGL/Basic Pitch ở đây.</p>
         <span className="desktop-review-help">Chỗ nào chưa giống ý bạn, hãy chụp màn hình và gửi trong cuộc trò chuyện.</span>
       </section>}
       {showDawHelp && <section className="daw-help-popup" role="dialog" aria-modal="false" aria-label="Kết nối Cubase, Cakewalk và Kontakt">
@@ -855,7 +852,7 @@ function App() {
         <p>Âm thanh xử lý tại thiết bị của bạn. Mô hình AI tải qua Internet khi cần.</p>
         <p>{nativeReady
           ? 'Bản Windows có MuScriptor C++ CPU. Mô hình Small 209 MB, giấy phép CC BY-NC 4.0 (phi thương mại).'
-          : 'Cloudflare Web chỉ chạy Basic Pitch; MuScriptor C++ cần ứng dụng Windows được đóng gói native.'}</p>
+          : 'Cloudflare Web chỉ hiển thị giao diện và biên tập MIDI; để nhận diện nốt bằng MuScriptor C++ gốc NeuralNote, hãy dùng NOTIQ Windows.'}</p>
         {nativeReady && <p><strong>{nativeModelInstalled ? 'MuScriptor Small đã sẵn sàng' : 'MuScriptor Small chưa tải'}</strong>
           {!nativeModelInstalled && <button type="button" disabled={nativeDownloading}
             onClick={() => void downloadNativeModel()}>{nativeDownloading ? 'Đang tải model…' : 'Tải mô hình Small · 209 MB'}</button>}</p>}
@@ -867,8 +864,8 @@ function App() {
             <span>{hasNativeTracks ? nativePrograms.length : (notes.length ? GROUPS.length : 0)}</span>
           </div>
           <div className="track-explainer">{hasNativeTracks
-            ? 'MuScriptor · mỗi track mang mã nhạc cụ GM thật'
-            : 'Basic Pitch • nhóm theo cao độ'}</div>
+            ? 'MuScriptor (NeuralNote) · mỗi track là một nhạc cụ GM'
+            : 'Piano Roll · chỉnh sửa nốt MIDI bằng tay trên Web'}</div>
           {hasNativeTracks ? nativePrograms.map(program => {
             const count = notes.filter(note => note.program === program).length;
             const mutedTrack = nativeMuted.has(program);
@@ -971,9 +968,10 @@ function App() {
           </div>
           <div className="editor-status">
             <span>{status}</span>
-            <span className="notiq-ai-mode" title={engineMode === 'muscriptor'
-              ? 'MuScriptor C++ native: tách nhạc cụ theo GM · CPU-only' : 'Basic Pitch: nhận diện nốt, chưa nhận diện loại nhạc cụ'}>
-              AI: {engineMode === 'muscriptor' ? 'MuScriptor CPU' : 'Basic Pitch'}
+            <span className="notiq-ai-mode" title={nativeReady
+              ? 'MuScriptor C++ gốc NeuralNote đang chạy qua cầu nối Windows'
+              : 'Web chỉ dùng để duyệt giao diện và biên tập MIDI, không có engine nhận diện'}>
+              {nativeReady ? 'AI: MuScriptor (NeuralNote)' : 'Web UI Preview · AI trên Windows'}
             </span>
             <span title={soundfontStatus}>{loadingSoundfont ? '◌ Đang tải SoundFont' : '♪ ' + soundfontStatus}</span>
             <span className="piano-edit-hint" title="Thêm nốt: nhấn vào lưới · Di chuyển: kéo nốt · Đổi độ dài: kéo mép phải · Xóa: Del · Hoàn tác: Ctrl+Z">✎ Sửa MIDI · Snap ${SNAP_SECONDS}s · Ctrl+Z</span>
@@ -985,7 +983,7 @@ function App() {
           {error && <div className="error-banner" role="alert"><Info size={15}/>{error}<button aria-label="Đóng lỗi" onClick={()=>setError('')}><X size={15}/></button></div>}
         </section>
       </div>
-      <footer className="app-footer"><span><Headphones size={13}/> Piano/Guitar/Bass… từ mẫu FluidR3 SoundFont · xử lý bằng Web Audio</span><span><CircleHelp size={13}/> FluidR3_GM samples: <a href="https://gleitz.github.io/midi-js-soundfonts/" target="_blank" rel="noreferrer">CC BY 3.0 · Frank Wen</a> · Basic Pitch không phân loại nhạc cụ</span></footer>
+      <footer className="app-footer"><span><Headphones size={13}/> Piano/Guitar/Bass… từ mẫu FluidR3 SoundFont · xử lý bằng Web Audio</span><span><CircleHelp size={13}/> Nhận diện: MuScriptor gốc NeuralNote trên Windows · <a href="https://gleitz.github.io/midi-js-soundfonts/" target="_blank" rel="noreferrer">FluidR3_GM CC BY 3.0</a></span></footer>
       <input ref={fileInput} type="file" accept=".wav,.mp3,.flac,.ogg,.m4a,.aac,.aiff,audio/*" className="hidden" onChange={e => {if(e.target.files?.[0])void setAudio(e.target.files[0],e.target.files[0].name);e.target.value='';}}/>
     </main>
   );
