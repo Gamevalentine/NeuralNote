@@ -81,7 +81,7 @@ export async function transcribe(file: Blob, onProgress: (text: string, value: n
     await ctx.close().catch(() => undefined);
   }
 }
-export function makeMidi(notes: Note[], bpm: number, included: Set<PitchGroup>): Blob {
+export function makeMidi(notes: Note[], bpm: number, included: Set<PitchGroup>, programs?: Record<PitchGroup, number>): Blob {
   const midi = new Midi();
   midi.header.setTempo(Math.min(240, Math.max(40, bpm)));
   for (const group of GROUPS) {
@@ -89,6 +89,8 @@ export function makeMidi(notes: Note[], bpm: number, included: Set<PitchGroup>):
     if (!items.length) continue;
     const track = midi.addTrack();
     track.name = 'NOTIQ - ' + group.name;
+    // Keep the selected GM program in exported MIDI as well as Web playback.
+    track.instrument.number = programs?.[group.id] ?? 0;
     items.forEach(n => track.addNote({
       midi: Math.round(n.pitchMidi),
       time: Math.max(0, n.startTimeSeconds),

@@ -6,6 +6,8 @@ import { AudioWaveform, CircleHelp, Gauge, Headphones, Info, LoaderCircle,
 import { fmt, generateDemo, groupFor, GROUPS, makeMidi, noteName, readAudio, transcribe } from './audio';
 import { addNote, copyNotes, removeNote, sameNotes, SNAP_SECONDS, snapSeconds, updateNote, clamp } from './pianoEdit';
 import type { Note, AudioInfo, PitchGroup } from './audio';
+import { DEFAULT_INSTRUMENTS, INSTRUMENTS, instrumentProgram, playSoundfontNote, prepareInstrument } from './soundfont';
+import type { InstrumentId, InstrumentSelection } from './soundfont';
 
 type Selection = { file: Blob; name: string; url: string };
 type Phase = 'empty' | 'ready' | 'analyzing' | 'complete' | 'error';
@@ -42,6 +44,9 @@ function App() {
   const [muted, setMuted] = useState<Set<PitchGroup>>(new Set());
   const [solo, setSolo] = useState<PitchGroup | null>(null);
   const [gain, setGain] = useState<Record<PitchGroup, number>>({ high: 0.7, mid: 0.7, low: 0.7 });
+  const [instrumentSelection, setInstrumentSelection] = useState<InstrumentSelection>({ ...DEFAULT_INSTRUMENTS });
+  const [soundfontStatus, setSoundfontStatus] = useState('SoundFont: chọn tiếng để tải mẫu');
+  const [loadingSoundfont, setLoadingSoundfont] = useState(false);
   const [masterVolume, setMasterVolume] = useState(0.65);
   const [showSettings, setShowSettings] = useState(false);
   const [showDesktopReview, setShowDesktopReview] = useState(false);
@@ -55,6 +60,7 @@ function App() {
   const timelineViewport = useRef<HTMLDivElement>(null);
   const [viewportWidth, setViewportWidth] = useState(1000);
   const audioCtx = useRef<AudioContext | null>(null);
+  const midiOnlyStart = useRef<number | null>(null);
   const firedNotes = useRef<Set<number>>(new Set());
   const previousTime = useRef(0);
   const selectionRef = useRef<Selection | null>(null);
@@ -230,21 +236,43 @@ function App() {
     }
   };
 
-  const oscPreview = async (pitch: number, length = 0.35, volume = 0.65) => {
+  const getAudioContext = () => {
     const ctx = audioCtx.current || new AudioContext();
     audioCtx.current = ctx;
-    if (ctx.state !== 'running') await ctx.resume();
-    const oscillator = ctx.createOscillator();
-    const env = ctx.createGain();
-    oscillator.type = 'triangle';
-    oscillator.frequency.value = 440 * Math.pow(2, (pitch - 69) / 12);
-    const level = Math.max(0.004, Math.min(0.2, volume * 0.15));
-    env.gain.setValueAtTime(0.0001, ctx.currentTime);
-    env.gain.exponentialRampToValueAtTime(level, ctx.currentTime + 0.014);
-    env.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + Math.max(0.06, length));
-    oscillator.connect(env).connect(ctx.destination);
-    oscillator.start();
-    oscillator.stop(ctx.currentTime + Math.max(0.07, length) + 0.02);
+    return ctx;
+  };
+
+  const warmInstrument = async (instrument: InstrumentId) => {
+    try {
+      setLoadingSoundfont(true);
+      setSoundfontStatus('Đang tải mẫu SoundFont: ' + (INSTRUMENTS.find(item => item.id === instrument)?.label || instrument));
+      const ctx = getAudioContext();
+      if (ctx.state !== 'running') await ctx.resume();
+      await prepareInstrument(ctx, instrument);
+      setSoundfontStatus('SoundFont đã sẵn sàng: ' + (INSTRUMENTS.find(item => item.id === instrument)?.label || instrument));
+    } catch (cause) {
+      setSoundfontStatus('Không tải được bộ tiếng — kiểm tra kết nối Internet');
+      setError('Không tải được mẫu SoundFont FluidR3. '
+        + (cause instanceof Error ? cause.message : 'Hãy thử chọn lại tiếng nhạc cụ.'));
+    } finally {
+      setLoadingSoundfont(false);
+    }
+  };
+
+  const changeInstrument = (group: PitchGroup, instrument: InstrumentId) => {
+    setInstrumentSelection(previous => ({ ...previous, [group]: instrument }));
+    void warmInstrument(instrument);
+  };
+
+  const previewNote = async (pitch: number, length = 0.35, volume = 0.65) => {
+    try {
+      const ctx = getAudioContext();
+      await playSoundfontNote(ctx, instrumentSelection[groupFor(pitch)], pitch, length, volume);
+    } catch (cause) {
+      setSoundfontStatus('Lỗi tải / phát SoundFont');
+      setError('Không thể nghe tiếng nhạc cụ. '
+        + (cause instanceof Error ? cause.message : 'Kiểm tra mạng và chọn lại nhạc cụ.'));
+    }
   };
 
   const addNoteAtPointer = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -257,7 +285,7 @@ function App() {
     commitNotes(next);
     setSelectedNote(next.length - 1);
     setStatus('Đã thêm nốt ' + noteName(pitch) + ' · có thể kéo nốt hoặc kéo mép phải');
-    void oscPreview(pitch);
+    void previewNote(pitch);
   };
 
   const beginNoteGesture = (event: ReactPointerEvent<HTMLButtonElement>, index: number, kind: 'move' | 'resize') => {
@@ -274,7 +302,7 @@ function App() {
       before: copyNotes(notesRef.current), startX: event.clientX, startY: event.clientY,
     };
     setSelectedNote(index);
-    void oscPreview(original.pitchMidi, Math.min(0.36, original.durationSeconds));
+    void previewNote(original.pitchMidi, Math.min(0.36, original.durationSeconds));
   };
 
   const moveNoteGesture = (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -315,7 +343,7 @@ function App() {
         setStatus((gesture.kind === 'resize' ? 'Đã đổi độ dài: ' : 'Đã chuyển nốt: ')
           + noteName(result.pitchMidi) + ' · ' + fmt(result.startTimeSeconds));
         if (gesture.kind === 'move' && result.pitchMidi !== gesture.original.pitchMidi)
-          void oscPreview(result.pitchMidi, 0.25);
+          void previewNote(result.pitchMidi, 0.25);
       }
     }
   };
@@ -347,7 +375,21 @@ function App() {
   useEffect(() => {
     if (!playing || !notes.length || playbackMode === 'original') return;
     const interval = window.setInterval(() => {
-      const now = audioEl.current?.currentTime || 0;
+      const now = info ? (audioEl.current?.currentTime || 0)
+        : Math.max(0, (audioCtx.current?.currentTime || 0) - (midiOnlyStart.current || 0));
+      if (!info) {
+        setTime(now);
+        if (now >= totalSeconds) {
+          if (loop) {
+            midiOnlyStart.current = audioCtx.current?.currentTime || null;
+            firedNotes.current.clear();
+          } else {
+            setPlaying(false);
+            midiOnlyStart.current = null;
+          }
+          return;
+        }
+      }
       if (now + 0.25 < previousTime.current || Math.abs(now - previousTime.current) > 0.5) firedNotes.current.clear();
       previousTime.current = now;
       for (let i = 0; i < notes.length; i++) {
@@ -356,12 +398,12 @@ function App() {
         if (!activeGroups.has(group) || firedNotes.current.has(i)) continue;
         if (n.startTimeSeconds >= now - 0.10 && n.startTimeSeconds <= now + 0.055) {
           firedNotes.current.add(i);
-          void oscPreview(n.pitchMidi, Math.min(0.85, n.durationSeconds), gain[group] * masterVolume);
+          void previewNote(n.pitchMidi, Math.min(0.85, n.durationSeconds), gain[group] * masterVolume);
         }
       }
     }, 45);
     return () => window.clearInterval(interval);
-  }, [playing, notes, playbackMode, activeGroups, gain, masterVolume]);
+  }, [playing, notes, playbackMode, activeGroups, gain, masterVolume, info, totalSeconds, loop, instrumentSelection]);
 
   useEffect(() => {
     if (audioEl.current) audioEl.current.volume = playbackMode === 'midi' ? 0 : masterVolume * (playbackMode === 'mix' ? 0.65 : 1);
@@ -369,29 +411,42 @@ function App() {
 
   const togglePlayback = async () => {
     const audio = audioEl.current;
-    if (!audio || !info) return;
+    if (!info && !visibleNotes.length) return;
     if (playing) {
-      audio.pause();
+      audio?.pause();
+      midiOnlyStart.current = null;
       setPlaying(false);
     } else {
       try {
-        if (playbackMode !== 'original') {
-          const synth = audioCtx.current || new AudioContext();
-          audioCtx.current = synth;
-          await synth.resume();
+        const ctx = getAudioContext();
+        if (ctx.state !== 'running') await ctx.resume();
+        if (playbackMode !== 'original' || !info) {
+          const needed = [...new Set(visibleNotes.map(n => instrumentSelection[groupFor(n.pitchMidi)]))];
+          if (needed.length) {
+            setLoadingSoundfont(true);
+            setSoundfontStatus('Đang chuẩn bị các tiếng SoundFont để phát MIDI...');
+            await Promise.all(needed.map(instrument => prepareInstrument(ctx, instrument)));
+            setSoundfontStatus('Đã tải xong ' + needed.length + ' bộ tiếng SoundFont');
+          }
         }
         firedNotes.current.clear();
-        await audio.play();
+        previousTime.current = info ? (audio?.currentTime || 0) : 0;
+        if (info && audio) await audio.play();
+        else { midiOnlyStart.current = ctx.currentTime; setTime(0); }
         setPlaying(true);
-      } catch {
-        setError('Không thể phát âm thanh. Hãy cho phép trình duyệt phát media.');
+      } catch (cause) {
+        setSoundfontStatus('Lỗi SoundFont / phát lại');
+        setError('Không thể chuẩn bị bộ tiếng: ' + (cause instanceof Error ? cause.message : 'Kiểm tra mạng hoặc thử chọn lại nhạc cụ.'));
+      } finally {
+        setLoadingSoundfont(false);
       }
     }
   };
   const seekTo = (seconds: number) => {
-    if (!audioEl.current) return;
-    const clamped = Math.max(0, Math.min(info?.duration || 0, seconds));
-    audioEl.current.currentTime = clamped;
+    const clamped = Math.max(0, Math.min(info?.duration || totalSeconds, seconds));
+    if (info && audioEl.current) audioEl.current.currentTime = clamped;
+    else if (midiOnlyStart.current !== null && audioCtx.current)
+      midiOnlyStart.current = audioCtx.current.currentTime - clamped;
     setTime(clamped);
     previousTime.current = clamped;
     firedNotes.current.clear();
@@ -399,6 +454,7 @@ function App() {
   const stop = () => {
     if (audioEl.current) audioEl.current.pause();
     setPlaying(false);
+    midiOnlyStart.current = null;
     seekTo(0);
   };
   const toggleMute = (id: PitchGroup) => {
@@ -410,7 +466,12 @@ function App() {
   };
   const exportFile = () => {
     if (!visibleNotes.length) return;
-    const blob = makeMidi(notes, bpm, activeGroups);
+    const programs: Record<PitchGroup, number> = {
+      high: instrumentProgram(instrumentSelection.high),
+      mid: instrumentProgram(instrumentSelection.mid),
+      low: instrumentProgram(instrumentSelection.low),
+    };
+    const blob = makeMidi(notes, bpm, activeGroups, programs);
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -458,13 +519,13 @@ function App() {
         { label: 'Làm lại (Redo)', run: redoEdit, disabled: !canRedo || phase === 'analyzing', shortcut: 'Ctrl+Y' },
         { label: 'Xóa nốt đã chọn', run: deleteSelected, disabled: selectedNote === null || phase === 'analyzing', shortcut: 'Del' },
         { label: 'Xóa kết quả nhận diện', run: () => { commitNotes([]); setSelectedNote(null); setPhase(selection ? 'ready' : 'empty'); setStatus('Đã xóa kết quả MIDI'); }, disabled: notes.length === 0 || phase === 'analyzing' },
-        { label: 'Về đầu bản nhạc', run: () => seekTo(0), disabled: !info },
+        { label: 'Về đầu bản nhạc', run: () => seekTo(0), disabled: !info && !notes.length },
       ],
     },
     {
       id: 'play', label: 'Phát lại', commands: [
-        { label: playing ? 'Tạm dừng' : 'Phát', run: () => void togglePlayback(), disabled: !info },
-        { label: 'Dừng và về đầu', run: stop, disabled: !info },
+        { label: playing ? 'Tạm dừng' : 'Phát', run: () => void togglePlayback(), disabled: !info && !notes.length },
+        { label: 'Dừng và về đầu', run: stop, disabled: !info && !notes.length },
         { label: 'Phát lặp', run: () => setLoop(v => !v), checked: loop },
       ],
     },
@@ -621,6 +682,14 @@ function App() {
                   <button className={'tiny-toggle ' + (solo === group.id ? 'selected' : '')} onClick={() => setSolo(solo === group.id ? null : group.id)} title="Chỉ nghe dải này">S</button>
                 </div>
                 <div className="track-slider-row"><span style={{ color: group.color }}>▰</span><input aria-label={'Âm lượng ' + group.name} type="range" min={0} max={1} step={0.01} value={gain[group.id]} onChange={e => setGain(prev => ({...prev, [group.id]: Number(e.target.value)}))}/><span>{Math.round(gain[group.id] * 100)}%</span></div>
+                <div className="track-preset-row">
+                  <select aria-label={'Chọn tiếng nhạc cụ cho ' + group.name}
+                    value={instrumentSelection[group.id]}
+                    onChange={event => changeInstrument(group.id, event.target.value as InstrumentId)}>
+                    {INSTRUMENTS.map(instrument => <option key={instrument.id} value={instrument.id}>{instrument.label}</option>)}
+                  </select>
+                  <button type="button" title="Tải tiếng và nghe thử nốt C4 bằng SoundFont" onClick={() => void warmInstrument(instrumentSelection[group.id])}>↻</button>
+                </div>
               </div>
             );
           })}
@@ -630,7 +699,7 @@ function App() {
           <div className="workarea">
             <div className="keyboard" ref={keyColumn}>
               <div className="ruler-key-label">THỜI GIAN</div>
-              {pitches.map(pitch => <button key={pitch} type="button" onClick={() => void oscPreview(pitch)} title={'Nghe nốt ' + noteName(pitch)} className={'key ' + ([1,3,6,8,10].includes(pitch%12) ? 'black' : 'white')}>{pitch % 12 === 0 ? noteName(pitch) : ''}</button>)}
+              {pitches.map(pitch => <button key={pitch} type="button" onClick={() => void previewNote(pitch)} title={'Nghe nốt ' + noteName(pitch)} className={'key ' + ([1,3,6,8,10].includes(pitch%12) ? 'black' : 'white')}>{pitch % 12 === 0 ? noteName(pitch) : ''}</button>)}
             </div>
             <div className="scroller" ref={timelineViewport} onDragOver={event => event.preventDefault()} onDrop={onDropFile} onScroll={event => { if (keyColumn.current) keyColumn.current.scrollTop = event.currentTarget.scrollTop; }}>
               <div className="timeline" style={{ width: timelineWidth }}>
@@ -670,6 +739,7 @@ function App() {
           </div>
           <div className="editor-status">
             <span>{status}</span>
+            <span title={soundfontStatus}>{loadingSoundfont ? '◌ Đang tải SoundFont' : '♪ ' + soundfontStatus}</span>
             <span className="piano-edit-hint" title="Thêm nốt: nhấn vào lưới · Di chuyển: kéo nốt · Đổi độ dài: kéo mép phải · Xóa: Del · Hoàn tác: Ctrl+Z">✎ Sửa MIDI · Snap ${SNAP_SECONDS}s · Ctrl+Z</span>
             {phase === 'analyzing' && <div className="progress-track"><div style={{width: progress+'%'}}/></div>}
             <span>{phase === 'analyzing' ? progress+'%' : summary}</span>
@@ -679,7 +749,7 @@ function App() {
           {error && <div className="error-banner" role="alert"><Info size={15}/>{error}<button aria-label="Đóng lỗi" onClick={()=>setError('')}><X size={15}/></button></div>}
         </section>
       </div>
-      <footer className="app-footer"><span><Headphones size={13}/> Nhận diện Audio → MIDI thực tế · xử lý trong trình duyệt</span><span><CircleHelp size={13}/> Basic Pitch không phân loại nhạc cụ · <a href="https://github.com/spotify/basic-pitch-ts" target="_blank" rel="noreferrer">Apache-2.0</a></span></footer>
+      <footer className="app-footer"><span><Headphones size={13}/> Piano/Guitar/Bass… từ mẫu FluidR3 SoundFont · xử lý bằng Web Audio</span><span><CircleHelp size={13}/> FluidR3_GM samples: <a href="https://gleitz.github.io/midi-js-soundfonts/" target="_blank" rel="noreferrer">CC BY 3.0 · Frank Wen</a> · Basic Pitch không phân loại nhạc cụ</span></footer>
       <input ref={fileInput} type="file" accept=".wav,.mp3,.flac,.ogg,.m4a,.aac,.aiff,audio/*" className="hidden" onChange={e => {if(e.target.files?.[0])void setAudio(e.target.files[0],e.target.files[0].name);e.target.value='';}}/>
     </main>
   );
