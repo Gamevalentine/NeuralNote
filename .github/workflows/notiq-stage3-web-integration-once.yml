@@ -1,4 +1,5 @@
 name: NOTIQ Stage 3 - approved web UI with actual WASM smoke test
+# Retry after adding Vite import.meta.env type references for TypeScript
 on:
   push:
     branches:
