@@ -15,6 +15,14 @@
 #include <string>
 #include <utility>
 
+// Emscripten calls this from inside MuScriptor's actual model-load/chunk
+// callbacks. UI updates therefore reflect REAL progress instead of a timer.
+EM_JS(void, notiq_emit_progress, (int value), {
+    if (typeof postMessage === 'function') {
+        postMessage({ type: 'progress', percent: value });
+    }
+});
+
 namespace {
 std::optional<msl::Transcriber> engine;
 std::string lastError;
@@ -70,6 +78,7 @@ EMSCRIPTEN_KEEPALIVE int notiq_core_load_model(const char* modelPath) {
         msl::LoadOptions options{};
         options.on_progress = [](float fraction) {
             percent = std::clamp(static_cast<int>(fraction * 15), 0, 15);
+            notiq_emit_progress(percent);
         };
         auto loaded = msl::Transcriber::load(modelPath, std::move(options));
         if (!loaded) {
@@ -78,6 +87,7 @@ EMSCRIPTEN_KEEPALIVE int notiq_core_load_model(const char* modelPath) {
         }
         engine.emplace(std::move(*loaded));
         percent = 15;
+        notiq_emit_progress(percent);
         return 1;
     } catch (const std::exception& error) {
         fail(error.what());
@@ -114,6 +124,7 @@ EMSCRIPTEN_KEEPALIVE int notiq_core_transcribe(const float* samples, int sampleC
             options,
             [](const msl::TranscriptionUpdate& update) {
                 percent = std::clamp(15 + static_cast<int>(update.progress * 84), 15, 99);
+                notiq_emit_progress(percent);
                 return true;
             });
         if (!recognized) {
@@ -122,6 +133,7 @@ EMSCRIPTEN_KEEPALIVE int notiq_core_transcribe(const float* samples, int sampleC
         }
         lastResult = serialize(*recognized);
         percent = 100;
+        notiq_emit_progress(percent);
         return 1;
     } catch (const std::exception& error) {
         fail(error.what());
