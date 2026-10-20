@@ -50,6 +50,6 @@ if (process.env.NOTIQ_MODEL_DOWNLOAD === '1') {
 }
 if (!existsSync(path)) throw new Error('GGUF model is missing; set NOTIQ_MODEL_DOWNLOAD=1 to opt in to downloading it.');
 const server = createNotiqServer();
-server.listen(Number(process.env.PORT || 8080), '0.0.0.0', () => {
+server.listen(Number(process.env.PORT || 8080), process.env.NOTIQ_BIND_ADDRESS || '0.0.0.0', () => {
   console.log('NOTIQ MuScriptor private preview backend ready');
 });
