@@ -31,7 +31,26 @@ NeuralNoteMainView::NeuralNoteMainView(NeuralNoteAudioProcessor& processor)
     mProcessor.addListenerToStateValueTree(this);
     jassert(mProcessor.getValueTree().hasProperty(NnId::PlayheadCenteredId));
 
+    // The eight compact menus mirror NOTIQ Web. Native commands still call the
+    // original JUCE player, transcriber, mixer and MIDI export implementation.
+    constexpr std::array<const char*, 8> titles {
+        "Tệp", "Chỉnh sửa", "Phát lại", "Track MIDI",
+        "Nhạc cụ", "Công cụ", "Hiển thị", "Xuất"
+    };
+    for (std::size_t i = 0; i < titles.size(); ++i) {
+        auto button = std::make_unique<juce::TextButton>(juce::String::fromUTF8(titles[i]));
+        button->setColour(juce::TextButton::buttonColourId, nn::colours::bgTopBar);
+        button->setColour(juce::TextButton::buttonOnColourId, nn::colours::bgControlActive);
+        button->setColour(juce::TextButton::textColourOffId, nn::colours::textPrimary);
+        button->setColour(juce::TextButton::textColourOnId, nn::colours::textBright);
+        button->setWantsKeyboardFocus(false);
+        button->onClick = [this, index = static_cast<int>(i)] { _showWebStyleMenu(index); };
+        addAndMakeVisible(*button);
+        mWebMenuButtons[i] = std::move(button);
+    }
+
     addAndMakeVisible(mTopBar);
+    mTopBar.setVisible(false);
     addAndMakeVisible(mSidebar);
     addAndMakeVisible(mVisualizationPanel);
 
@@ -93,8 +112,20 @@ void NeuralNoteMainView::resized()
 {
     auto bounds = getLocalBounds();
 
-    mTopBar.setBounds(bounds.removeFromTop(nn::metrics::topBarHeight));
+    mWebMenuBounds = bounds.removeFromTop(40);
+    const int widths[] = {47, 79, 69, 89, 76, 72, 76, 51};
+    int x = 164;
+    for (std::size_t i = 0; i < mWebMenuButtons.size(); ++i) {
+        mWebMenuButtons[i]->setBounds(x, mWebMenuBounds.getY() + 4, widths[i], 32);
+        x += widths[i];
+    }
+
+    // Show the legacy sound/transport controls on demand. Nothing is deleted:
+    // playback, master gain, recording, BPM editing and MIDI drag remain intact.
+    mTopBar.setVisible(mShowAdvancedControls);
+    mTopBar.setBounds(bounds.removeFromTop(mShowAdvancedControls ? nn::metrics::topBarHeight : 0));
     mSidebar.setBounds(bounds.removeFromLeft(nn::metrics::sidebarWidth));
+    mVisualizationPanel.setCompactMode(!mShowAdvancedControls);
     mVisualizationPanel.setBounds(bounds);
 
     // Just above the status bar. Wider than the panel needs -- it sizes itself to its message and
@@ -128,6 +159,21 @@ void NeuralNoteMainView::_setInstrumentMenuOpen(bool inIsOpen)
 void NeuralNoteMainView::paint(Graphics& g)
 {
     g.fillAll(nn::colours::bgRoot);
+    g.setColour(nn::colours::bgTopBar);
+    g.fillRect(mWebMenuBounds);
+    nn::drawBottomBorder(g, mWebMenuBounds, nn::colours::divStrong);
+
+    g.setColour(nn::colours::textBright);
+    g.setFont(nn::fonts::wordmark());
+    g.drawText("NOTIQ", 14, mWebMenuBounds.getY(), 83, mWebMenuBounds.getHeight(),
+               juce::Justification::centredLeft, false);
+    g.setColour(nn::colours::accentText);
+    g.setFont(nn::fonts::pillLabel());
+    g.drawText("DESKTOP", 92, mWebMenuBounds.getY(), 75, mWebMenuBounds.getHeight(),
+               juce::Justification::centredLeft, false);
+    g.setColour(nn::colours::textPrimary);
+    g.drawText("LUNOR MUSIC", getWidth() - 150, mWebMenuBounds.getY(), 135,
+               mWebMenuBounds.getHeight(), juce::Justification::centredRight, false);
 }
 
 void NeuralNoteMainView::timerCallback()
@@ -143,6 +189,11 @@ void NeuralNoteMainView::timerCallback()
         mPrevState = processor_state;
         updateEnablements();
     }
+}
+
+void NeuralNoteMainView::openAudioFile()
+{
+    mVisualizationPanel.getCombinedAudioMidiRegion().getAudioRegion()->openFileChooser();
 }
 
 void NeuralNoteMainView::repaintPianoRoll()
@@ -225,6 +276,114 @@ void NeuralNoteMainView::valueTreePropertyChanged(ValueTree& treeWhosePropertyHa
     if (property == NnId::SelectedInstrumentGroupsId) {
         // The transcribe button names how many instruments it is about to look for.
         mVisualizationPanel.updateEnablements();
+    }
+}
+
+
+void NeuralNoteMainView::_showWebStyleMenu(int index)
+{
+    juce::PopupMenu menu;
+    const auto state = mProcessor.getState();
+    const bool hasAudio = state == AudioLoaded || state == Processing
+                          || state == Paused || state == PopulatedAudioAndMidiRegions;
+    const bool canLoad = state != Recording && state != Processing;
+    const bool hasMidi = state == PopulatedAudioAndMidiRegions;
+    switch (index) {
+        case 0: // Tệp
+            menu.addItem(101, "Mở tệp âm thanh...", canLoad);
+            menu.addItem(102, "Đóng tệp / xóa dữ liệu", hasAudio);
+            break;
+        case 1: // Chỉnh sửa
+            menu.addItem(201, "Xóa nốt / kết quả nhận diện", hasAudio);
+            menu.addItem(202, "Về đầu bản nhạc", mProcessor.canPlay());
+            break;
+        case 2: // Phát lại
+            menu.addItem(301, "Phát / Tạm dừng", mProcessor.canPlay());
+            menu.addItem(302, "Về đầu", mProcessor.canPlay());
+            menu.addItem(303, "Phát lặp", true, mTopBar.getLoopButton().getToggleState());
+            menu.addSeparator();
+            menu.addItem(304, "Hiện bộ điều khiển âm thanh...", true);
+            break;
+        case 3: // Track MIDI
+            menu.addItem(401, "Thêm / chọn nhạc cụ", true);
+            menu.addItem(402, "Xóa nốt đang nhận diện", hasAudio);
+            break;
+        case 4: // Nhạc cụ
+            menu.addItem(501, "Chọn nhạc cụ cần nhận diện...", true);
+            menu.addItem(502, "Điều chỉnh âm lượng / Solo / Mute...", true);
+            break;
+        case 5: // Công cụ
+            menu.addItem(601, "Nhận diện Audio → MIDI", state == AudioLoaded);
+            menu.addItem(602, "Chọn / tải mô hình AI...");
+            menu.addItem(603, "Cài đặt NOTIQ...");
+            break;
+        case 6: // Hiển thị
+            menu.addItem(701, "Thanh điều khiển nâng cao", true, mShowAdvancedControls);
+            menu.addItem(702, "Đặt lại thu phóng Piano Roll");
+            break;
+        case 7: // Xuất
+            menu.addItem(801, "Xuất tệp MIDI (.mid)...", hasMidi);
+            {
+                juce::PopupMenu bpm;
+                const double currentBpm = mProcessor.getValueTree().getProperty(NnId::ExportTempoId, 120.0);
+                bpm.addItem(811, "90 BPM", true, juce::approximatelyEqual(currentBpm, 90.0));
+                bpm.addItem(812, "120 BPM", true, juce::approximatelyEqual(currentBpm, 120.0));
+                bpm.addItem(813, "140 BPM", true, juce::approximatelyEqual(currentBpm, 140.0));
+                menu.addSubMenu("BPM xuất MIDI", bpm);
+            }
+            menu.addItem(802, "Hiện nút kéo MIDI ra...", true);
+            break;
+        default:
+            return;
+    }
+
+    juce::Component::SafePointer<NeuralNoteMainView> safeThis(this);
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(mWebMenuButtons[static_cast<size_t>(index)].get()),
+                       [safeThis](int command) {
+                           if (safeThis != nullptr && command != 0)
+                               safeThis->_handleWebStyleMenuAction(command);
+                       });
+}
+
+void NeuralNoteMainView::_handleWebStyleMenuAction(int command)
+{
+    switch (command) {
+        case 101: openAudioFile(); break;
+        case 102: case 201: case 402:
+            mVisualizationPanel.getToolbar().getClearButton().triggerClick(); break;
+        case 202: case 302:
+            mTopBar.getBackButton().triggerClick(); break;
+        case 301:
+            mTopBar.getPlayPauseButton().triggerClick(); break;
+        case 303:
+            mTopBar.getLoopButton().triggerClick(); break;
+        case 401: case 501:
+            _setInstrumentMenuOpen(true); break;
+        case 601:
+            mVisualizationPanel.triggerTranscription(); break;
+        case 602:
+            mTopBar.getModelButton().triggerClick(); break;
+        case 603:
+            _buildSettingsMenu();
+            mSettingsMenu->showMenuAsync(
+                juce::PopupMenu::Options().withTargetComponent(mWebMenuButtons[5].get()));
+            break;
+        case 702:
+            mProcessor.getValueTree().setProperty(NnId::ZoomLevelId, 1.0, nullptr);
+            mProcessor.getValueTree().setProperty(NnId::VerticalZoomId, -1.0, nullptr);
+            break;
+        case 801:
+            mVisualizationPanel.getToolbar().getExportButton().triggerClick(); break;
+        case 811: case 812: case 813:
+            mProcessor.getValueTree().setProperty(
+                NnId::ExportTempoId, command == 811 ? 90.0 : command == 812 ? 120.0 : 140.0, nullptr);
+            break;
+        case 304: case 502: case 701: case 802:
+            mShowAdvancedControls = !mShowAdvancedControls;
+            resized();
+            repaint();
+            break;
+        default: break;
     }
 }
 

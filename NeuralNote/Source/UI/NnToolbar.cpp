@@ -10,6 +10,7 @@
 #include "NnIcons.h"
 #include "NnLogger.h"
 #include "NnLook.h"
+#include "NeuralNoteMainView.h"
 #include "PluginProcessor.h"
 
 namespace
@@ -51,6 +52,20 @@ NnToolbar::NnToolbar(NeuralNoteAudioProcessor& inProcessor)
     // and the editor takes the pill's full height.
     mTempoEditor->setIndents(mTempoEditor->getLeftIndent(), 0);
     addAndMakeVisible(*mTempoEditor);
+
+    mLoadButton.setIcon(nn::icons::folderStroked, NnFlatButton::IconStyle::stroked, 13.0f);
+    mLoadButton.setLabel("Mở tệp", nn::fonts::buttonLabel());
+    mLoadButton.setPadding(10, 10, 6);
+    mLoadButton.setColour(NnFlatButton::backgroundColourId, nn::colours::bgControlAlt);
+    mLoadButton.setColour(NnFlatButton::iconColourId, nn::colours::accent);
+    mLoadButton.setColour(NnFlatButton::textColourId, nn::colours::textButton);
+    mLoadButton.setTooltip(NeuralNoteTooltips::load_audio);
+    mLoadButton.onClick = [this] {
+        if (auto* view = mProcessor.getNeuralNoteMainView()) {
+            view->openAudioFile();
+        }
+    };
+    addAndMakeVisible(mLoadButton);
 
     mExportButton.setIcon(nn::icons::folderStroked, NnFlatButton::IconStyle::stroked, 13.0f);
     mExportButton.setLabel("Xuất MIDI", nn::fonts::buttonLabel());
@@ -99,6 +114,9 @@ void NnToolbar::resized()
     mTempoPill = bounds.removeFromRight(tempo_width).withSizeKeepingCentre(tempo_width, button_height);
     mTempoEditor->setBounds(
         mTempoPill.getX() + PILL_PADDING + label_width + PILL_GAP, mTempoPill.getY(), TEMPO_VALUE_WIDTH, button_height);
+
+    mLoadButton.setBounds(bounds.removeFromLeft(mLoadButton.getIdealWidth())
+                              .withSizeKeepingCentre(mLoadButton.getIdealWidth(), button_height));
 }
 
 void NnToolbar::paint(juce::Graphics& g)
@@ -110,7 +128,7 @@ void NnToolbar::paint(juce::Graphics& g)
 
     auto filename_area = getLocalBounds()
                              .withTrimmedBottom(1)
-                             .reduced(PADDING_SIDE, 0)
+                             .withTrimmedLeft(mLoadButton.getRight() + FILENAME_GAP)
                              .withTrimmedRight(getWidth() - mTempoPill.getX() + FILENAME_GAP);
 
     // Nothing at all when there is no file: the waveform's drop zone right below already says the
@@ -136,6 +154,8 @@ void NnToolbar::updateEnablements()
     const State state = mProcessor.getState();
     mClearButton.setEnabled(state == AudioLoaded || state == Processing || state == Paused
                             || state == PopulatedAudioAndMidiRegions);
+    mLoadButton.setEnabled(state == EmptyAudioAndMidiRegions || state == AudioLoaded
+                           || state == Paused || state == PopulatedAudioAndMidiRegions);
 
     resized();
     repaint();

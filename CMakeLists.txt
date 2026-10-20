@@ -3,6 +3,11 @@ project(NeuralNotePlugin VERSION 0.1.0)
 
 # C++ settings
 set(CMAKE_CXX_STANDARD 23)
+# All NOTIQ Vietnamese UI strings are UTF-8. MSVC otherwise reads C++ source
+# using the Windows ANSI codepage, producing mojibake even when JUCE fonts are correct.
+if (MSVC)
+  add_compile_options(/utf-8)
+endif ()
 enable_language(CXX)
 
 # stb_vorbis is C and does not compile as C++.

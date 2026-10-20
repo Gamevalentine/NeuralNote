@@ -36,6 +36,9 @@ public:
 
     void resized() override;
 
+    /** Toggle the extra transport/utility toolbar without disabling its commands. */
+    void setCompactMode(bool inCompact);
+
     void clear();
 
     void repaintPianoRoll();
@@ -53,6 +56,9 @@ public:
     CombinedAudioMidiRegion& getCombinedAudioMidiRegion();
 
     NnToolbar& getToolbar();
+
+    /** Reuse the original model-gated transcribe action in the compact menu. */
+    void triggerTranscription() { mTranscribeButton.triggerClick(); }
 
 private:
     /** Follows the instrument mixer, which reports the transcription's pitch range as it grows. */
@@ -85,6 +91,7 @@ private:
 
     NeuralNoteAudioProcessor* mProcessor;
 
+    bool mCompactMode = true;
     NnToolbar mToolbar;
     TimelineGutter mGutter;
     Keyboard mKeyboard;

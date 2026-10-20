@@ -5,6 +5,9 @@
 #ifndef PluginMainView_h
 #define PluginMainView_h
 
+#include <array>
+#include <memory>
+
 #include <JuceHeader.h>
 
 #include "InstrumentMenu.h"
@@ -39,6 +42,9 @@ public:
      */
     void clear();
 
+    /** Open the native audio picker from the toolbar or the menu bar. */
+    void openAudioFile();
+
     bool keyPressed(const KeyPress& key) override;
 
 private:
@@ -54,12 +60,19 @@ private:
 
     void _updateTooltipVisibility();
 
+    void _showWebStyleMenu(int index);
+    void _handleWebStyleMenuAction(int command);
+
     /** Shows or hides the instrument picker, and lights the "+" to match. */
     void _setInstrumentMenuOpen(bool inIsOpen);
 
     NeuralNoteAudioProcessor& mProcessor;
 
     State mPrevState = EmptyAudioAndMidiRegions;
+
+    std::array<std::unique_ptr<juce::TextButton>, 8> mWebMenuButtons;
+    juce::Rectangle<int> mWebMenuBounds;
+    bool mShowAdvancedControls = false;
 
     TopBar mTopBar;
     Sidebar mSidebar;
