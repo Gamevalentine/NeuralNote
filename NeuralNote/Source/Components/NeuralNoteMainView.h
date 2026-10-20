@@ -60,6 +60,9 @@ private:
 
     void _updateTooltipVisibility();
 
+    void _showWebStyleMenu(int index);
+    void _handleWebStyleMenuAction(int command);
+
     /** Shows or hides the instrument picker, and lights the "+" to match. */
     void _setInstrumentMenuOpen(bool inIsOpen);
 
