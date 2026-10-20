@@ -83,13 +83,49 @@ export async function installWebModel(onProgress:(p:Progress)=>void) {
     moduleUrl:new URL('notiq-ai-core.js',root).href},[data.buffer],onProgress);
   onProgress({kind:'download',percent:100,message:'MuScriptor Small sẵn sàng trong trình duyệt.'});
 }
+// A conforming float32 WAV must be passed bit-for-bit to MuScriptor: decoding
+// it through AudioContext first resamples to the device rate and back, which
+// changes note predictions even when the source was already 16k mono.
+async function unchangedPcmFromWav(source: Blob): Promise<ArrayBuffer | null> {
+  if (source.size < 44 || source.size > 15 * 60 * 16000 * 4 + 65536) return null;
+  const header = new Uint8Array(await source.slice(0, 12).arrayBuffer());
+  const id = (a: Uint8Array, p: number, text: string): boolean =>
+    text.split('').every((letter, i) => a[p+i] === letter.charCodeAt(0));
+  if (!id(header,0,'RIFF') || !id(header,8,'WAVE')) return null;
+  const content = await source.arrayBuffer();
+  const bytes = new Uint8Array(content);
+  const view = new DataView(content);
+  let correctFormat = false, begin = -1, size = 0;
+  for (let p = 12; p + 8 <= bytes.length;) {
+    const length = view.getUint32(p+4,true), offset = p+8;
+    if (length > bytes.length-offset) return null;
+    if (id(bytes,p,'fmt ') && length >= 16) {
+      correctFormat = view.getUint16(offset,true)===3 &&
+        view.getUint16(offset+2,true)===1 &&
+        view.getUint32(offset+4,true)===16000 &&
+        view.getUint16(offset+12,true)===4 &&
+        view.getUint16(offset+14,true)===32;
+    } else if(id(bytes,p,'data')) { begin=offset;size=length; }
+    p=offset+length+(length%2);
+  }
+  if (!correctFormat || begin < 0 || !size || size%4 ||
+      size > 15*60*16000*4) return null;
+  // Copy only the actual PCM chunk; transferable buffer is freed from UI.
+  return content.slice(begin,begin+size);
+}
+
 export async function recognizeWeb(source:Blob,onProgress:(p:Progress)=>void):Promise<Note[]> {
   if(!ready)throw new Error('Hãy nạp GGUF MuScriptor Small trước khi nhận diện.');
   onProgress({kind:'transcribe',percent:1,message:'Đang chuẩn bị âm thanh 16 kHz mono…'});
-  const wav=await convertAudioToNativeWav(source,percent=>
-    onProgress({kind:'transcribe',percent:Math.max(1,Math.round(percent*.08)),
-      message:'Chuẩn bị âm thanh: '+percent+'%'}));
-  const pcm=wav.buffer.slice(wav.byteOffset+44,wav.byteOffset+wav.byteLength);
+  let pcm=await unchangedPcmFromWav(source);
+  if (pcm) {
+    onProgress({kind:'transcribe',percent:10,message:'WAV 16kHz float32 đúng chuẩn; giữ nguyên từng mẫu âm thanh.'});
+  } else {
+    const wav=await convertAudioToNativeWav(source,percent=>
+      onProgress({kind:'transcribe',percent:Math.max(1,Math.round(percent*.08)),
+        message:'Chuẩn bị âm thanh: '+percent+'%'}));
+    pcm=wav.buffer.slice(wav.byteOffset+44,wav.byteOffset+wav.byteLength);
+  }
   onProgress({kind:'transcribe',percent:10,message:'MuScriptor C++ đang nhận diện âm thanh thật…'});
   const response=await send('transcribe',{type:'transcribe',pcm,sampleRate:16000},[pcm],onProgress);
   if(!response.result)throw new Error('MuScriptor không gửi được nốt MIDI.');
