@@ -1,5 +1,6 @@
 import { toPianoNotes, type MuScriptorResult } from './muscriptorProtocol';
 import type { Note } from './audio';
+import { assertSupportedSong, MAX_SONG_BYTES } from './longAudio';
 
 export type NativeStatus = {
   available: boolean;
@@ -28,7 +29,7 @@ declare global {
 }
 
 const SAMPLE_RATE = 16_000;
-const MAX_SECONDS = 45;
+const NATIVE_RESAMPLE_CHUNK_SECONDS = 45;
 const WAV_HEADER = 44;
 
 export function nativeBridgeAvailable(): boolean {
@@ -36,22 +37,13 @@ export function nativeBridgeAvailable(): boolean {
     && typeof window.notiqNative?.transcribe === 'function';
 }
 
-export async function convertAudioToNativeWav(source: Blob): Promise<Uint8Array> {
+export async function convertAudioToNativeWav(source: Blob, onConversionProgress?: (percent: number) => void): Promise<Uint8Array> {
   const audioContext = new AudioContext();
   try {
     const audio = await audioContext.decodeAudioData(await source.arrayBuffer());
-    if (!Number.isFinite(audio.duration) || audio.duration <= 0 || audio.duration > MAX_SECONDS)
-      throw new Error('MuScriptor hỗ trợ tối đa 45 giây âm thanh trong bản thử.');
+    assertSupportedSong(audio.duration);
     const frames = Math.round(audio.duration * SAMPLE_RATE);
-    const offline = new OfflineAudioContext(1, frames, SAMPLE_RATE);
-    const node = offline.createBufferSource();
-    node.buffer = audio;
-    node.connect(offline.destination);
-    node.start();
-    const downsampled = await offline.startRendering();
-    const samples = downsampled.getChannelData(0);
-
-    const bytes = new Uint8Array(WAV_HEADER + samples.length * 4);
+    const bytes = new Uint8Array(WAV_HEADER + frames * 4);
     const view = new DataView(bytes.buffer);
     const text = (offset: number, value: string) => {
       for (let i = 0; i < value.length; i++) view.setUint8(offset+i, value.charCodeAt(i));
@@ -67,9 +59,21 @@ export async function convertAudioToNativeWav(source: Blob): Promise<Uint8Array>
     view.setUint16(32, 4, true);
     view.setUint16(34, 32, true);
     text(36, 'data');
-    view.setUint32(40, samples.length*4, true);
-    for (let i = 0; i < samples.length; ++i)
-      view.setFloat32(WAV_HEADER+i*4, samples[i], true);
+    view.setUint32(40, frames*4, true);
+    const perChunk = SAMPLE_RATE * NATIVE_RESAMPLE_CHUNK_SECONDS;
+    for (let startFrame = 0; startFrame < frames; startFrame += perChunk) {
+      const chunkFrames = Math.min(perChunk, frames - startFrame);
+      const offline = new OfflineAudioContext(1, chunkFrames, SAMPLE_RATE);
+      const node = offline.createBufferSource();
+      node.buffer = audio;
+      node.connect(offline.destination);
+      node.start(0, startFrame / SAMPLE_RATE, chunkFrames / SAMPLE_RATE);
+      const buffer = await offline.startRendering();
+      const samples = buffer.getChannelData(0);
+      for (let i = 0; i < chunkFrames; ++i)
+        view.setFloat32(WAV_HEADER + (startFrame+i)*4, samples[i], true);
+      onConversionProgress?.(Math.min(100, Math.round((startFrame+chunkFrames) / frames * 100)));
+    }
     return bytes;
   } finally {
     await audioContext.close().catch(() => undefined);
@@ -84,7 +88,10 @@ export async function runMuScriptor(
   const detach = bridge.onProgress(onProgress);
   try {
     onProgress({ kind:'transcribe', percent: 1, message:'Đang chuyển WAV về 16 kHz mono…' });
-    const wav = await convertAudioToNativeWav(source);
+    if (source.size > MAX_SONG_BYTES) throw new Error('Bài hát phải nhỏ hơn 200 MB.');
+    const wav = await convertAudioToNativeWav(source, percent =>
+      onProgress({ kind:'transcribe', percent: Math.min(2, Math.round(percent * 0.02)),
+        message: 'Đang chuẩn bị âm thanh toàn bài: ' + percent + '%' }));
     onProgress({ kind:'transcribe', percent: 2, message:'Đang gửi âm thanh sang MuScriptor CPU…' });
     const result = await bridge.transcribe(wav);
     return toPianoNotes(result);
