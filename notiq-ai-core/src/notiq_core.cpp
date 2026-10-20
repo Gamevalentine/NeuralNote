@@ -85,7 +85,7 @@ EMSCRIPTEN_KEEPALIVE int notiq_core_load_model(const char* modelPath) {
         };
         auto loaded = msl::Transcriber::load(modelPath, std::move(options));
         if (!loaded) {
-            fail("MuScriptor: " + msl::describe(loaded.error()));
+            fail(std::string("MuScriptor: ") + msl::describe(loaded.error()));
             return 0;
         }
         engine.emplace(std::move(*loaded));
@@ -131,7 +131,7 @@ EMSCRIPTEN_KEEPALIVE int notiq_core_transcribe(const float* samples, int sampleC
                 return true;
             });
         if (!recognized) {
-            fail("MuScriptor: " + msl::describe(recognized.error()));
+            fail(std::string("MuScriptor: ") + msl::describe(recognized.error()));
             return 0;
         }
         lastResult = serialize(*recognized);

@@ -1,6 +1,6 @@
 # NOTIQ AI Core — nguồn MuScriptor độc lập để nghiên cứu WebAssembly
 
-**Trạng thái:** proof of concept C++/WebAssembly; **CHƯA biên dịch và chạy mô hình GGUF thật trên trình duyệt**. Không coi đây là bản NOTIQ Web đã hoàn tất. Không có AI giả, không có máy chủ nhận diện, không thay giao diện đã duyệt.
+**Trạng thái mới nhất:** **Giai đoạn 2 ĐẠT** — Emscripten biên dịch thật, đã nạp thành công MuScriptor Small GGUF bằng Chromium Web Worker. Giai đoạn 3 Audio → MIDI chưa kiểm thử. Không coi đây là bản NOTIQ Web đã hoàn tất. Không có AI giả, không có máy chủ nhận diện, không thay giao diện đã duyệt.
 
 ## Đã phát triển
 - C++ adapter riêng `src/notiq_core.cpp` mang thương hiệu NOTIQ; chỉ gọi **MuScriptor nguyên bản** (`msl::Transcriber::load` và `transcribe`), trả JSON MIDI cùng cấu trúc đã dùng trong NOTIQ.
@@ -57,3 +57,18 @@ Các cập nhật thực tế trên nhánh thử nghiệm:
 - CMake NOTIQ **chỉ ở wasm32** bật `PFFFT_SIMD_DISABLE=1`. Lý do: PFFFT gốc chọn nhánh ARM NEON khi thấy `__wasm_simd128__`, rồi `#include <arm_neon.h>`; nhánh này không phù hợp với target wasm32. Dùng FFT scalar có sẵn của PFFFT cho lần biên dịch đầu, giữ nguyên nguồn native/Windows.
 - Đã xác minh trên Clang WebAssembly target: `-target wasm32 -msimd128` định nghĩa `__wasm_simd128__`. Đó là chứng cứ tương thích **mức tiền xử lý**, chưa phải bản build MuScriptor WASM.
 - Trở ngại vẫn còn: thiếu Emscripten/emsdk, không có mạng tại runtime. **CHƯA** sinh `.wasm`, chưa nạp GGUF và chưa nhận diện Audio → MIDI thật. Không dùng Codespaces, GitHub Actions hoặc dịch vụ trả phí.
+
+## Nghiệm thu Giai đoạn 2 — 21/10/2026: PASS build + model-load
+
+**Kết quả thực tế trên GitHub Actions:**
+- Workflow miễn phí trên runner tiêu chuẩn của repo Public, lần chạy **SUCCESS**: https://github.com/Gamevalentine/NeuralNote/actions/runs/39484427024.
+- Emscripten 4.0.7 biên dịch toàn bộ MuScriptor C++ gốc đã ghim, FFT PFFFT, ggml 0.23.0 (e91ded11), NOTIQ adapter sang `notiq-ai-core.js` và `notiq-ai-core.wasm`.
+- `tests/verify-wasm.mjs` xác nhận `WebAssembly.compile/validate` và 8 exports bắt buộc: PASS; WASM 1,393,980 bytes và JS loader 93,947 bytes.
+- Tải checkpoint MuScriptor Small F16 GGUF 209,425,152 bytes theo nguồn pin, SHA-256 `925f55af65a20ebc4f8b45ceaf095a12b72493d436cb112623cd0041a1af23d4`: PASS. Trọng số không được đưa lên Git.
+- Chromium headless mở trang `web/diagnostic.html` qua HTTP localhost (secure context), Web Worker nạp GGUF và gọi `msl::Transcriber::load` **thành công thực tế**; log cuối: `NOTIQ_MODEL_LOAD_RESULT: NẠP MÔ HÌNH THẬT THÀNH CÔNG: MuScriptor gốc đã sẵn sàng trong trình duyệt`.
+- Giữ bản nhị phân đã nghiệm thu tại `dist/notiq-ai-core.js` và `dist/notiq-ai-core.wasm` trong Draft PR; trang kiểm thử và worker tại `dist/web/`. Bản nhị phân là **engine thật**, không bao gồm GGUF.
+- Hai lỗi tìm được qua CI thật đã sửa: ghép chuỗi `std::string` trong C++ và export `HEAPU8`/`HEAPF32` khi chạy trên JS Emscripten.
+
+**Phạm vi nghiệm thu:** Giai đoạn 2 chỉ chứng minh biên dịch và tải mô hình thật trên Chromium desktop. **Giai đoạn 3 chưa thực hiện**: chưa truyền âm thanh/WAV để nhận diện nốt, chưa so độ chính xác với native, chưa xác nhận 3–15 phút, chưa kiểm tra iPhone, chưa nối NOTIQ Web production. Không thay engine gốc hoặc UI được duyệt.
+
+**Không phát sinh sử dụng runner tính phí** (repo Public, GitHub runner tiêu chuẩn), không dùng Codespaces hoặc VPS. Không merge `main`.
