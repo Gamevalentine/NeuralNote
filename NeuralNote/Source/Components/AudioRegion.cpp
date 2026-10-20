@@ -190,6 +190,11 @@ void AudioRegion::_paintDropZone(Graphics& g) const
         g, "HOẶC THẢ TỆP VÀO ĐÂY", nn::fonts::meta(), hint.toFloat(), juce::Justification::centred, DROP_HINT_TRACKING);
 }
 
+void AudioRegion::openFileChooser()
+{
+    _openFileChooser();
+}
+
 void AudioRegion::_openFileChooser()
 {
     // Built from the formats the loader actually accepts, rather than a second hard-coded list that
