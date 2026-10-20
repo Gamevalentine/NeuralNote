@@ -1,4 +1,6 @@
-import { Midi } from '@tonejs/midi';
+import toneMidi from '@tonejs/midi';
+import type { Midi as MidiType } from '@tonejs/midi';
+const { Midi } = toneMidi;
 import { zipSync, strToU8 } from 'fflate';
 import type { Note, PitchGroup } from './audio';
 // Match NOTIQ's existing pitch boundaries without pulling the AI runtime into MIDI tests.
