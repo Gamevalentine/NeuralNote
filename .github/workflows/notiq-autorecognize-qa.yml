@@ -1,0 +1,50 @@
+name: NOTIQ Auto-Recognize Import Web QA
+
+on:
+  push:
+    branches:
+      - fix/notiq-fullsong-auto-recognize-ui
+    paths:
+      - .github/workflows/notiq-autorecognize-qa.yml
+      - web/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notiq-auto-recognize-qa
+  cancel-in-progress: true
+
+jobs:
+  fullsong-web-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install NOTIQ dependencies
+        working-directory: web
+        run: npm install --no-audit --no-fund
+      - name: Test whole-song split + stitch and duration boundaries
+        working-directory: web
+        run: npm run test:long
+      - name: Test MIDI DAW roundtrip
+        working-directory: web
+        run: npm run test:daw
+      - name: Test Piano Roll editing
+        working-directory: web
+        run: npm run test:piano
+      - name: Test SoundFont instruments
+        working-directory: web
+        run: npm run test:soundfont
+      - name: Test MuScriptor native result schema
+        working-directory: web
+        run: node --experimental-strip-types --test tests/muscriptor-protocol.test.mts
+      - name: Typecheck and Vite production build
+        working-directory: web
+        run: npm run build
