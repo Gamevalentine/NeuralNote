@@ -1,0 +1,82 @@
+name: NOTIQ Stage 4 MuScriptor Native Windows Bridge
+
+on:
+  push:
+    branches:
+      - feature/notiq-stage4-native-muscriptor-bridge
+    paths:
+      - .github/workflows/notiq-muscriptor-native-bridge.yml
+      - notiq-native/**
+      - web/src/muscriptor*
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notiq-stage4-muscriptor-native
+  cancel-in-progress: true
+
+jobs:
+  windows-cpu-bridge:
+    runs-on: windows-latest
+    timeout-minutes: 110
+    steps:
+      - name: Checkout native C++ and pinned MuScriptor submodule
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - name: Select available MSVC generator
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ([Environment]::GetFolderPath('ProgramFilesX86')) 'Microsoft Visual Studio\Installer\vswhere.exe'
+          if (-not (Test-Path $vswhere)) { throw 'No Visual Studio installer' }
+          $vsPath = & $vswhere -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $vsPath) { throw 'No Visual Studio C++ workload' }
+          $helpText = cmake --help | Out-String
+          if (($vsPath -match '[\\/]18[\\/]') -and ($helpText -match 'Visual Studio 18 2026')) {
+            $generator = 'Visual Studio 18 2026'
+          } elseif (($vsPath -match '[\\/]17[\\/]') -and ($helpText -match 'Visual Studio 17 2022')) {
+            $generator = 'Visual Studio 17 2022'
+          } else {
+            throw "Unsupported C++ MSVC generator: $vsPath"
+          }
+          "NOTIQ_CMAKE_GENERATOR=$generator" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "Using $generator"
+      - name: Configure standalone MuScriptor bridge CPU-only
+        shell: pwsh
+        run: |
+          cmake -S notiq-native -B build-notiq-bridge -G "$env:NOTIQ_CMAKE_GENERATOR" -A x64 -DMUSCRIPTOR_VULKAN=OFF -DMUSCRIPTOR_METAL=OFF
+          if ($LASTEXITCODE -ne 0) { throw 'Native bridge configure failed' }
+      - name: Compile NOTIQ MuScriptor C++ bridge
+        shell: pwsh
+        run: |
+          cmake --build build-notiq-bridge --config Release --target notiq-muscriptor-cli --parallel 2
+          if ($LASTEXITCODE -ne 0) { throw 'Native bridge compile failed' }
+      - name: Smoke-test real executable (no model weights)
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem build-notiq-bridge -Recurse -File -Filter notiq-muscriptor-cli.exe | Select-Object -First 1
+          if (-not $exe) { throw 'No compiled MuScriptor CLI' }
+          $version = & $exe.FullName --version
+          if ($LASTEXITCODE -ne 0 -or $version -notmatch 'protocol=1') { throw 'Version handshake failed' }
+          $selfTest = & $exe.FullName --self-test
+          if ($LASTEXITCODE -ne 0 -or $selfTest -notmatch '"ready":true') { throw 'Bridge cannot run' }
+          New-Item -ItemType Directory -Force -Path stage4-artifact | Out-Null
+          Copy-Item $exe.FullName stage4-artifact/
+          @'
+          NOTIQ Stage 4 native MuScriptor bridge (Windows CPU-only)
+          This is an engine component, NOT a complete desktop app.
+          It requires a compatible, separately downloaded GGUF model to transcribe.
+          Weights are noncommercial (CC BY-NC 4.0), and are not packaged.
+          The CLI expects float32 mono 16kHz WAV and returns instrument-coded notes JSON.
+          '@ | Set-Content stage4-artifact/README.txt -Encoding UTF8
+          Write-Host "Actual Windows executable ran successfully at $($exe.FullName)"
+      - name: Upload tested Windows bridge artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NOTIQ-MuScriptor-Windows-x64-native-bridge
+          path: stage4-artifact/
+          retention-days: 7
+          if-no-files-found: error

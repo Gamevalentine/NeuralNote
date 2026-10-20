@@ -1,0 +1,44 @@
+name: NOTIQ Stage 4 Web and MuScriptor Protocol QA
+
+on:
+  push:
+    branches:
+      - feature/notiq-stage4-native-muscriptor-bridge
+    paths:
+      - .github/workflows/notiq-stage4-web-qa.yml
+      - web/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notiq-stage4-web-qa
+  cancel-in-progress: true
+
+jobs:
+  web-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install web dependencies
+        working-directory: web
+        run: npm install --no-audit --no-fund
+      - name: Verify Piano Roll note editing
+        working-directory: web
+        run: npm run test:piano
+      - name: Verify real MuScriptor instrument protocol
+        working-directory: web
+        run: node --experimental-strip-types --test tests/muscriptor-protocol.test.mts
+      - name: Verify SoundFont sample presets
+        working-directory: web
+        run: npm run test:soundfont
+      - name: Typecheck and build Web+Electron UI
+        working-directory: web
+        run: npm run build

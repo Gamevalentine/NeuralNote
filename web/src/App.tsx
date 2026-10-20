@@ -8,6 +8,8 @@ import { addNote, copyNotes, removeNote, sameNotes, SNAP_SECONDS, snapSeconds, u
 import type { Note, AudioInfo, PitchGroup } from './audio';
 import { DEFAULT_INSTRUMENTS, INSTRUMENTS, instrumentProgram, playSoundfontNote, prepareInstrument } from './soundfont';
 import type { InstrumentId, InstrumentSelection } from './soundfont';
+import { nativeInstrumentPrograms, nativeProgramName } from './muscriptorProtocol';
+import { nativeBridgeAvailable, runMuScriptor } from './muscriptorNative';
 
 type Selection = { file: Blob; name: string; url: string };
 type Phase = 'empty' | 'ready' | 'analyzing' | 'complete' | 'error';
@@ -23,6 +25,16 @@ const PITCH_ROW = 16;
 // UI-only review of the future Desktop layout. This does not enable MuScriptor in the browser.
 const desktopReview = new URLSearchParams(window.location.search).get('review') === 'desktop';
 const midiColor = (pitch: number) => GROUPS.find(group => group.id === groupFor(pitch))?.color || '#59bfa3';
+const nativeTrackColors = ['#e4b45b', '#47bda0', '#8b83ec', '#79bcf5', '#d988ae', '#f09d6c', '#a6cc73'];
+const nativeTrackColor = (program: number) => nativeTrackColors[Math.abs(program) % nativeTrackColors.length];
+const nativeSoundfontPreset = (program: number): InstrumentId =>
+  program < 8 ? 'acoustic_grand_piano'
+  : program >= 24 && program < 32 ? 'acoustic_guitar_nylon'
+  : program >= 32 && program < 40 ? 'electric_bass_finger'
+  : program >= 40 && program < 52 ? 'violin'
+  : program >= 72 && program < 80 ? 'flute'
+  : program >= 8 && program < 16 ? 'marimba'
+  : 'acoustic_grand_piano';
 
 function App() {
   const [selection, setSelection] = useState<Selection | null>(null);
@@ -31,6 +43,14 @@ function App() {
   const [selectedNote, setSelectedNote] = useState<number | null>(null);
   const [historyTick, setHistoryTick] = useState(0);
   const [phase, setPhase] = useState<Phase>('empty');
+  const [engineMode, setEngineMode] = useState<'basic' | 'muscriptor'>('basic');
+  const [nativeReady, setNativeReady] = useState(false);
+  const [nativeModelInstalled, setNativeModelInstalled] = useState(false);
+  const [nativeDownloading, setNativeDownloading] = useState(false);
+  const [nativeMuted, setNativeMuted] = useState<Set<number>>(new Set());
+  const [nativeSolo, setNativeSolo] = useState<number | null>(null);
+  const [nativeSelectedProgram, setNativeSelectedProgram] = useState<number | null>(null);
+  const [nativeGain, setNativeGain] = useState<Record<number, number>>({});
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState('Chưa tải tệp âm thanh');
   const [error, setError] = useState('');
@@ -73,6 +93,17 @@ function App() {
     selectionRef.current = selection;
   }, [selection]);
   useEffect(() => { notesRef.current = notes; }, [notes]);
+  useEffect(() => {
+    if (!nativeBridgeAvailable()) return;
+    let mounted = true;
+    void window.notiqNative!.status().then(native => {
+      if (!mounted || !native.available) return;
+      setNativeReady(true);
+      setNativeModelInstalled(native.modelInstalled);
+      setEngineMode('muscriptor');
+    }).catch(() => {});
+    return () => { mounted = false; };
+  }, []);
   useEffect(() => () => {
     if (selectionRef.current) URL.revokeObjectURL(selectionRef.current.url);
     if (audioCtx.current) void audioCtx.current.close().catch(() => undefined);
@@ -109,9 +140,15 @@ function App() {
     () => new Set(GROUPS.filter(g => !muted.has(g.id) && (!solo || solo === g.id)).map(g => g.id)),
     [muted, solo],
   );
-  const visibleNotes = useMemo(() => notes.filter(n => activeGroups.has(groupFor(n.pitchMidi))), [notes, activeGroups]);
-  const visibleIndexedNotes = useMemo(() => notes.map((note, index) => ({note, index}))
-    .filter(({note}) => activeGroups.has(groupFor(note.pitchMidi))), [notes, activeGroups]);
+  const hasNativeTracks = notes.some(n => n.program !== undefined);
+  const nativePrograms = useMemo(() => nativeInstrumentPrograms(notes), [notes]);
+  const isNoteAudible = (n: Note) => n.program !== undefined
+    ? !nativeMuted.has(n.program) && (nativeSolo === null || nativeSolo === n.program)
+    : activeGroups.has(groupFor(n.pitchMidi));
+  const visibleNotes = useMemo(() => notes.filter(isNoteAudible),
+    [notes, activeGroups, nativeMuted, nativeSolo]);
+  const visibleIndexedNotes = useMemo(() => notes.map((note,index) => ({note,index})).filter(({note}) => isNoteAudible(note)),
+    [notes, activeGroups, nativeMuted, nativeSolo]);
   const canUndo = historyTick >= 0 && undoRef.current.length > 0;
   const canRedo = historyTick >= 0 && redoRef.current.length > 0;
   const summary = useMemo(() => {
@@ -212,26 +249,71 @@ function App() {
     }
   };
 
+  const downloadNativeModel = async () => {
+    if (!nativeReady || !window.notiqNative || nativeDownloading) return;
+    const bridge = window.notiqNative;
+    const detach = bridge.onProgress(({kind, percent, message}) => {
+      if (kind === 'download') {
+        setStatus(message);
+        setProgress(percent);
+      }
+    });
+    setNativeDownloading(true);
+    setError('');
+    setProgress(0);
+    try {
+      const result = await bridge.downloadModel();
+      setNativeModelInstalled(result.modelInstalled);
+      setStatus(result.modelInstalled ? 'MuScriptor Small đã sẵn sàng' : 'Model MuScriptor chưa hoàn tất');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Không tải được mô hình MuScriptor');
+    } finally {
+      detach();
+      setNativeDownloading(false);
+    }
+  };
+
   const startInference = async () => {
     if (!selection || phase === 'analyzing') return;
+    if (engineMode === 'muscriptor' && !nativeReady) {
+      setError('MuScriptor chỉ có trên NOTIQ Desktop có cầu nối native, không chạy trực tiếp trên Cloudflare.');
+      return;
+    }
+    if (engineMode === 'muscriptor' && !nativeModelInstalled) {
+      setError('Chưa có MuScriptor Small. Mở Công cụ → Tải mô hình MuScriptor (209 MB) trước.');
+      return;
+    }
     if (audioEl.current) audioEl.current.pause();
     setPlaying(false);
     setPhase('analyzing');
     setError('');
     setProgress(0);
     try {
-      const detected = await transcribe(selection.file, (message, percentage) => {
-        setStatus(message);
-        setProgress(percentage);
-      });
+      const detected = engineMode === 'muscriptor'
+        ? await runMuScriptor(selection.file, ({kind, percent, message}) => {
+            if (kind === 'transcribe') {
+              setStatus(message);
+              setProgress(percent);
+            }
+          })
+        : await transcribe(selection.file, (message, percentage) => {
+            setStatus(message);
+            setProgress(percentage);
+          });
       clearHistory(detected);
+      setNativeMuted(new Set());
+      setNativeSolo(null);
+      setNativeSelectedProgram(detected.find(n => n.program !== undefined)?.program ?? null);
       setProgress(100);
       setPhase('complete');
-      setStatus(detected.length ? 'Đã nhận diện ' + detected.length + ' nốt' : 'Không tìm thấy nốt rõ ràng trong âm thanh');
+      setStatus(engineMode === 'muscriptor'
+        ? 'MuScriptor: ' + detected.length + ' nốt · ' + nativeInstrumentPrograms(detected).length + ' nhạc cụ'
+        : 'Basic Pitch: ' + detected.length + ' nốt');
       firedNotes.current.clear();
     } catch (cause) {
       setPhase('error');
-      setError((cause instanceof Error ? cause.message : 'Có lỗi xảy ra') + ' · Hãy kiểm tra mạng khi tải mô hình hoặc thử tệp WAV ngắn.');
+      setError((cause instanceof Error ? cause.message : 'Nhận diện thất bại')
+        + (engineMode === 'muscriptor' ? '' : ' · Kiểm tra mạng khi tải Basic Pitch.'));
       setStatus('Không thể nhận diện');
     }
   };
@@ -264,10 +346,15 @@ function App() {
     void warmInstrument(instrument);
   };
 
-  const previewNote = async (pitch: number, length = 0.35, volume = 0.65) => {
+  const previewNote = async (pitch: number, length = 0.35, volume = 0.65, program?: number) => {
+    if (program === 128) {
+      setSoundfontStatus('Đã nhận diện trống GM; tiếng trống cần bộ sample percussion riêng.');
+      return;
+    }
+    const nativePreset: InstrumentId | undefined = program === undefined ? undefined : nativeSoundfontPreset(program);
     try {
       const ctx = getAudioContext();
-      await playSoundfontNote(ctx, instrumentSelection[groupFor(pitch)], pitch, length, volume);
+      await playSoundfontNote(ctx, nativePreset || instrumentSelection[groupFor(pitch)], pitch, length, volume);
     } catch (cause) {
       setSoundfontStatus('Lỗi tải / phát SoundFont');
       setError('Không thể nghe tiếng nhạc cụ. '
@@ -282,6 +369,10 @@ function App() {
     const y = clamp(event.clientY - rect.top, 0, rect.height - 1);
     const pitch = clamp(pitchTop - Math.floor(y / PITCH_ROW), pitchBottom, pitchTop);
     const next = addNote(notesRef.current, pitch, x / rect.width * totalSeconds, totalSeconds);
+    if (hasNativeTracks) {
+      const program = nativeSelectedProgram ?? nativePrograms[0];
+      next[next.length-1] = { ...next[next.length-1], program, isDrum: program === 128 };
+    }
     commitNotes(next);
     setSelectedNote(next.length - 1);
     setStatus('Đã thêm nốt ' + noteName(pitch) + ' · có thể kéo nốt hoặc kéo mép phải');
@@ -302,7 +393,7 @@ function App() {
       before: copyNotes(notesRef.current), startX: event.clientX, startY: event.clientY,
     };
     setSelectedNote(index);
-    void previewNote(original.pitchMidi, Math.min(0.36, original.durationSeconds));
+    void previewNote(original.pitchMidi, Math.min(0.36, original.durationSeconds), 0.65, original.program);
   };
 
   const moveNoteGesture = (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -343,7 +434,7 @@ function App() {
         setStatus((gesture.kind === 'resize' ? 'Đã đổi độ dài: ' : 'Đã chuyển nốt: ')
           + noteName(result.pitchMidi) + ' · ' + fmt(result.startTimeSeconds));
         if (gesture.kind === 'move' && result.pitchMidi !== gesture.original.pitchMidi)
-          void previewNote(result.pitchMidi, 0.25);
+          void previewNote(result.pitchMidi, 0.25, 0.65, result.program);
       }
     }
   };
@@ -395,15 +486,16 @@ function App() {
       for (let i = 0; i < notes.length; i++) {
         const n = notes[i];
         const group = groupFor(n.pitchMidi);
-        if (!activeGroups.has(group) || firedNotes.current.has(i)) continue;
+        if (!isNoteAudible(n) || firedNotes.current.has(i)) continue;
         if (n.startTimeSeconds >= now - 0.10 && n.startTimeSeconds <= now + 0.055) {
           firedNotes.current.add(i);
-          void previewNote(n.pitchMidi, Math.min(0.85, n.durationSeconds), gain[group] * masterVolume);
+          const level = n.program === undefined ? gain[group] : (nativeGain[n.program] ?? 0.7);
+          void previewNote(n.pitchMidi, Math.min(0.85, n.durationSeconds), level * masterVolume, n.program);
         }
       }
     }, 45);
     return () => window.clearInterval(interval);
-  }, [playing, notes, playbackMode, activeGroups, gain, masterVolume, info, totalSeconds, loop, instrumentSelection]);
+  }, [playing, notes, playbackMode, activeGroups, gain, masterVolume, info, totalSeconds, loop, instrumentSelection, nativeGain, nativeMuted, nativeSolo]);
 
   useEffect(() => {
     if (audioEl.current) audioEl.current.volume = playbackMode === 'midi' ? 0 : masterVolume * (playbackMode === 'mix' ? 0.65 : 1);
@@ -421,7 +513,7 @@ function App() {
         const ctx = getAudioContext();
         if (ctx.state !== 'running') await ctx.resume();
         if (playbackMode !== 'original' || !info) {
-          const needed = [...new Set(visibleNotes.map(n => instrumentSelection[groupFor(n.pitchMidi)]))];
+          const needed = [...new Set(visibleNotes.filter(n => n.program !== 128).map(n => n.program === undefined ? instrumentSelection[groupFor(n.pitchMidi)] : nativeSoundfontPreset(n.program)))];
           if (needed.length) {
             setLoadingSoundfont(true);
             setSoundfontStatus('Đang chuẩn bị các tiếng SoundFont để phát MIDI...');
@@ -553,6 +645,15 @@ function App() {
     {
       id: 'tools', label: 'Công cụ', commands: [
         { label: phase === 'analyzing' ? 'Đang nhận diện…' : 'Nhận diện Audio → MIDI', run: () => void startInference(), disabled: !selection || phase === 'analyzing' },
+        { label: 'AI: Basic Pitch (Web)', run: () => setEngineMode('basic'), checked: engineMode === 'basic', disabled: phase === 'analyzing' },
+        { label: nativeReady ? 'AI: MuScriptor C++ (Windows)' : 'MuScriptor C++ (chỉ có trên NOTIQ Windows)',
+          run: () => setEngineMode('muscriptor'), disabled: !nativeReady || phase === 'analyzing',
+          checked: engineMode === 'muscriptor' },
+        ...(nativeReady ? [{
+          label: nativeModelInstalled ? 'MuScriptor Small — đã tải (209 MB)' :
+            nativeDownloading ? 'Đang tải mô hình MuScriptor…' : 'Tải mô hình MuScriptor Small (209 MB)',
+          run: () => void downloadNativeModel(), disabled: nativeDownloading || nativeModelInstalled,
+        }] : []),
         { label: 'Cài đặt NOTIQ', run: () => setShowSettings(true) },
       ],
     },
@@ -664,13 +765,55 @@ function App() {
         <label>Tempo xuất MIDI (BPM)<input type="number" min={40} max={240} value={bpm} onChange={e => setBpm(Math.min(240, Math.max(40, Number(e.target.value) || 120)))} /></label>
         <p>Giới hạn bản thử nghiệm: 45 giây · 50 MB.</p>
         <p>Âm thanh xử lý tại thiết bị của bạn. Mô hình AI tải qua Internet khi cần.</p>
-        <p>Engine MuScriptor đa nhạc cụ của NeuralNote v2 chưa được tích hợp vào bản web này.</p>
+        <p>{nativeReady
+          ? 'Bản Windows có MuScriptor C++ CPU. Mô hình Small 209 MB, giấy phép CC BY-NC 4.0 (phi thương mại).'
+          : 'Cloudflare Web chỉ chạy Basic Pitch; MuScriptor C++ cần ứng dụng Windows được đóng gói native.'}</p>
+        {nativeReady && <p><strong>{nativeModelInstalled ? 'MuScriptor Small đã sẵn sàng' : 'MuScriptor Small chưa tải'}</strong>
+          {!nativeModelInstalled && <button type="button" disabled={nativeDownloading}
+            onClick={() => void downloadNativeModel()}>{nativeDownloading ? 'Đang tải model…' : 'Tải mô hình Small · 209 MB'}</button>}</p>}
       </div>}
       <div className="studio">
         <aside className={"sidebar" + (reviewArea === "tracks" ? " ui-review-highlight" : "")}>
-          <div className="sidebar-heading"><span>NHÓM NỐT / DẢI ÂM</span><span>{notes.length ? GROUPS.length : 0}</span></div>
-          <div className="track-explainer">Basic Pitch • nhóm theo cao độ</div>
-          {GROUPS.map(group => {
+          <div className="sidebar-heading">
+            <span>{hasNativeTracks ? 'TRACK NHẠC CỤ AI' : 'NHÓM NỐT / DẢI ÂM'}</span>
+            <span>{hasNativeTracks ? nativePrograms.length : (notes.length ? GROUPS.length : 0)}</span>
+          </div>
+          <div className="track-explainer">{hasNativeTracks
+            ? 'MuScriptor · mỗi track mang mã nhạc cụ GM thật'
+            : 'Basic Pitch • nhóm theo cao độ'}</div>
+          {hasNativeTracks ? nativePrograms.map(program => {
+            const count = notes.filter(note => note.program === program).length;
+            const mutedTrack = nativeMuted.has(program);
+            const selected = nativeSelectedProgram === program;
+            return <div className={'track-card native-track-card' + (mutedTrack ? ' is-muted' : '') + (selected ? ' active-track' : '')}
+              key={'gm-' + program}>
+              <div className="track-title-row">
+                <div className="track-icon" style={{
+                  color: nativeTrackColor(program), borderColor: nativeTrackColor(program),
+                  backgroundColor: nativeTrackColor(program) + '18',
+                }}>{program === 128 ? 'DR' : String(program + 1)}</div>
+                <button type="button" className="native-track-select" onClick={() => setNativeSelectedProgram(program)}
+                  title={'Chọn track ' + nativeProgramName(program) + ' để thêm nốt mới'}>
+                  <strong>{nativeProgramName(program)}</strong><small>{count} nốt · {program === 128 ? 'GM Drum channel 10' : 'Program ' + (program + 1)}</small>
+                </button>
+                <button type="button" className={'tiny-toggle ' + (mutedTrack ? 'selected' : '')}
+                  onClick={() => setNativeMuted(previous => {
+                    const next = new Set(previous);
+                    if (next.has(program)) next.delete(program); else next.add(program);
+                    return next;
+                  })}>M</button>
+                <button type="button" className={'tiny-toggle ' + (nativeSolo === program ? 'selected' : '')}
+                  onClick={() => setNativeSolo(current => current === program ? null : program)}>S</button>
+              </div>
+              <div className="track-slider-row">
+                <span style={{ color: nativeTrackColor(program) }}>▰</span>
+                <input aria-label={'Âm lượng ' + nativeProgramName(program)} type="range"
+                  min={0} max={1} step={0.01} value={nativeGain[program] ?? 0.7}
+                  onChange={event => setNativeGain(previous => ({ ...previous, [program]: Number(event.target.value) }))}/>
+                <span>{Math.round((nativeGain[program] ?? 0.7)*100)}%</span>
+              </div>
+            </div>;
+          }) : GROUPS.map(group => {
             const count = notes.filter(n => groupFor(n.pitchMidi) === group.id).length;
             const inactive = !activeGroups.has(group.id);
             return (
@@ -725,7 +868,8 @@ function App() {
                         top:(pitchTop-n.pitchMidi)*PITCH_ROW + 1,
                         left:n.startTimeSeconds/totalSeconds*100 + '%',
                         width:Math.max(6,n.durationSeconds/totalSeconds*timelineWidth-1),
-                        backgroundColor:midiColor(n.pitchMidi),borderColor:midiColor(n.pitchMidi),
+                        backgroundColor: n.program === undefined ? midiColor(n.pitchMidi) : nativeTrackColor(n.program),
+                        borderColor: n.program === undefined ? midiColor(n.pitchMidi) : nativeTrackColor(n.program),
                       }}>
                       {n.durationSeconds/totalSeconds*timelineWidth > 39 ? noteName(n.pitchMidi) : ''}
                       <span className="note-resize-handle" aria-hidden="true"/>
@@ -739,6 +883,10 @@ function App() {
           </div>
           <div className="editor-status">
             <span>{status}</span>
+            <span className="notiq-ai-mode" title={engineMode === 'muscriptor'
+              ? 'MuScriptor C++ native: tách nhạc cụ theo GM · CPU-only' : 'Basic Pitch: nhận diện nốt, chưa nhận diện loại nhạc cụ'}>
+              AI: {engineMode === 'muscriptor' ? 'MuScriptor CPU' : 'Basic Pitch'}
+            </span>
             <span title={soundfontStatus}>{loadingSoundfont ? '◌ Đang tải SoundFont' : '♪ ' + soundfontStatus}</span>
             <span className="piano-edit-hint" title="Thêm nốt: nhấn vào lưới · Di chuyển: kéo nốt · Đổi độ dài: kéo mép phải · Xóa: Del · Hoàn tác: Ctrl+Z">✎ Sửa MIDI · Snap ${SNAP_SECONDS}s · Ctrl+Z</span>
             {phase === 'analyzing' && <div className="progress-track"><div style={{width: progress+'%'}}/></div>}

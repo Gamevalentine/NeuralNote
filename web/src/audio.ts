@@ -2,7 +2,7 @@ import { BasicPitch, addPitchBendsToNoteEvents, noteFramesToTime, outputToNotesP
 import type { NoteEventTime } from '@spotify/basic-pitch';
 import { Midi } from '@tonejs/midi';
 
-export type Note = NoteEventTime;
+export type Note = NoteEventTime & { program?: number; isDrum?: boolean };
 export type PitchGroup = 'low' | 'mid' | 'high';
 export type AudioInfo = { duration: number; peaks: number[]; sampleRate: number };
 export const GROUPS = [
@@ -84,6 +84,30 @@ export async function transcribe(file: Blob, onProgress: (text: string, value: n
 export function makeMidi(notes: Note[], bpm: number, included: Set<PitchGroup>, programs?: Record<PitchGroup, number>): Blob {
   const midi = new Midi();
   midi.header.setTempo(Math.min(240, Math.max(40, bpm)));
+  const hasNativeInstruments = notes.some(note => note.program !== undefined);
+  if (hasNativeInstruments) {
+    const programsInUse = [...new Set(notes.filter(note => note.program !== undefined)
+      .map(note => note.program!))].sort((a, b) => a - b);
+    for (const program of programsInUse) {
+      const items = notes.filter(note => note.program === program);
+      if (!items.length) continue;
+      const track = midi.addTrack();
+      track.name = program === 128 ? 'NOTIQ · Trống' : 'NOTIQ · Nhạc cụ GM ' + (program + 1);
+      track.instrument.number = program === 128 ? 0 : program;
+      if (program === 128) track.channel = 9; // General MIDI drums
+      items.forEach(n => track.addNote({
+        midi: Math.round(n.pitchMidi),
+        time: Math.max(0, n.startTimeSeconds),
+        duration: Math.max(0.01, n.durationSeconds),
+        velocity: Math.max(0.1, Math.min(1, n.amplitude)),
+      }));
+    }
+    const bytes = midi.toArray();
+    const buffer = new ArrayBuffer(bytes.byteLength);
+    new Uint8Array(buffer).set(bytes);
+    return new Blob([buffer], { type: 'audio/midi' });
+  }
+
   for (const group of GROUPS) {
     const items = notes.filter(n => groupFor(n.pitchMidi) === group.id && included.has(group.id));
     if (!items.length) continue;

@@ -1,0 +1,10 @@
+/* Stage 4 native track view. The approved Piano Roll layout is unchanged. */
+.track-card.native-track-card { min-height: 104px; height: 104px; }
+.native-track-card.active-track { background: #292d3b; border-left: 2px solid #9d9df5; }
+.native-track-select { display:flex; flex:1; min-width:0; flex-direction:column; align-items:flex-start; justify-content:center; border:0; background:transparent; color:#e3e6f2; padding:2px 0; text-align:left; }
+.native-track-select strong { display:block; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; }
+.native-track-select small { color:#9aa8bf; font-size:10px; }
+.track-card.native-track-card .track-icon { min-width:30px; font-size:11px; }
+.track-card.native-track-card .track-title-row { gap:6px; }
+.notiq-ai-mode { color:#b8beff; white-space:nowrap; font-size:10px; }
+@media(max-width:650px){ .native-track-card .track-icon{display:none}; .native-track-select strong{font-size:10px}; .native-track-select small{font-size:9px}; .notiq-ai-mode{font-size:9px} }
