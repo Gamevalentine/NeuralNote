@@ -4,6 +4,7 @@ import type { DragEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { AudioWaveform, CircleHelp, Gauge, Headphones, Info, LoaderCircle,
   Music, Settings2, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { fmt, generateDemo, groupFor, GROUPS, noteName, readAudio, transcribe } from './audio';
+import { assertSupportedSong, MAX_SONG_BYTES, MAX_SONG_SECONDS } from './longAudio';
 import { createDawMidi, createDawBundle, extractDawTracks, midiChannelLimitExceeded } from './dawMidi';
 import { addNote, copyNotes, removeNote, sameNotes, SNAP_SECONDS, snapSeconds, updateNote, clamp } from './pianoEdit';
 import type { Note, AudioInfo, PitchGroup } from './audio';
@@ -216,8 +217,8 @@ function App() {
       setPhase('error');
       return;
     }
-    if (file.size > 50 * 1024 * 1024) {
-      setError('Tệp lớn hơn 50 MB. Hãy chọn đoạn âm thanh nhỏ hơn.');
+    if (file.size > MAX_SONG_BYTES) {
+      setError('Tệp lớn hơn 200 MB. Hãy thử tệp MP3/FLAC nhỏ hơn hoặc chọn một bài khác.');
       setPhase('error');
       return;
     }
@@ -235,7 +236,7 @@ function App() {
     if (audioEl.current) audioEl.current.pause();
     try {
       const decoded = await readAudio(file);
-      if (decoded.duration > 45) throw new Error('Bản thử nghiệm chỉ xử lý tối đa 45 giây. Vui lòng cắt đoạn cần nhận diện.');
+      assertSupportedSong(decoded.duration);
       const next = { file, name, url: URL.createObjectURL(file) };
       selectionRef.current = next;
       setSelection(next);
@@ -628,7 +629,7 @@ function App() {
   const menus: AppMenu[] = [
     {
       id: 'file', label: 'Tệp', commands: [
-        { label: 'Mở âm thanh…', run: () => fileInput.current?.click(), disabled: busyLoading || phase === 'analyzing' },
+        { label: 'Tải bài hát / mở âm thanh…', run: () => fileInput.current?.click(), disabled: busyLoading || phase === 'analyzing' },
         { label: 'Dùng nhạc mẫu', run: () => void setAudio(generateDemo(), 'NOTIQ - giai điệu mẫu.wav'), disabled: busyLoading || phase === 'analyzing' },
         { label: 'Đóng tệp đang mở', run: reset, disabled: !selection || phase === 'analyzing' },
       ],
@@ -772,6 +773,12 @@ function App() {
           ))}
         </nav>
         <div className="os-actions">
+          <button type="button" className="song-upload-btn"
+            disabled={busyLoading || phase === 'analyzing'}
+            onClick={() => fileInput.current?.click()}
+            title="Mở bài hát đầy đủ (WAV, MP3, FLAC, M4A… · tối đa 15 phút / 200 MB)">
+            <Music size={14}/> Tải bài hát
+          </button>
           <span className="lunor">LUNOR <b>MUSIC</b></span>
           <a href="https://github.com/Gamevalentine/NeuralNote" target="_blank" rel="noreferrer">Mã nguồn ↗</a>
           {desktopReview && <button type="button" className="desktop-review-toggle" aria-expanded={showDesktopReview} onClick={() => { setActiveMenu(null); setShowSettings(false); setShowDesktopReview(value => !value); }}><Info size={14}/> Duyệt Desktop <span>UI v0.3</span></button>}
@@ -806,7 +813,7 @@ function App() {
       {showSettings && <div className="settings-popup">
         <div className="popup-head"><strong><Gauge size={17} /> Tùy chọn NOTIQ</strong><button aria-label="Đóng" onClick={() => setShowSettings(false)}><X size={16} /></button></div>
         <label>Tempo xuất MIDI (BPM)<input type="number" min={40} max={240} value={bpm} onChange={e => setBpm(Math.min(240, Math.max(40, Number(e.target.value) || 120)))} /></label>
-        <p>Giới hạn bản thử nghiệm: 45 giây · 50 MB.</p>
+        <p>Hỗ trợ tải cả bài hát: tối đa {MAX_SONG_SECONDS / 60} phút · 200 MB. AI xử lý theo từng đoạn và ghép nốt.</p>
         <p>Âm thanh xử lý tại thiết bị của bạn. Mô hình AI tải qua Internet khi cần.</p>
         <p>{nativeReady
           ? 'Bản Windows có MuScriptor C++ CPU. Mô hình Small 209 MB, giấy phép CC BY-NC 4.0 (phi thương mại).'

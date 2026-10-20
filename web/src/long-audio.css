@@ -1,0 +1,8 @@
+/* Full-song import button; compact and consistent with the approved NOTIQ menubar. */
+.song-upload-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  background:#334665;border:1px solid #59729b;border-radius:5px;color:#eef4ff;
+  font-size:11px;font-weight:650;padding:6px 10px;white-space:nowrap;cursor:pointer}
+.song-upload-btn:hover:not(:disabled){background:#425b84}
+.song-upload-btn:focus-visible{outline:2px solid #afc9ff;outline-offset:2px}
+.song-upload-btn:disabled{opacity:.45;cursor:not-allowed}
+@media(max-width:820px){.song-upload-btn{font-size:0;gap:0;padding:5px 7px}.song-upload-btn svg{width:16px;height:16px}}

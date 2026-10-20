@@ -17,9 +17,9 @@
 #include <vector>
 
 namespace {
-constexpr std::size_t kMaxWaveBytes = 46 * 16000 * sizeof(float) + 4096;
+constexpr std::size_t kMaxWaveBytes = 15 * 60 * 16000 * sizeof(float) + 4096;
 constexpr std::uint32_t kSampleRate = 16000;
-constexpr std::size_t kMaxSamples = 45 * kSampleRate;
+constexpr std::size_t kMaxSamples = 15 * 60 * kSampleRate;
 
 std::uint16_t u16(const std::vector<std::uint8_t>& b, std::size_t p) {
     if (p > b.size() || b.size() - p < 2) throw std::runtime_error("Invalid WAV header");
@@ -43,7 +43,7 @@ std::vector<float> decodeWave(const std::filesystem::path& file) {
     if (!stream) throw std::runtime_error("Cannot open input WAV");
     const auto size = stream.tellg();
     if (size < 44 || size > static_cast<std::streamoff>(kMaxWaveBytes))
-        throw std::runtime_error("Input WAV too large or invalid (45 seconds maximum)");
+        throw std::runtime_error("Input WAV too large or invalid (15 minutes maximum)");
     stream.seekg(0);
     std::vector<std::uint8_t> bytes(static_cast<std::size_t>(size));
     if (!stream.read(reinterpret_cast<char*>(bytes.data()), size))
@@ -124,6 +124,12 @@ int run(const std::vector<std::filesystem::path>& args) {
         // Does not load weights. Exercising the sample parser and library linkage happens
         // separately in CI. This switch confirms this executable actually starts.
         std::cout << "{\"bridge\":\"notiq-muscriptor\",\"schema\":1,\"ready\":true}\n";
+        return 0;
+    }
+    if(args.size()==2 && args[0]==std::filesystem::path("--probe-wav")){
+        const auto audio = decodeWave(args[1]);
+        std::cout << "OK samples=" << audio.size()
+                  << " seconds=" << (static_cast<double>(audio.size())/kSampleRate) << '\n';
         return 0;
     }
     if(args.size()!=3){
