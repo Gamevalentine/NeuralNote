@@ -13,6 +13,8 @@ type MenuKey = 'file' | 'edit' | 'play' | 'track' | 'instrument' | 'tools' | 'vi
 type MenuAction = { label: string; run: () => void; disabled?: boolean; checked?: boolean; shortcut?: string };
 type AppMenu = { id: MenuKey; label: string; commands: MenuAction[] };
 const PITCH_ROW = 16;
+// UI-only review of the future Desktop layout. This does not enable MuScriptor in the browser.
+const desktopReview = new URLSearchParams(window.location.search).get('review') === 'desktop';
 const midiColor = (pitch: number) => GROUPS.find(group => group.id === groupFor(pitch))?.color || '#59bfa3';
 
 function App() {
@@ -35,6 +37,8 @@ function App() {
   const [gain, setGain] = useState<Record<PitchGroup, number>>({ high: 0.7, mid: 0.7, low: 0.7 });
   const [masterVolume, setMasterVolume] = useState(0.65);
   const [showSettings, setShowSettings] = useState(false);
+  const [showDesktopReview, setShowDesktopReview] = useState(false);
+  const [reviewArea, setReviewArea] = useState<'menu' | 'tracks' | 'roll' | null>(null);
   const [activeMenu, setActiveMenu] = useState<MenuKey | null>(null);
   const [menuPosition, setMenuPosition] = useState({ left: 0, top: 43 });
   const audioEl = useRef<HTMLAudioElement>(null);
@@ -60,7 +64,7 @@ function App() {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) setActiveMenu(null);
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { setActiveMenu(null); setShowSettings(false); }
+      if (event.key === 'Escape') { setActiveMenu(null); setShowSettings(false); setShowDesktopReview(false); setReviewArea(null); }
     };
     document.addEventListener('pointerdown', onOutside);
     document.addEventListener('keydown', onKey);
@@ -361,7 +365,7 @@ function App() {
         }}
       />
 
-      <header className="osbar" ref={menuRef}>
+      <header className={"osbar" + (reviewArea === "menu" ? " ui-review-highlight" : "")} ref={menuRef}>
         <span className="os-title"><AudioWaveform size={17} /> <strong>NOTIQ</strong><b>WEB STUDIO</b></span>
         <nav className="app-menu-items" aria-label="Menu chính">
           {menus.map(menu => (
@@ -410,9 +414,24 @@ function App() {
         <div className="os-actions">
           <span className="lunor">LUNOR <b>MUSIC</b></span>
           <a href="https://github.com/Gamevalentine/NeuralNote" target="_blank" rel="noreferrer">Mã nguồn ↗</a>
+          {desktopReview && <button type="button" className="desktop-review-toggle" aria-expanded={showDesktopReview} onClick={() => { setActiveMenu(null); setShowSettings(false); setShowDesktopReview(value => !value); }}><Info size={14}/> Duyệt Desktop <span>UI v0.3</span></button>}
           <button type="button" className="os-settings" onClick={() => { setActiveMenu(null); setShowSettings(!showSettings); }} title="Cài đặt" aria-label="Cài đặt"><Settings2 size={16} /></button>
         </div>
       </header>
+      {desktopReview && showDesktopReview && <section className="desktop-review-panel" aria-label="Duyệt giao diện NOTIQ Desktop">
+        <div className="desktop-review-head"><strong>NOTIQ Desktop · Bản duyệt giao diện</strong><button type="button" aria-label="Đóng bảng duyệt" onClick={() => { setShowDesktopReview(false); setReviewArea(null); }}><X size={16}/></button></div>
+        <p>Trang này là bản mẫu giao diện để bạn xem trước khi tải Desktop. Các nút, nhóm nốt và Piano Roll bên dưới vẫn hoạt động theo engine Web.</p>
+        <strong className="desktop-review-subtitle">Chọn vùng muốn kiểm tra</strong>
+        <div className="desktop-review-areas">
+          {([
+            ['menu', 'Thanh menu'],
+            ['tracks', 'Nhóm nốt'],
+            ['roll', 'Piano Roll'],
+          ] as const).map(([id, label]) => <button key={id} type="button" className={reviewArea === id ? 'selected' : ''} aria-pressed={reviewArea === id} onClick={() => setReviewArea(current => current === id ? null : id)}>{label}</button>)}
+        </div>
+        <p className="desktop-review-note"><strong>Chưa nghiệm thu bản Windows.</strong> Web dùng Basic Pitch; bản Desktop dùng MuScriptor và SoundFont. Khi giao diện được bạn duyệt, mình mới đóng gói bản Windows để kiểm thử âm thanh và AI.</p>
+        <span className="desktop-review-help">Chỗ nào chưa giống ý bạn, hãy chụp màn hình và gửi trong cuộc trò chuyện.</span>
+      </section>}
       {showSettings && <div className="settings-popup">
         <div className="popup-head"><strong><Gauge size={17} /> Tùy chọn NOTIQ</strong><button aria-label="Đóng" onClick={() => setShowSettings(false)}><X size={16} /></button></div>
         <label>Tempo xuất MIDI (BPM)<input type="number" min={40} max={240} value={bpm} onChange={e => setBpm(Math.min(240, Math.max(40, Number(e.target.value) || 120)))} /></label>
@@ -421,7 +440,7 @@ function App() {
         <p>Engine MuScriptor đa nhạc cụ của NeuralNote v2 chưa được tích hợp vào bản web này.</p>
       </div>}
       <div className="studio">
-        <aside className="sidebar">
+        <aside className={"sidebar" + (reviewArea === "tracks" ? " ui-review-highlight" : "")}>
           <div className="sidebar-heading"><span>NHÓM NỐT / DẢI ÂM</span><span>{notes.length ? GROUPS.length : 0}</span></div>
           <div className="track-explainer">Basic Pitch • nhóm theo cao độ</div>
           {GROUPS.map(group => {
@@ -441,7 +460,7 @@ function App() {
           })}
           <div className="side-bottom"><strong>ĐẦU RA</strong><div className="bar-dummy"/><p>{summary}</p></div>
         </aside>
-        <section className="editor">
+        <section className={"editor" + (reviewArea === "roll" ? " ui-review-highlight" : "")}>
           <div className="workarea">
             <div className="keyboard" ref={keyColumn}>
               <div className="ruler-key-label">THỜI GIAN</div>
