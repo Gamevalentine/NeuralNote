@@ -238,26 +238,70 @@ function App() {
     }
   };
 
+  const downloadNativeModel = async () => {
+    if (!nativeReady || !window.notiqNative || nativeDownloading) return;
+    const bridge = window.notiqNative;
+    const detach = bridge.onProgress(({kind, percent, message}) => {
+      if (kind === 'download') {
+        setStatus(message);
+        setProgress(percent);
+      }
+    });
+    setNativeDownloading(true);
+    setError('');
+    setProgress(0);
+    try {
+      const result = await bridge.downloadModel();
+      setNativeModelInstalled(result.modelInstalled);
+      setStatus(result.modelInstalled ? 'MuScriptor Small đã sẵn sàng' : 'Model MuScriptor chưa hoàn tất');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Không tải được mô hình MuScriptor');
+    } finally {
+      detach();
+      setNativeDownloading(false);
+    }
+  };
+
   const startInference = async () => {
     if (!selection || phase === 'analyzing') return;
+    if (engineMode === 'muscriptor' && !nativeReady) {
+      setError('MuScriptor chỉ có trên NOTIQ Desktop có cầu nối native, không chạy trực tiếp trên Cloudflare.');
+      return;
+    }
+    if (engineMode === 'muscriptor' && !nativeModelInstalled) {
+      setError('Chưa có MuScriptor Small. Mở Công cụ → Tải mô hình MuScriptor (209 MB) trước.');
+      return;
+    }
     if (audioEl.current) audioEl.current.pause();
     setPlaying(false);
     setPhase('analyzing');
     setError('');
     setProgress(0);
     try {
-      const detected = await transcribe(selection.file, (message, percentage) => {
-        setStatus(message);
-        setProgress(percentage);
-      });
+      const detected = engineMode === 'muscriptor'
+        ? await runMuScriptor(selection.file, ({kind, percent, message}) => {
+            if (kind === 'transcribe') {
+              setStatus(message);
+              setProgress(percent);
+            }
+          })
+        : await transcribe(selection.file, (message, percentage) => {
+            setStatus(message);
+            setProgress(percentage);
+          });
       clearHistory(detected);
+      setNativeMuted(new Set());
+      setNativeSolo(null);
       setProgress(100);
       setPhase('complete');
-      setStatus(detected.length ? 'Đã nhận diện ' + detected.length + ' nốt' : 'Không tìm thấy nốt rõ ràng trong âm thanh');
+      setStatus(engineMode === 'muscriptor'
+        ? 'MuScriptor: ' + detected.length + ' nốt · ' + nativeInstrumentPrograms(detected).length + ' nhạc cụ'
+        : 'Basic Pitch: ' + detected.length + ' nốt');
       firedNotes.current.clear();
     } catch (cause) {
       setPhase('error');
-      setError((cause instanceof Error ? cause.message : 'Có lỗi xảy ra') + ' · Hãy kiểm tra mạng khi tải mô hình hoặc thử tệp WAV ngắn.');
+      setError((cause instanceof Error ? cause.message : 'Nhận diện thất bại')
+        + (engineMode === 'muscriptor' ? '' : ' · Kiểm tra mạng khi tải Basic Pitch.'));
       setStatus('Không thể nhận diện');
     }
   };
