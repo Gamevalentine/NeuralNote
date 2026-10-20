@@ -247,6 +247,103 @@ function App() {
     oscillator.stop(ctx.currentTime + Math.max(0.07, length) + 0.02);
   };
 
+  const addNoteAtPointer = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || phase === 'analyzing') return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = clamp(event.clientX - rect.left, 0, rect.width);
+    const y = clamp(event.clientY - rect.top, 0, rect.height - 1);
+    const pitch = clamp(pitchTop - Math.floor(y / PITCH_ROW), pitchBottom, pitchTop);
+    const next = addNote(notesRef.current, pitch, x / rect.width * totalSeconds, totalSeconds);
+    commitNotes(next);
+    setSelectedNote(next.length - 1);
+    setStatus('Đã thêm nốt ' + noteName(pitch) + ' · có thể kéo nốt hoặc kéo mép phải');
+    void oscPreview(pitch);
+  };
+
+  const beginNoteGesture = (event: ReactPointerEvent<HTMLButtonElement>, index: number, kind: 'move' | 'resize') => {
+    if (event.button !== 0 || phase === 'analyzing') return;
+    event.stopPropagation();
+    event.preventDefault();
+    const original = notesRef.current[index];
+    if (!original) return;
+    const element = event.currentTarget;
+    element.setPointerCapture(event.pointerId);
+    element.focus();
+    gestureRef.current = {
+      pointerId: event.pointerId, index, kind, original,
+      before: copyNotes(notesRef.current), startX: event.clientX, startY: event.clientY,
+    };
+    setSelectedNote(index);
+    void oscPreview(original.pitchMidi, Math.min(0.36, original.durationSeconds));
+  };
+
+  const moveNoteGesture = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const gesture = gestureRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    event.stopPropagation();
+    const deltaSeconds = snapSeconds((event.clientX - gesture.startX) / timelineWidth * totalSeconds);
+    const next = gesture.kind === 'move'
+      ? updateNote(gesture.before, gesture.index, {
+          startTimeSeconds: gesture.original.startTimeSeconds + deltaSeconds,
+          pitchMidi: clamp(gesture.original.pitchMidi
+            - Math.round((event.clientY - gesture.startY) / PITCH_ROW), pitchBottom, pitchTop),
+        }, totalSeconds)
+      : updateNote(gesture.before, gesture.index, {
+          durationSeconds: gesture.original.durationSeconds + deltaSeconds,
+        }, totalSeconds);
+    if (sameNotes(next, notesRef.current)) return;
+    notesRef.current = next;
+    setNotes(next);
+  };
+
+  const endNoteGesture = (event: ReactPointerEvent<HTMLButtonElement>, cancelled = false) => {
+    const gesture = gestureRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    gestureRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId))
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    if (cancelled) {
+      notesRef.current = gesture.before;
+      setNotes(gesture.before);
+    } else if (!sameNotes(gesture.before, notesRef.current)) {
+      undoRef.current = [...undoRef.current.slice(-49), gesture.before];
+      redoRef.current = [];
+      firedNotes.current.clear();
+      setHistoryTick(tick => tick + 1);
+      const result = notesRef.current[gesture.index];
+      if (result) {
+        setStatus((gesture.kind === 'resize' ? 'Đã đổi độ dài: ' : 'Đã chuyển nốt: ')
+          + noteName(result.pitchMidi) + ' · ' + fmt(result.startTimeSeconds));
+        if (gesture.kind === 'move' && result.pitchMidi !== gesture.original.pitchMidi)
+          void oscPreview(result.pitchMidi, 0.25);
+      }
+    }
+  };
+
+  useEffect(() => {
+    const shortcuts = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (target instanceof HTMLElement
+          && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return;
+      if ((event.ctrlKey || event.metaKey) && !event.altKey) {
+        if (event.key.toLowerCase() === 'z') {
+          event.preventDefault();
+          if (event.shiftKey) redoEdit(); else undoEdit();
+        } else if (event.key.toLowerCase() === 'y') {
+          event.preventDefault();
+          redoEdit();
+        }
+      } else if ((event.key === 'Delete' || event.key === 'Backspace') && selectedNote !== null) {
+        event.preventDefault();
+        deleteSelected();
+      } else if (event.key === 'Escape') {
+        setSelectedNote(null);
+      }
+    };
+    document.addEventListener('keydown', shortcuts);
+    return () => document.removeEventListener('keydown', shortcuts);
+  });
+
   useEffect(() => {
     if (!playing || !notes.length || playbackMode === 'original') return;
     const interval = window.setInterval(() => {
