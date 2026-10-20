@@ -13,9 +13,10 @@ test('NOTIQ renderer only dispatches AI recognition to original NeuralNote MuScr
   assert.match(app, /if \(!nativeReady\)/);
 });
 
-test('Web is presented as UI preview, never falsely as native inference', () => {
-  assert.match(app, /Bản Web chỉ duyệt giao diện/);
-  assert.match(app, /MuScriptor C\+\+ gốc của NeuralNote/);
+test('Web only recognizes with original MuScriptor when a real private API is available', () => {
+  assert.match(app, /installWebMuScriptorBridge/);
+  assert.match(app, /Máy chủ MuScriptor thử nghiệm chưa sẵn sàng/);
+  assert.match(app, /MuScriptor chưa kết nối/);
   assert.doesNotMatch(app, /AI: Basic Pitch \(Web\)/);
 });
 
