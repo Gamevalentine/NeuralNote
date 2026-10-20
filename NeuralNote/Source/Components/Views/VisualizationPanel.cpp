@@ -52,6 +52,14 @@ VisualizationPanel::VisualizationPanel(NeuralNoteAudioProcessor* processor)
     mTranscribeButton.onClick = [this] { mProcessor->getTranscriptionManager()->startTranscription(); };
     addChildComponent(mTranscribeButton);
 
+    mEmptyHint.setText(juce::String::fromUTF8("♫   Piano Roll đang trống\nChọn Tệp → Mở âm thanh để bắt đầu nhận diện nốt"),
+                       juce::dontSendNotification);
+    mEmptyHint.setColour(juce::Label::textColourId, nn::colours::textButton);
+    mEmptyHint.setFont(nn::fonts::instrumentName());
+    mEmptyHint.setJustificationType(juce::Justification::centred);
+    mEmptyHint.setInterceptsMouseClicks(false, false);
+    addAndMakeVisible(mEmptyHint);
+
     mModelDownloadPanel.onInstalledModelsChanged = [this] { _layOutTranscribeButton(); };
     mModelDownloadPanel.onCloseRequested = [this] { setModelPanelOpen(false); };
     addChildComponent(mModelDownloadPanel);
@@ -188,11 +196,14 @@ void VisualizationPanel::_layOutTranscribeButton()
     const auto roll =
         mAudioMidiViewport.getBounds().withTrimmedTop(nn::metrics::waveformHeight + nn::metrics::rulerHeight);
 
-    // With no checkpoint, the panel is the only thing to do next on an idle roll, so it cannot be
-    // closed there. Anywhere else it is up only when asked for, over whatever is showing.
-    const bool panel_is_required = roll_is_idle && !has_model;
-    mModelDownloadPanel.setCloseButtonVisible(!panel_is_required);
-    mModelDownloadPanel.setVisible(mModelPanelOpen || panel_is_required);
+    // Keep the workspace visible by default: the model selector opens only from
+    // Công cụ -> Chọn / tải mô hình AI. Closing it never blocks the Piano Roll.
+    mModelDownloadPanel.setCloseButtonVisible(true);
+    mModelDownloadPanel.setVisible(mModelPanelOpen);
+    mEmptyHint.setVisible(roll_is_idle && !mModelPanelOpen);
+    mEmptyHint.setBounds(roll.withSizeKeepingCentre(
+        std::min(420, roll.getWidth()), std::min(96, roll.getHeight())).translated(
+            0, -std::min(roll.getHeight() / 4, 130)));
     mModelDownloadPanel.setBounds(
         roll.withSizeKeepingCentre(std::min(ModelDownloadPanel::getIdealWidth(), roll.getWidth()),
                                    std::min(ModelDownloadPanel::getIdealHeight(), roll.getHeight())));
