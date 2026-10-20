@@ -2,7 +2,7 @@
 // Never store model weights inside GitHub or a public artifact.
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { createWriteStream, existsSync } from 'node:fs';
+import { createWriteStream, createReadStream, existsSync } from 'node:fs';
 import { mkdir, rename, rm, stat, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -16,7 +16,12 @@ const model = Object.freeze({
   url: 'https://huggingface.co/DamRsn/muscriptor-gguf/resolve/d7045f94e8b19427f4ff9542975035e66596e51c/v1/muscriptor-small-f16.gguf',
 });
 async function modelReady(path) {
-  try { return (await stat(path)).size === model.bytes; } catch { return false; }
+  try {
+    if ((await stat(path)).size !== model.bytes) return false;
+    const digest = createHash('sha256');
+    for await (const chunk of createReadStream(path)) digest.update(chunk);
+    return digest.digest('hex') === model.sha256;
+  } catch { return false; }
 }
 async function downloadModel(path) {
   if (await modelReady(path)) return;
