@@ -1,5 +1,6 @@
 import { BasicPitch, addPitchBendsToNoteEvents, noteFramesToTime, outputToNotesPoly } from '@spotify/basic-pitch';
 import type { NoteEventTime } from '@spotify/basic-pitch';
+import { assertSupportedSong, collectChunkNotes, mergeChunkNotes, planSongChunks } from './longAudio';
 import { Midi } from '@tonejs/midi';
 
 export type Note = NoteEventTime & { program?: number; isDrum?: boolean };
@@ -51,32 +52,41 @@ export async function transcribe(file: Blob, onProgress: (text: string, value: n
   try {
     onProgress('Đang đọc âm thanh', 4);
     const audio = await ctx.decodeAudioData(await file.arrayBuffer());
-    if (!audio.duration || !Number.isFinite(audio.duration)) throw new Error('Tệp âm thanh không hợp lệ');
-    if (audio.duration > 45) throw new Error('Bản thử nghiệm hỗ trợ tối đa 45 giây âm thanh. Hãy cắt một đoạn ngắn hơn.');
-    onProgress('Đang chuyển mẫu âm thanh', 12);
-    const rate = 22050;
-    const offline = new OfflineAudioContext(1, Math.max(1, Math.ceil(audio.duration * rate)), rate);
-    const source = offline.createBufferSource();
-    source.buffer = audio;
-    source.connect(offline.destination);
-    source.start();
-    const prepared = await offline.startRendering();
-    onProgress('Đang tải mô hình Basic Pitch', 18);
+    assertSupportedSong(audio.duration);
+    onProgress('Đang tải mô hình Basic Pitch', 10);
     const engine = new BasicPitch(modelUrl);
     await engine.model;
-    const frames: number[][] = [];
-    const onsets: number[][] = [];
-    const contours: number[][] = [];
-    await engine.evaluateModel(prepared, (f, o, c) => {
-      frames.push(...f);
-      onsets.push(...o);
-      contours.push(...c);
-    }, ratio => onProgress('Đang nhận diện cao độ và trường độ', Math.round(20 + ratio * 73)));
-    if (!frames.length) throw new Error('Mô hình không trả dữ liệu nhận diện.');
-    onProgress('Đang dựng Piano Roll', 97);
-    return noteFramesToTime(addPitchBendsToNoteEvents(contours, outputToNotesPoly(frames, onsets, 0.25, 0.25, 5)))
-      .filter(n => n.durationSeconds > 0.03 && n.pitchMidi >= 0 && n.pitchMidi <= 127)
-      .sort((a, b) => a.startTimeSeconds - b.startTimeSeconds);
+    const chunks = planSongChunks(audio.duration);
+    const rate = 22050;
+    const allNotes: Note[] = [];
+    for (const chunk of chunks) {
+      const renderedSeconds = chunk.renderEnd - chunk.renderStart;
+      const offline = new OfflineAudioContext(1, Math.max(1, Math.ceil(renderedSeconds * rate)), rate);
+      const source = offline.createBufferSource();
+      source.buffer = audio;
+      source.connect(offline.destination);
+      source.start(0, chunk.renderStart, renderedSeconds);
+      const prepared = await offline.startRendering();
+      const frames: number[][] = [], onsets: number[][] = [], contours: number[][] = [];
+      const progressLabel = 'AI đang nhận diện đoạn ' + (chunk.index + 1) + '/' + chunks.length;
+      await engine.evaluateModel(prepared, (f, o, c) => {
+        frames.push(...f);
+        onsets.push(...o);
+        contours.push(...c);
+      }, ratio => onProgress(progressLabel, Math.min(96,
+        Math.round(15 + ((chunk.index + ratio) / chunks.length) * 81))));
+      if (frames.length) {
+        const localNotes = noteFramesToTime(addPitchBendsToNoteEvents(
+          contours, outputToNotesPoly(frames, onsets, 0.25, 0.25, 5)));
+        allNotes.push(...collectChunkNotes(chunk, localNotes)
+          .filter(n => n.pitchMidi >= 0 && n.pitchMidi <= 127));
+      }
+      onProgress('Đã xử lý đoạn ' + (chunk.index + 1) + '/' + chunks.length,
+        Math.round(15 + ((chunk.index + 1) / chunks.length) * 81));
+    }
+    if (!allNotes.length) throw new Error('AI chưa phát hiện nốt nhạc rõ ràng trong bài hát.');
+    onProgress('Đang ghép các nốt theo timeline toàn bài', 98);
+    return mergeChunkNotes(allNotes);
   } finally {
     await ctx.close().catch(() => undefined);
   }
