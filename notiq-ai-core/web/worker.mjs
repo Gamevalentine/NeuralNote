@@ -21,7 +21,7 @@ function checkResult(payload) {
       Number.isInteger(n.pitchMidi) && n.pitchMidi >= 0 && n.pitchMidi <= 127 &&
       Number.isInteger(n.program) && n.program >= 0 && n.program <= 128 &&
       Number.isFinite(n.amplitude) && n.amplitude >= 0 && n.amplitude <= 1 &&
-      typeof n.isDrum === 'boolean');
+      typeof n.isDrum === 'boolean' && n.isDrum === (n.program === 128));
 }
 function getError() {
   return engine?.UTF8ToString(engine._notiq_core_error()) || 'NOTIQ AI Core: lỗi chưa xác định';
