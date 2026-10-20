@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Midi } from '@tonejs/midi';
+import toneMidi from '@tonejs/midi';
+const { Midi } = toneMidi;
 import { unzipSync, strFromU8 } from 'fflate';
 import { extractDawTracks, createDawMidi, createDawBundle, midiChannelLimitExceeded } from '../src/dawMidi.ts';
 
