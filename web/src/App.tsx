@@ -101,16 +101,28 @@ function App() {
   useEffect(() => { notesRef.current = notes; }, [notes]);
   useEffect(() => {
     let mounted = true;
-    void (async () => {
-      if (!nativeBridgeAvailable()) await installWebMuScriptorBridge().catch(() => false);
-      if (!mounted || !nativeBridgeAvailable()) return;
-      const native = await window.notiqNative!.status();
-      if (!mounted || !native.available) return;
-      setNativeReady(true);
-      setNativeModelInstalled(native.modelInstalled);
-      setEngineMode('muscriptor');
-    })().catch(() => {});
-    return () => { mounted = false; };
+    let retryTimer: number | null = null;
+    const connect = async () => {
+      try {
+        if (!nativeBridgeAvailable()) await installWebMuScriptorBridge().catch(() => false);
+        if (!mounted) return;
+        if (nativeBridgeAvailable()) {
+          const native = await window.notiqNative!.status();
+          if (!mounted) return;
+          if (native.available) {
+            setNativeReady(true);
+            setNativeModelInstalled(native.modelInstalled);
+            setEngineMode('muscriptor');
+            return;
+          }
+        }
+      } catch { /* backend startup may still be in progress */ }
+      // Codespaces may need time to download the pinned 209 MB model and pass
+      // real C++ inference smoke QA before opening the API. Retry transparently.
+      if (mounted && isWebMuScriptorConfigured()) retryTimer = window.setTimeout(() => { void connect(); }, 5000);
+    };
+    void connect();
+    return () => { mounted = false; if (retryTimer !== null) window.clearTimeout(retryTimer); };
   }, []);
   useEffect(() => () => {
     if (selectionRef.current) URL.revokeObjectURL(selectionRef.current.url);
