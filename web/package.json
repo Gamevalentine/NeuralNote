@@ -9,7 +9,8 @@
     "preview": "vite preview --host 0.0.0.0",
     "test:piano": "node --experimental-strip-types --test tests/piano-edit.test.mts",
     "test:soundfont": "node --experimental-strip-types --test tests/soundfont.test.mts",
-    "test:daw": "node --experimental-strip-types --test tests/daw-midi.test.mts"
+    "test:daw": "node --experimental-strip-types --test tests/daw-midi.test.mts",
+    "test:long": "node --experimental-strip-types --test tests/long-audio.test.mts"
   },
   "dependencies": {
     "@spotify/basic-pitch": "^1.0.1",
