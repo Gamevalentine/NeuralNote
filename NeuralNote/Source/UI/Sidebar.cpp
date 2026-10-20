@@ -51,7 +51,7 @@ void paintMasterPanel(juce::Graphics& g, juce::Rectangle<int> inBounds)
 
     g.setColour(nn::colours::textLabel);
     nn::drawTrackedText(g,
-                        "TỔNG",
+                        juce::String::fromUTF8("TỔNG"),
                         nn::fonts::sectionHeader(),
                         label_row.toFloat(),
                         juce::Justification::centredLeft,
@@ -185,7 +185,7 @@ void Sidebar::paintOverChildren(juce::Graphics& g)
                    juce::Justification::centredLeft, true);
         g.setColour(nn::colours::textLabel);
         g.setFont(nn::fonts::meta());
-        g.drawText("0 " + juce::String::fromUTF8("nốt") + "  ·  "
+        g.drawText("0 " + juce::String::fromUTF8("nốt") + juce::String::fromUTF8("  ·  ")
                        + juce::String::fromUTF8(ranges[static_cast<size_t>(i)]),
                    52, area.getY() + 31, getWidth() - 62, 18,
                    juce::Justification::centredLeft, true);
