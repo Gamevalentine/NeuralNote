@@ -54,7 +54,7 @@ NnToolbar::NnToolbar(NeuralNoteAudioProcessor& inProcessor)
     addAndMakeVisible(*mTempoEditor);
 
     mLoadButton.setIcon(nn::icons::folderStroked, NnFlatButton::IconStyle::stroked, 13.0f);
-    mLoadButton.setLabel("Mở tệp", nn::fonts::buttonLabel());
+    mLoadButton.setLabel(juce::String::fromUTF8("Mở tệp"), nn::fonts::buttonLabel());
     mLoadButton.setPadding(10, 10, 6);
     mLoadButton.setColour(NnFlatButton::backgroundColourId, nn::colours::bgControlAlt);
     mLoadButton.setColour(NnFlatButton::iconColourId, nn::colours::accent);
@@ -68,12 +68,12 @@ NnToolbar::NnToolbar(NeuralNoteAudioProcessor& inProcessor)
     addAndMakeVisible(mLoadButton);
 
     mExportButton.setIcon(nn::icons::folderStroked, NnFlatButton::IconStyle::stroked, 13.0f);
-    mExportButton.setLabel("Xuất MIDI", nn::fonts::buttonLabel());
+    mExportButton.setLabel(juce::String::fromUTF8("Xuất MIDI"), nn::fonts::buttonLabel());
     mExportButton.setPadding(12, 12, 7);
     mExportButton.setColour(NnFlatButton::backgroundColourId, nn::colours::bgControlAlt);
     mExportButton.setColour(NnFlatButton::iconColourId, nn::colours::textIconSoft);
     mExportButton.setColour(NnFlatButton::textColourId, nn::colours::textButton);
-    mExportButton.setTooltip("Lưu các nốt đã nhận diện thành tệp MIDI");
+    mExportButton.setTooltip(juce::String::fromUTF8("Lưu các nốt đã nhận diện thành tệp MIDI"));
     mExportButton.setWantsKeyboardFocus(false);
     mExportButton.onClick = [this] { _exportMidiFile(); };
     addAndMakeVisible(mExportButton);
@@ -108,7 +108,7 @@ void NnToolbar::resized()
     place_right(mExportButton, mExportButton.getIdealWidth());
 
     const int label_width =
-        juce::roundToInt(std::ceil(nn::trackedTextWidth("BPM XUẤT", nn::fonts::pillLabel(), LABEL_TRACKING)));
+        juce::roundToInt(std::ceil(nn::trackedTextWidth(juce::String::fromUTF8("BPM XUẤT"), nn::fonts::pillLabel(), LABEL_TRACKING)));
     const int tempo_width = 2 * PILL_PADDING + label_width + PILL_GAP + TEMPO_VALUE_WIDTH + PILL_GAP + SPINNER_WIDTH;
 
     mTempoPill = bounds.removeFromRight(tempo_width).withSizeKeepingCentre(tempo_width, button_height);
@@ -167,7 +167,7 @@ void NnToolbar::_exportMidiFile()
         NNFileUtils::getMidiExportFileName(mProcessor.getSourceAudioManager()->getDroppedFilename());
 
     mFileChooser = std::make_shared<juce::FileChooser>(
-        "Xuất tệp MIDI", NNFileUtils::getDefaultMidiExportDirectory().getChildFile(filename), "*.mid");
+        juce::String::fromUTF8("Xuất tệp MIDI"), NNFileUtils::getDefaultMidiExportDirectory().getChildFile(filename), "*.mid");
 
     mFileChooser->launchAsync(
         juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting,
@@ -193,7 +193,7 @@ void NnToolbar::_exportMidiFile()
             if (!success) {
                 NnLogger::write(NnLogger::Level::Error, "NnToolbar: Could not write the MIDI file.");
                 juce::NativeMessageBox::showMessageBoxAsync(
-                    juce::MessageBoxIconType::NoIcon, "Lỗi", "Không thể lưu tệp MIDI.");
+                    juce::MessageBoxIconType::NoIcon, juce::String::fromUTF8("Lỗi"), juce::String::fromUTF8("Không thể lưu tệp MIDI."));
             }
         });
 }
@@ -240,7 +240,7 @@ void NnToolbar::_paintTempoPill(juce::Graphics& g) const
 
     g.setColour(nn::colours::textDim.withMultipliedAlpha(alpha));
     nn::drawTrackedText(
-        g, "BPM XUẤT", nn::fonts::pillLabel(), content.toFloat(), juce::Justification::centredLeft, LABEL_TRACKING);
+        g, juce::String::fromUTF8("BPM XUẤT"), nn::fonts::pillLabel(), content.toFloat(), juce::Justification::centredLeft, LABEL_TRACKING);
 
     // Stacked triangles rather than a spinner control: the value is typed, and these say the field
     // is a number without pretending to be a second way of setting it.
