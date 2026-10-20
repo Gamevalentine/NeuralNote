@@ -1,5 +1,5 @@
 # Copies and generated build outputs stay local until reviewed.
-/vendor/
+# Vendor MuScriptor source is now versioned as part of NOTIQ AI Core.
 /.build-wasm/
 *.wasm
 *.gguf
