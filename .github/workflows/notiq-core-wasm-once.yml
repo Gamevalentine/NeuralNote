@@ -1,4 +1,5 @@
 name: NOTIQ AI Core - one-shot real WebAssembly verification
+# Retry after fixing two real clang C++ errors in NOTIQ adapter (no fake results).
 
 on:
   push:
