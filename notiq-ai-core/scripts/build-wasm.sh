@@ -8,7 +8,7 @@ if ! command -v emcmake >/dev/null 2>&1; then
   exit 2
 fi
 if [ ! -f "$MODULE/vendor/muscriptor/cpp/CMakeLists.txt" ]; then
-  bash "$MODULE/scripts/snapshot-source.sh"
+  python3 "$MODULE/scripts/snapshot_source.py"
 fi
 emcmake cmake -S "$MODULE" -B "$MODULE/.build-wasm" -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
