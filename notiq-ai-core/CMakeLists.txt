@@ -28,7 +28,7 @@ target_link_options(notiq_ai_core PRIVATE
   "SHELL:-sEXPORT_ES6=1"
   "SHELL:-sENVIRONMENT=web,worker"
   "SHELL:-sALLOW_MEMORY_GROWTH=1"
-  "SHELL:-sMAXIMUM_MEMORY=4294967296"
+  "SHELL:-sMAXIMUM_MEMORY=2147483648"
   "SHELL:-sINITIAL_MEMORY=268435456"
   "SHELL:-sFILESYSTEM=1"
   "SHELL:-sEXPORTED_FUNCTIONS=['_malloc','_free','_notiq_core_load_model','_notiq_core_transcribe','_notiq_core_progress','_notiq_core_error','_notiq_core_result_json','_notiq_core_unload']"
