@@ -61,14 +61,9 @@ jobs:
             page.on('requestfailed', req=>console.log('FAILED_REQUEST',req.url().slice(0,160),req.failure()?.errorText));
             page.on('pageerror',e=>errors.push(e.message));
             page.on('console',msg=>{if(msg.type()==='error')console.log('CHROME_ERROR:',msg.text())});
-            // The test feeds the genuine model bytes from the runner's local,
-            // SHA-verified download; web still uses the pinned official URL.
-            // Prevent redundant 209MB downloads without altering model bytes.
-            console.log('PINNED_GGUF_BYTES',statSync('/tmp/notiq-original-small.gguf').size);
-            await page.route('https://huggingface.co/DamRsn/muscriptor-gguf/**',async route=>{
-              await route.fulfill({status:200,contentType:'application/octet-stream',
-                headers:{'access-control-allow-origin':'*','content-length':'209425152'},path:'/tmp/notiq-original-small.gguf'});
-            });
+            // Browser fetches the pinned GGUF directly from official source, as a real user would.
+            // No Playwright route.fulfill on a 209 MB response: that can kill Chromium.
+            console.log('OFFICIAL_MODEL_URL_ONLY',statSync('/tmp/notiq-original-small.gguf').size);
             await page.goto('http://127.0.0.1:4173/',{waitUntil:'domcontentloaded'});
             console.log('UI_TITLE',await page.title());
             await page.locator('input[type=file]').setInputFiles('/tmp/notiq-audio-15s.wav');
