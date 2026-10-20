@@ -1,0 +1,102 @@
+name: NOTIQ AI Core - one-shot real WebAssembly verification
+
+on:
+  push:
+    branches:
+      - test/notiq-ai-core-wasm-final-20261021
+    paths:
+      - .github/workflows/notiq-core-wasm-once.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notiq-core-wasm-one-shot
+  cancel-in-progress: true
+
+jobs:
+  verify-native-to-wasm:
+    name: Build actual MuScriptor and load GGUF in Chromium
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+
+      - name: Verify pinned NOTIQ C++ source before compiling
+        run: |
+          node --version
+          node --test notiq-ai-core/tests/core-contract.test.mjs notiq-ai-core/tests/source-integrity.test.mjs
+
+      - name: Install Emscripten SDK 4.0.7 in ephemeral runner
+        run: |
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git /tmp/notiq-emsdk
+          /tmp/notiq-emsdk/emsdk install 4.0.7
+          /tmp/notiq-emsdk/emsdk activate 4.0.7
+          . /tmp/notiq-emsdk/emsdk_env.sh
+          emcc --version | head -n 2
+          echo "$EMSDK/upstream/emscripten" >> "$GITHUB_PATH"
+          echo "$EMSDK/upstream/bin" >> "$GITHUB_PATH"
+
+      - name: Obtain only exact pinned ggml C++ source
+        run: |
+          git init /tmp/notiq-ggml
+          git -C /tmp/notiq-ggml remote add origin https://github.com/ggml-org/ggml.git
+          git -C /tmp/notiq-ggml fetch --depth=1 origin e91ded11bdcd78c42f9c8d3978ff6686eb4c1226
+          git -C /tmp/notiq-ggml checkout --detach FETCH_HEAD
+          test "$(git -C /tmp/notiq-ggml rev-parse HEAD)" = "e91ded11bdcd78c42f9c8d3978ff6686eb4c1226"
+
+      - name: Compile real MuScriptor C++ and validate wasm32 exports
+        env:
+          FETCHCONTENT_SOURCE_DIR_GGML: /tmp/notiq-ggml
+        run: |
+          . /tmp/notiq-emsdk/emsdk_env.sh
+          export CMAKE_ARGS="-DFETCHCONTENT_SOURCE_DIR_GGML=/tmp/notiq-ggml"
+          bash notiq-ai-core/scripts/build-wasm.sh
+          ls -lh notiq-ai-core/.build-wasm/notiq-ai-core.js notiq-ai-core/.build-wasm/notiq-ai-core.wasm
+
+      - name: Download and integrity-check original noncommercial MuScriptor Small GGUF
+        run: |
+          curl -fL --retry 3 --connect-timeout 30 --max-time 600 \
+            'https://huggingface.co/DamRsn/muscriptor-gguf/resolve/d7045f94e8b19427f4ff9542975035e66596e51c/v1/muscriptor-small-f16.gguf' \
+            -o /tmp/notiq-small-f16.gguf
+          echo '925f55af65a20ebc4f8b45ceaf095a12b72493d436cb112623cd0041a1af23d4  /tmp/notiq-small-f16.gguf' | sha256sum -c -
+          test "$(stat -c %s /tmp/notiq-small-f16.gguf)" = "209425152"
+
+      - name: Load the actual GGUF inside headless Chromium Web Worker
+        timeout-minutes: 15
+        run: |
+          npm install --prefix /tmp/notiq-browser --no-fund --no-audit playwright-core@1.56.1
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory notiq-ai-core/.build-wasm >/tmp/notiq-web.log 2>&1 &
+          sleep 3
+          node --input-type=module <<'JS'
+          import { chromium } from '/tmp/notiq-browser/node_modules/playwright-core/index.mjs';
+          const binary = '/usr/bin/google-chrome';
+          const browser = await chromium.launch({
+            executablePath: binary,
+            headless: true,
+            args: ['--no-sandbox','--disable-dev-shm-usage', '--js-flags=--max-old-space-size=8192']
+          });
+          try {
+            const page = await browser.newPage();
+            page.on('console', msg => console.log('CHROME:', msg.type(), msg.text()));
+            page.on('pageerror', err => console.error('PAGE_ERROR:', err.message));
+            await page.goto('http://127.0.0.1:4173/web/diagnostic.html');
+            console.log('BEFORE:', await page.locator('#status').innerText());
+            await page.locator('#model').setInputFiles('/tmp/notiq-small-f16.gguf');
+            await page.locator('#run').click();
+            await page.waitForFunction(() => {
+              const status = document.querySelector('#status')?.textContent || '';
+              return status.includes('NẠP MÔ HÌNH THẬT THÀNH CÔNG') ||
+                status.includes('KHÔNG NẠP ĐƯỢC') ||
+                status.startsWith('Lỗi module');
+            }, null, { timeout: 12 * 60 * 1000 });
+            const status = await page.locator('#status').innerText();
+            console.log('NOTIQ_MODEL_LOAD_RESULT:', status);
+            if (!status.includes('NẠP MÔ HÌNH THẬT THÀNH CÔNG')) process.exitCode = 1;
+          } finally {
+            await browser.close();
+          }
+          JS
