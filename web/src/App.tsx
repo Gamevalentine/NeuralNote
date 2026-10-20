@@ -12,6 +12,7 @@ import { DEFAULT_INSTRUMENTS, INSTRUMENTS, instrumentProgram, playSoundfontNote,
 import type { InstrumentId, InstrumentSelection } from './soundfont';
 import { nativeInstrumentPrograms, nativeProgramName } from './muscriptorProtocol';
 import { nativeBridgeAvailable, runMuScriptor } from './muscriptorNative';
+import { webAiEnabled, installWebModel, recognizeWeb, closeWebModel } from './muscriptorWebLocal';
 
 type Selection = { file: Blob; name: string; url: string };
 type Phase = 'empty' | 'ready' | 'analyzing' | 'complete' | 'error';
@@ -45,9 +46,11 @@ function App() {
   const [selectedNote, setSelectedNote] = useState<number | null>(null);
   const [historyTick, setHistoryTick] = useState(0);
   const [phase, setPhase] = useState<Phase>('empty');
-  // Browser is strictly a GUI preview. The original NeuralNote MuScriptor runs only via Windows native IPC.
+  // Stage 3 opt-in browser preview uses the actual pinned MuScriptor C++ WASM worker.
   const [engineMode, setEngineMode] = useState<'preview' | 'muscriptor'>('preview');
   const [nativeReady, setNativeReady] = useState(false);
+  const browserAi = webAiEnabled();
+  const aiAvailable = nativeReady || browserAi;
   const [nativeModelInstalled, setNativeModelInstalled] = useState(false);
   const [nativeDownloading, setNativeDownloading] = useState(false);
   const [nativeMuted, setNativeMuted] = useState<Set<number>>(new Set());
@@ -99,7 +102,10 @@ function App() {
   }, [selection]);
   useEffect(() => { notesRef.current = notes; }, [notes]);
   useEffect(() => {
-    if (!nativeBridgeAvailable()) return;
+    if (!nativeBridgeAvailable()) {
+      if (browserAi) setEngineMode('muscriptor');
+      return;
+    }
     let mounted = true;
     void window.notiqNative!.status().then(native => {
       if (!mounted || !native.available) return;
@@ -112,6 +118,7 @@ function App() {
   useEffect(() => () => {
     if (selectionRef.current) URL.revokeObjectURL(selectionRef.current.url);
     if (audioCtx.current) void audioCtx.current.close().catch(() => undefined);
+    closeWebModel();
   }, []);
   useEffect(() => {
     const onOutside = (event: PointerEvent) => {
@@ -244,13 +251,12 @@ function App() {
       setSelection(next);
       setInfo(decoded);
       setPhase('ready');
-      if (!nativeReady) {
-        // The Web build has no C++ bridge. Never silently substitute a different AI engine.
-        setStatus('Đã tải bài hát · Bản Web chỉ duyệt giao diện và biên tập MIDI');
-        setError('MuScriptor nguyên gốc từ NeuralNote chỉ chạy trong NOTIQ Windows. Bản Web không có engine nhận diện; hãy mở NOTIQ Desktop để chuyển âm thanh thành MIDI.');
+      if (!aiAvailable) {
+        setStatus('Đã tải bài hát · Bản Web chưa bật NOTIQ AI Core');
+        setError('Bản Web này đang ở chế độ xem giao diện. Chưa có engine MuScriptor để nhận diện.');
       } else if (!nativeModelInstalled) {
         setStatus('Đã tải bài hát · Chờ mô hình MuScriptor từ NeuralNote');
-        setError('Chưa cài MuScriptor Small (209 MB). Nhấn “Tải mô hình AI” trên thanh trên cùng, sau đó nhận diện sẽ tự khởi chạy.');
+        setError('Cần nạp mô hình MuScriptor Small 209 MB (CC BY-NC 4.0, phi thương mại). Nhấn “Tải mô hình AI” để nạp từ nguồn chính thức.');
       } else {
         setStatus('Đã tải bài hát · Đang chạy MuScriptor nguyên gốc từ NeuralNote…');
         void runRecognition(next);
@@ -265,7 +271,23 @@ function App() {
   };
 
   const downloadNativeModel = async () => {
-    if (!nativeReady || !window.notiqNative || nativeDownloading) return;
+    if (nativeDownloading) return;
+    if (browserAi && !nativeReady) {
+      setNativeDownloading(true);
+      setError('');
+      setProgress(0);
+      try {
+        await installWebModel(({percent,message}) => {setStatus(message);setProgress(percent);});
+        setNativeModelInstalled(true);
+        setStatus('MuScriptor Small đã nạp thành công trên Web · không dùng máy chủ AI');
+        if (selectionRef.current) void runRecognition(selectionRef.current,'muscriptor',true);
+      } catch(cause) {
+        setError(cause instanceof Error ? cause.message : 'Không tải được MuScriptor Small.');
+        setStatus('Chưa nạp được MuScriptor AI Core');
+      } finally { setNativeDownloading(false); }
+      return;
+    }
+    if (!nativeReady || !window.notiqNative) return;
     const bridge = window.notiqNative;
     const detach = bridge.onProgress(({kind, percent, message}) => {
       if (kind === 'download') {
@@ -294,15 +316,15 @@ function App() {
     target: Selection, _mode: 'muscriptor' = 'muscriptor', modelJustInstalled = false,
   ) => {
     if (recognitionInFlight.current) return;
-    if (!nativeReady) {
-      setStatus('MuScriptor không có trên Web — hãy mở NOTIQ Windows');
-      setError('Đây là giao diện Web thử nghiệm. MuScriptor C++ gốc của NeuralNote cần NOTIQ Desktop để chạy trên máy bạn.');
+    if (!aiAvailable) {
+      setStatus('MuScriptor AI Core chưa được bật trên bản Web này');
+      setError('Bản Web hiện tại không được cấp engine nhận diện.');
       return;
     }
     if (!nativeModelInstalled && !modelJustInstalled) {
       setPhase('ready');
       setStatus('Chưa có mô hình MuScriptor · Cần tải AI để nhận diện');
-      setError('Bạn cần tải mô hình MuScriptor Small trong ứng dụng Windows trước khi nhận diện.');
+      setError('Hãy tải/nạp mô hình MuScriptor Small trước khi nhận diện.');
       return;
     }
     recognitionInFlight.current = true;
@@ -313,19 +335,19 @@ function App() {
     setProgress(0);
     setStatus('MuScriptor C++ (NeuralNote) đang nhận diện bài hát…');
     try {
-      const detected = await runMuScriptor(target.file, ({kind, percent, message}) => {
-        if (kind === 'transcribe') {
-          setStatus(message);
-          setProgress(percent);
-        }
-      });
+      const update = ({kind, percent, message}: {kind: 'download' | 'transcribe'; percent: number; message: string}) => {
+        if (kind === 'transcribe') {setStatus(message);setProgress(percent);}
+      };
+      const detected = nativeReady
+        ? await runMuScriptor(target.file, update)
+        : await recognizeWeb(target.file, update);
       clearHistory(detected);
       setNativeMuted(new Set());
       setNativeSolo(null);
       setNativeSelectedProgram(detected.find(n => n.program !== undefined)?.program ?? null);
       setProgress(100);
       setPhase('complete');
-      setStatus('MuScriptor (NeuralNote): ' + detected.length + ' nốt · ' + nativeInstrumentPrograms(detected).length + ' nhạc cụ');
+      setStatus('MuScriptor AI Core: ' + detected.length + ' nốt · ' + nativeInstrumentPrograms(detected).length + ' nhạc cụ');
       firedNotes.current.clear();
     } catch (cause) {
       setPhase('error');
@@ -804,11 +826,11 @@ function App() {
             <span>Đang nhận diện {progress}%</span>
             <div className="ai-running-meter"><div style={{width: progress + '%'}}/></div>
           </div>}
-          {nativeReady && (phase === 'ready' || phase === 'error') && selection && <button type="button"
+          {aiAvailable && (phase === 'ready' || phase === 'error') && selection && <button type="button"
             className="ai-retry-button" disabled={busyLoading || nativeDownloading}
             title="Chạy AI nhận diện âm thanh thành các nốt MIDI"
             onClick={startInference}>Nhận diện nốt</button>}
-          {nativeReady && engineMode === 'muscriptor' && !nativeModelInstalled &&
+          {aiAvailable && engineMode === 'muscriptor' && !nativeModelInstalled &&
             <button type="button" className="ai-retry-button" disabled={nativeDownloading}
               title="Tải mô hình MuScriptor Small (~209 MB) để nhận diện nhạc cụ"
               onClick={() => void downloadNativeModel()}>
@@ -850,10 +872,8 @@ function App() {
         <label>Tempo xuất MIDI (BPM)<input type="number" min={40} max={240} value={bpm} onChange={e => setBpm(Math.min(240, Math.max(40, Number(e.target.value) || 120)))} /></label>
         <p>Hỗ trợ tải cả bài hát: tối đa {MAX_SONG_SECONDS / 60} phút · 200 MB. AI xử lý theo từng đoạn và ghép nốt.</p>
         <p>Âm thanh xử lý tại thiết bị của bạn. Mô hình AI tải qua Internet khi cần.</p>
-        <p>{nativeReady
-          ? 'Bản Windows có MuScriptor C++ CPU. Mô hình Small 209 MB, giấy phép CC BY-NC 4.0 (phi thương mại).'
-          : 'Cloudflare Web chỉ hiển thị giao diện và biên tập MIDI; để nhận diện nốt bằng MuScriptor C++ gốc NeuralNote, hãy dùng NOTIQ Windows.'}</p>
-        {nativeReady && <p><strong>{nativeModelInstalled ? 'MuScriptor Small đã sẵn sàng' : 'MuScriptor Small chưa tải'}</strong>
+        <p>{nativeReady ? 'Bản Windows: MuScriptor C++ CPU.' : browserAi ? 'Web Preview: MuScriptor C++ WebAssembly xử lý tại trình duyệt, không tải nhạc lên máy chủ.' : 'Bản Web chưa kết nối AI MuScriptor.'} Mô hình Small 209 MB, CC BY-NC 4.0 (phi thương mại).</p>
+        {aiAvailable && <p><strong>{nativeModelInstalled ? 'MuScriptor Small đã sẵn sàng' : 'MuScriptor Small chưa tải'}</strong>
           {!nativeModelInstalled && <button type="button" disabled={nativeDownloading}
             onClick={() => void downloadNativeModel()}>{nativeDownloading ? 'Đang tải model…' : 'Tải mô hình Small · 209 MB'}</button>}</p>}
       </div>}
@@ -968,10 +988,8 @@ function App() {
           </div>
           <div className="editor-status">
             <span>{status}</span>
-            <span className="notiq-ai-mode" title={nativeReady
-              ? 'MuScriptor C++ gốc NeuralNote đang chạy qua cầu nối Windows'
-              : 'Web chỉ dùng để duyệt giao diện và biên tập MIDI, không có engine nhận diện'}>
-              {nativeReady ? 'AI: MuScriptor (NeuralNote)' : 'Web UI Preview · AI trên Windows'}
+            <span className="notiq-ai-mode" title={nativeReady ? 'MuScriptor C++ native trên Windows' : browserAi ? 'MuScriptor C++ WebAssembly thật chạy tại trình duyệt' : 'Bản Web chưa bật AI'}>
+              {nativeReady ? 'AI: MuScriptor (Windows)' : browserAi ? 'AI: NOTIQ Core (WebAssembly)' : 'Web UI Preview · chưa bật AI'}
             </span>
             <span title={soundfontStatus}>{loadingSoundfont ? '◌ Đang tải SoundFont' : '♪ ' + soundfontStatus}</span>
             <span className="piano-edit-hint" title="Thêm nốt: nhấn vào lưới · Di chuyển: kéo nốt · Đổi độ dài: kéo mép phải · Xóa: Del · Hoàn tác: Ctrl+Z">✎ Sửa MIDI · Snap ${SNAP_SECONDS}s · Ctrl+Z</span>
