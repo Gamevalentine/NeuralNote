@@ -25,6 +25,16 @@ const PITCH_ROW = 16;
 // UI-only review of the future Desktop layout. This does not enable MuScriptor in the browser.
 const desktopReview = new URLSearchParams(window.location.search).get('review') === 'desktop';
 const midiColor = (pitch: number) => GROUPS.find(group => group.id === groupFor(pitch))?.color || '#59bfa3';
+const nativeTrackColors = ['#e4b45b', '#47bda0', '#8b83ec', '#79bcf5', '#d988ae', '#f09d6c', '#a6cc73'];
+const nativeTrackColor = (program: number) => nativeTrackColors[Math.abs(program) % nativeTrackColors.length];
+const nativeSoundfontPreset = (program: number): InstrumentId =>
+  program < 8 ? 'acoustic_grand_piano'
+  : program >= 24 && program < 32 ? 'acoustic_guitar_nylon'
+  : program >= 32 && program < 40 ? 'electric_bass_finger'
+  : program >= 40 && program < 52 ? 'violin'
+  : program >= 72 && program < 80 ? 'flute'
+  : program >= 8 && program < 16 ? 'marimba'
+  : 'acoustic_grand_piano';
 
 function App() {
   const [selection, setSelection] = useState<Selection | null>(null);
@@ -341,14 +351,7 @@ function App() {
       setSoundfontStatus('Đã nhận diện trống GM; tiếng trống cần bộ sample percussion riêng.');
       return;
     }
-    const nativePreset: InstrumentId | undefined = program === undefined ? undefined
-      : program < 8 ? 'acoustic_grand_piano'
-      : program >= 24 && program < 32 ? 'acoustic_guitar_nylon'
-      : program >= 32 && program < 40 ? 'electric_bass_finger'
-      : program >= 40 && program < 52 ? 'violin'
-      : program >= 72 && program < 80 ? 'flute'
-      : program >= 8 && program < 16 ? 'marimba'
-      : 'acoustic_grand_piano';
+    const nativePreset: InstrumentId | undefined = program === undefined ? undefined : nativeSoundfontPreset(program);
     try {
       const ctx = getAudioContext();
       await playSoundfontNote(ctx, nativePreset || instrumentSelection[groupFor(pitch)], pitch, length, volume);
@@ -510,7 +513,7 @@ function App() {
         const ctx = getAudioContext();
         if (ctx.state !== 'running') await ctx.resume();
         if (playbackMode !== 'original' || !info) {
-          const needed = [...new Set(visibleNotes.map(n => instrumentSelection[groupFor(n.pitchMidi)]))];
+          const needed = [...new Set(visibleNotes.filter(n => n.program !== 128).map(n => n.program === undefined ? instrumentSelection[groupFor(n.pitchMidi)] : nativeSoundfontPreset(n.program)))];
           if (needed.length) {
             setLoadingSoundfont(true);
             setSoundfontStatus('Đang chuẩn bị các tiếng SoundFont để phát MIDI...');
@@ -771,9 +774,46 @@ function App() {
       </div>}
       <div className="studio">
         <aside className={"sidebar" + (reviewArea === "tracks" ? " ui-review-highlight" : "")}>
-          <div className="sidebar-heading"><span>NHÓM NỐT / DẢI ÂM</span><span>{notes.length ? GROUPS.length : 0}</span></div>
-          <div className="track-explainer">Basic Pitch • nhóm theo cao độ</div>
-          {GROUPS.map(group => {
+          <div className="sidebar-heading">
+            <span>{hasNativeTracks ? 'TRACK NHẠC CỤ AI' : 'NHÓM NỐT / DẢI ÂM'}</span>
+            <span>{hasNativeTracks ? nativePrograms.length : (notes.length ? GROUPS.length : 0)}</span>
+          </div>
+          <div className="track-explainer">{hasNativeTracks
+            ? 'MuScriptor · mỗi track mang mã nhạc cụ GM thật'
+            : 'Basic Pitch • nhóm theo cao độ'}</div>
+          {hasNativeTracks ? nativePrograms.map(program => {
+            const count = notes.filter(note => note.program === program).length;
+            const mutedTrack = nativeMuted.has(program);
+            const selected = nativeSelectedProgram === program;
+            return <div className={'track-card native-track-card' + (mutedTrack ? ' is-muted' : '') + (selected ? ' active-track' : '')}
+              key={'gm-' + program}>
+              <div className="track-title-row">
+                <div className="track-icon" style={{
+                  color: nativeTrackColor(program), borderColor: nativeTrackColor(program),
+                  backgroundColor: nativeTrackColor(program) + '18',
+                }}>{program === 128 ? 'DR' : String(program + 1)}</div>
+                <button type="button" className="native-track-select" onClick={() => setNativeSelectedProgram(program)}
+                  title={'Chọn track ' + nativeProgramName(program) + ' để thêm nốt mới'}>
+                  <strong>{nativeProgramName(program)}</strong><small>{count} nốt · {program === 128 ? 'GM Drum channel 10' : 'Program ' + (program + 1)}</small>
+                </button>
+                <button type="button" className={'tiny-toggle ' + (mutedTrack ? 'selected' : '')}
+                  onClick={() => setNativeMuted(previous => {
+                    const next = new Set(previous);
+                    if (next.has(program)) next.delete(program); else next.add(program);
+                    return next;
+                  })}>M</button>
+                <button type="button" className={'tiny-toggle ' + (nativeSolo === program ? 'selected' : '')}
+                  onClick={() => setNativeSolo(current => current === program ? null : program)}>S</button>
+              </div>
+              <div className="track-slider-row">
+                <span style={{ color: nativeTrackColor(program) }}>▰</span>
+                <input aria-label={'Âm lượng ' + nativeProgramName(program)} type="range"
+                  min={0} max={1} step={0.01} value={nativeGain[program] ?? 0.7}
+                  onChange={event => setNativeGain(previous => ({ ...previous, [program]: Number(event.target.value) }))}/>
+                <span>{Math.round((nativeGain[program] ?? 0.7)*100)}%</span>
+              </div>
+            </div>;
+          }) : GROUPS.map(group => {
             const count = notes.filter(n => groupFor(n.pitchMidi) === group.id).length;
             const inactive = !activeGroups.has(group.id);
             return (
@@ -828,7 +868,8 @@ function App() {
                         top:(pitchTop-n.pitchMidi)*PITCH_ROW + 1,
                         left:n.startTimeSeconds/totalSeconds*100 + '%',
                         width:Math.max(6,n.durationSeconds/totalSeconds*timelineWidth-1),
-                        backgroundColor:midiColor(n.pitchMidi),borderColor:midiColor(n.pitchMidi),
+                        backgroundColor: n.program === undefined ? midiColor(n.pitchMidi) : nativeTrackColor(n.program),
+                        borderColor: n.program === undefined ? midiColor(n.pitchMidi) : nativeTrackColor(n.program),
                       }}>
                       {n.durationSeconds/totalSeconds*timelineWidth > 39 ? noteName(n.pitchMidi) : ''}
                       <span className="note-resize-handle" aria-hidden="true"/>
