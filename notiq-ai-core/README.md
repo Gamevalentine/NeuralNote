@@ -29,3 +29,10 @@
 - Trọng số model MuScriptor: CC BY-NC 4.0.
 
 > Đây là nơi chúng ta phát triển **NOTIQ AI Core** độc lập về API/kiểm thử, dựa trên bản sao mã nguồn MIT. Không tuyên bố thuật toán/weights là do NOTIQ tự nghiên cứu ra từ đầu.
+
+## Giai đoạn 2 — thay đổi trong phiên 20/10/2026
+- Sửa hướng dẫn file snapshot: `scripts/snapshot_source.py` (không có `snapshot-source.sh`). Công cụ sao chép **từ chối** làm việc nếu Git submodule không trùng commit pin `c8adc019677ed3479fa3c22c1a117d662382f347`.
+- CMake đã chuyển giới hạn cấp phát WASM32 lần thử đầu về 2 GiB với memory growth; không cam kết hỗ trợ mọi trình duyệt. Không sửa mã nguồn MuScriptor.
+- Sau khi Emscripten build thành công, `tests/verify-wasm.mjs` bắt buộc kiểm tra **file .wasm thật** (magic bytes, WebAssembly.compile và đủ exports C ABI), nếu thiếu sẽ báo lỗi và **không** kết luận PASS.
+- Thêm trang chẩn đoán **chỉ dành cho kỹ thuật** `web/diagnostic.html` để thử nạp GGUF cục bộ trong worker, không có nhận diện giả và không đưa lên NOTIQ Web production.
+- Tại thời điểm cập nhật, môi trường thực thi chưa có `emcc/emcmake`, không có network để tải Emscripten/ggml; **chưa build .wasm, chưa chạy nạp GGUF**. Không dùng GitHub Actions, Codespaces, dịch vụ có phí hoặc máy thật của người dùng.
