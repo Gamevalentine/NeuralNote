@@ -45,6 +45,7 @@ private:
     NeuralNoteAudioProcessor& mProcessor;
 
     std::unique_ptr<NumericTextEditor<double>> mTempoEditor;
+    NnFlatButton mLoadButton {"LoadAudioFromToolbar"};
     NnFlatButton mExportButton {"ExportMidiOut"};
     MidiFileDrag mDragButton;
     NnFlatButton mClearButton {"Clear"};
