@@ -1,0 +1,5 @@
+# Copies and generated build outputs stay local until reviewed.
+/vendor/
+/.build-wasm/
+*.wasm
+*.gguf
