@@ -1,0 +1,54 @@
+name: NOTIQ Restore NeuralNote MuScriptor Routing QA
+
+on:
+  push:
+    branches:
+      - fix/notiq-restore-neuralnote-native-engine
+    paths:
+      - .github/workflows/notiq-restore-neuralnote-qa.yml
+      - web/**
+      - desktop-preview/**
+      - notiq-native/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notiq-restore-neuralnote-qa
+  cancel-in-progress: true
+
+jobs:
+  verify-neuralnote-engine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Web tooling
+        working-directory: web
+        run: npm install --no-audit --no-fund
+      - name: Assert true NeuralNote engine route, no WebGL AI fallback
+        working-directory: web
+        run: node --experimental-strip-types --test tests/neuralnote-core-routing.test.mts
+      - name: Verify long-song note timeline and chunk boundaries
+        working-directory: web
+        run: npm run test:long
+      - name: Verify DAW multitrack and Kontakt MIDI bundles
+        working-directory: web
+        run: npm run test:daw
+      - name: Verify Piano Roll edits and SoundFont presets
+        working-directory: web
+        run: |
+          npm run test:piano
+          npm run test:soundfont
+      - name: Verify MuScriptor result protocol
+        working-directory: web
+        run: node --experimental-strip-types --test tests/muscriptor-protocol.test.mts
+      - name: Typecheck and bundle restored NOTIQ UI
+        working-directory: web
+        run: npm run build
