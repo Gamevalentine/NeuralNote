@@ -6,6 +6,8 @@ import { AudioWaveform, CircleHelp, Gauge, Headphones, Info, LoaderCircle,
 import { fmt, generateDemo, groupFor, GROUPS, makeMidi, noteName, readAudio, transcribe } from './audio';
 import { addNote, copyNotes, removeNote, sameNotes, SNAP_SECONDS, snapSeconds, updateNote, clamp } from './pianoEdit';
 import type { Note, AudioInfo, PitchGroup } from './audio';
+import { DEFAULT_INSTRUMENTS, INSTRUMENTS, instrumentProgram, playSoundfontNote, prepareInstrument } from './soundfont';
+import type { InstrumentId, InstrumentSelection } from './soundfont';
 
 type Selection = { file: Blob; name: string; url: string };
 type Phase = 'empty' | 'ready' | 'analyzing' | 'complete' | 'error';
@@ -42,6 +44,9 @@ function App() {
   const [muted, setMuted] = useState<Set<PitchGroup>>(new Set());
   const [solo, setSolo] = useState<PitchGroup | null>(null);
   const [gain, setGain] = useState<Record<PitchGroup, number>>({ high: 0.7, mid: 0.7, low: 0.7 });
+  const [instrumentSelection, setInstrumentSelection] = useState<InstrumentSelection>({ ...DEFAULT_INSTRUMENTS });
+  const [soundfontStatus, setSoundfontStatus] = useState('SoundFont: chọn tiếng để tải mẫu');
+  const [loadingSoundfont, setLoadingSoundfont] = useState(false);
   const [masterVolume, setMasterVolume] = useState(0.65);
   const [showSettings, setShowSettings] = useState(false);
   const [showDesktopReview, setShowDesktopReview] = useState(false);
@@ -55,6 +60,7 @@ function App() {
   const timelineViewport = useRef<HTMLDivElement>(null);
   const [viewportWidth, setViewportWidth] = useState(1000);
   const audioCtx = useRef<AudioContext | null>(null);
+  const midiOnlyStart = useRef<number | null>(null);
   const firedNotes = useRef<Set<number>>(new Set());
   const previousTime = useRef(0);
   const selectionRef = useRef<Selection | null>(null);
