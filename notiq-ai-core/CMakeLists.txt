@@ -16,7 +16,7 @@ set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
 set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
 
 if(NOT EXISTS "${CMAKE_CURRENT_LIST_DIR}/vendor/muscriptor/cpp/CMakeLists.txt")
-  message(FATAL_ERROR "NOTIQ source snapshot missing. Run scripts/snapshot-source.sh first.")
+  message(FATAL_ERROR "NOTIQ source snapshot missing. Run scripts/snapshot_source.py first.")
 endif()
 add_subdirectory(vendor/muscriptor/cpp vendor-build)
 add_executable(notiq_ai_core src/notiq_core.cpp)
