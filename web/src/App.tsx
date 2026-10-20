@@ -792,6 +792,17 @@ function App() {
         <p className="desktop-review-note"><strong>Chưa nghiệm thu bản Windows.</strong> Web dùng Basic Pitch; bản Desktop dùng MuScriptor và SoundFont. Khi giao diện được bạn duyệt, mình mới đóng gói bản Windows để kiểm thử âm thanh và AI.</p>
         <span className="desktop-review-help">Chỗ nào chưa giống ý bạn, hãy chụp màn hình và gửi trong cuộc trò chuyện.</span>
       </section>}
+      {showDawHelp && <section className="daw-help-popup" role="dialog" aria-modal="false" aria-label="Kết nối Cubase, Cakewalk và Kontakt">
+        <div className="daw-help-head"><strong>NOTIQ → Cubase / Cakewalk / Kontakt</strong>
+          <button type="button" aria-label="Đóng hướng dẫn" onClick={() => setShowDawHelp(false)}><X size={16}/></button>
+        </div>
+        <p><strong>1.</strong> Chọn <b>Xuất → Gói MIDI từng track (.zip)</b>, rồi giải nén. Thư mục có MIDI đa track và từng track riêng.</p>
+        <p><strong>2.</strong> Trong Cubase hoặc Cakewalk, nhập <code>NOTIQ_ALL_TRACKS.mid</code> vào các MIDI track riêng. Giữ BPM xuất là <strong>{bpm}</strong> nếu DAW không đọc tự động.</p>
+        <p><strong>3.</strong> Với Kontakt, tạo instrument cho từng track, chọn thư viện <code>.nki</code> tương ứng rồi định tuyến MIDI track vào Kontakt.</p>
+        <p><strong>4.</strong> Track trống dùng <b>MIDI channel 10</b> và nốt GM Drum Kit; gán bộ trống thay vì Kontakt Piano.</p>
+        <p className="daw-help-note">Mã GM giúp nhận diện loại nhạc cụ nhưng <strong>không tự chọn file Kontakt .nki</strong>. Nếu nhiều hơn 15 nhạc cụ giai điệu, dùng các MIDI riêng trong ZIP để tránh trùng kênh.</p>
+        <button type="button" className="daw-help-close" onClick={() => setShowDawHelp(false)}>Đã hiểu</button>
+      </section>}
       {showSettings && <div className="settings-popup">
         <div className="popup-head"><strong><Gauge size={17} /> Tùy chọn NOTIQ</strong><button aria-label="Đóng" onClick={() => setShowSettings(false)}><X size={16} /></button></div>
         <label>Tempo xuất MIDI (BPM)<input type="number" min={40} max={240} value={bpm} onChange={e => setBpm(Math.min(240, Math.max(40, Number(e.target.value) || 120)))} /></label>
