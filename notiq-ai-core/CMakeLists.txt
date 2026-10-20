@@ -23,6 +23,12 @@ if(NOT EXISTS "${CMAKE_CURRENT_LIST_DIR}/vendor/muscriptor/cpp/CMakeLists.txt")
   message(FATAL_ERROR "NOTIQ source snapshot missing. Run scripts/snapshot_source.py first.")
 endif()
 add_subdirectory(vendor/muscriptor/cpp vendor-build)
+# PFFFT vends a NEON branch when __wasm_simd128__ is defined, but wasm32
+# cannot include <arm_neon.h>. Use PFFFT's existing scalar FFT on this
+# Emscripten-only target; upstream/native MuScriptor is unchanged.
+if(EMSCRIPTEN)
+  target_compile_definitions(pffft PRIVATE PFFFT_SIMD_DISABLE=1)
+endif()
 add_executable(notiq_ai_core src/notiq_core.cpp)
 target_link_libraries(notiq_ai_core PRIVATE muscriptor_ggml)
 target_compile_options(notiq_ai_core PRIVATE -O2 -msimd128 -fexceptions)
