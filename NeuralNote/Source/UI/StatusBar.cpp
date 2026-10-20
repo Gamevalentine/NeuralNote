@@ -54,7 +54,7 @@ StatusBar::StatusBar(NeuralNoteAudioProcessor& inProcessor)
     mZoomSlider.setColour(NnFlatSlider::trackColourId, nn::colours::zoomTrack);
     mZoomSlider.setColour(NnFlatSlider::fillColourId, nn::colours::zoomFill);
     mZoomSlider.setColour(NnFlatSlider::thumbColourId, nn::colours::zoomThumb);
-    mZoomSlider.setTooltip("Thu phóng Piano Roll theo chiều dọc");
+    mZoomSlider.setTooltip(juce::String::fromUTF8("Thu phóng Piano Roll theo chiều dọc"));
     mZoomSlider.setWantsKeyboardFocus(false);
     mZoomSlider.onValueChange = [this] {
         if (onVerticalZoomChange != nullptr) {
@@ -112,13 +112,13 @@ void StatusBar::paint(juce::Graphics& g)
     const InstrumentMixer* mixer = mProcessor.getInstrumentMixer();
     const auto num_instruments = static_cast<int>(mixer->getEntries().size());
 
-    juce::StringArray segments {juce::String(num_instruments) + " nhạc cụ",
-                                juce::String(mixer->getTotalNoteCount()) + " nốt"};
+    juce::StringArray segments {juce::String(num_instruments) + juce::String::fromUTF8(" nhạc cụ"),
+                                juce::String(mixer->getTotalNoteCount()) + juce::String::fromUTF8(" nốt")};
 
     // The model that produced these notes, which need not be the one selected now.
     if (const auto model_size = mProcessor.getTranscriptionManager()->getTranscriptionModelSize();
         mProcessor.hasTranscription() && model_size.has_value()) {
-        segments.add(juce::String(modelSizeToDisplayName(*model_size)) + " mô hình");
+        segments.add(juce::String(modelSizeToDisplayName(*model_size)) + juce::String::fromUTF8(" mô hình"));
     }
 
     // The range and the duration sit with the counts rather than at the far right, which the zoom
