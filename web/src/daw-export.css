@@ -1,0 +1,11 @@
+/* NOTIQ Stage 5: lightweight DAW help, no change to approved Piano Roll layout. */
+.daw-help-popup{position:absolute;right:12px;top:51px;z-index:202;width:min(470px,calc(100vw - 24px));max-height:calc(100vh - 95px);overflow-y:auto;background:#1d2431;border:1px solid #596581;border-radius:8px;padding:17px;color:#e8ebf4;box-shadow:0 20px 48px #000b;font-size:12px}
+.daw-help-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.daw-help-head strong{font-size:14px}
+.daw-help-head button{border:0;background:transparent;color:#c9d1eb;padding:5px;cursor:pointer}
+.daw-help-popup p{margin:14px 0 0;line-height:1.6;color:#c0cadd}
+.daw-help-popup b,.daw-help-popup strong{color:#ecf0ff}
+.daw-help-popup code{padding:2px 3px;background:#303848;border-radius:3px;font-size:11px;color:#d7dff4}
+.daw-help-popup .daw-help-note{color:#b7c0e3;border-top:1px solid #343c50;padding-top:10px}
+.daw-help-close{width:100%;margin-top:15px;background:#485a90;color:#fff;border:1px solid #7380b5;border-radius:5px;padding:8px 12px;font-weight:650}
+@media(max-width:650px){.daw-help-popup{top:46px;padding:12px;font-size:11px}}
