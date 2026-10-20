@@ -1,5 +1,5 @@
 name: NOTIQ Stage 3 - approved web UI with actual WASM smoke test
-# Retry: bypass Web Audio resampling for already-normalized 16k float32 WAV
+# Retry: preserve direct 16k float32 PCM and fix transferable ArrayBuffer types
 # Retry after adding Vite import.meta.env type references for TypeScript
 on:
   push:
