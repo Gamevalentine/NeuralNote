@@ -55,10 +55,10 @@ jobs:
           try {
             const page=await browser.newPage({acceptDownloads:true});
             const errors=[];
-    let crashed=false;
-    page.on('crash',()=>{crashed=true;console.error('CHROME_RENDERER_CRASH');});
-    browser.on('disconnected',()=>console.error('CHROME_BROWSER_DISCONNECTED'));
-    page.on('requestfailed', req=>console.log('FAILED_REQUEST',req.url().slice(0,160),req.failure()?.errorText));
+            let crashed=false;
+            page.on('crash',()=>{crashed=true;console.error('CHROME_RENDERER_CRASH');});
+            browser.on('disconnected',()=>console.error('CHROME_BROWSER_DISCONNECTED'));
+            page.on('requestfailed', req=>console.log('FAILED_REQUEST',req.url().slice(0,160),req.failure()?.errorText));
             page.on('pageerror',e=>errors.push(e.message));
             page.on('console',msg=>{if(msg.type()==='error')console.log('CHROME_ERROR:',msg.text())});
             // The test feeds the genuine model bytes from the runner's local,
@@ -73,8 +73,8 @@ jobs:
             console.log('UI_TITLE',await page.title());
             await page.locator('input[type=file]').setInputFiles('/tmp/notiq-audio-15s.wav');
             console.log('UI_BEFORE_MODEL', (await page.locator('body').innerText()).slice(0,550));
-    await page.getByRole('button',{name:'Tải mô hình AI'}).click();
-    console.log('UI_MODEL_BUTTON_CLICKED');
+            await page.getByRole('button',{name:'Tải mô hình AI'}).click();
+            console.log('UI_MODEL_BUTTON_CLICKED');
             await page.waitForFunction(()=>{
               const text=document.body.innerText;
               return text.includes('MuScriptor AI Core: ') ||
@@ -82,9 +82,9 @@ jobs:
                 text.includes('Chưa nạp được MuScriptor');
             },null,{timeout:16*60*1000});
             if (crashed) throw Error('Chrome renderer crashed; check memory and browser logs');
-    const ui=await page.locator('body').innerText();
+            const ui=await page.locator('body').innerText();
             console.log('UI_HAS_AI',ui.includes('MuScriptor AI Core:'));
-    console.log('UI_AFTER_INFERENCE',ui.slice(0,900));
+            console.log('UI_AFTER_INFERENCE',ui.slice(0,900));
             console.log('UI_NOTES',ui.match(/MuScriptor AI Core: [^\\n]+/g)?.slice(0,2));
             console.log('JS_PAGE_ERRORS',errors);
             if(errors.length) throw Error('Frontend JS errors: '+JSON.stringify(errors));
