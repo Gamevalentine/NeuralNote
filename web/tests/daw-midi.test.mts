@@ -26,7 +26,7 @@ test('MuScriptor overlapping pitches are preserved as separate real GM tracks', 
   assert.equal(a.notes[0].midi, 60);
   assert.equal(b.notes[0].midi, 60);
   assert.equal(drums.notes[0].midi, 38);
-  assert.equal(drums.notes[0].duration, 0.01);
+  assert.ok(Math.abs(drums.notes[0].duration - 0.01) < 0.001, '10 ms drum note is preserved within 1 ms tick precision');
   assert.notEqual(a.channel, b.channel);
   assert.ok(Math.abs(a.notes[0].time - 0.125) < 0.001, 'MIDI ticks preserve timing within 1 ms');
 });
