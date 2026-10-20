@@ -642,6 +642,15 @@ function App() {
     {
       id: 'tools', label: 'Công cụ', commands: [
         { label: phase === 'analyzing' ? 'Đang nhận diện…' : 'Nhận diện Audio → MIDI', run: () => void startInference(), disabled: !selection || phase === 'analyzing' },
+        { label: 'AI: Basic Pitch (Web)', run: () => setEngineMode('basic'), checked: engineMode === 'basic', disabled: phase === 'analyzing' },
+        { label: nativeReady ? 'AI: MuScriptor C++ (Windows)' : 'MuScriptor C++ (chỉ có trên NOTIQ Windows)',
+          run: () => setEngineMode('muscriptor'), disabled: !nativeReady || phase === 'analyzing',
+          checked: engineMode === 'muscriptor' },
+        ...(nativeReady ? [{
+          label: nativeModelInstalled ? 'MuScriptor Small — đã tải (209 MB)' :
+            nativeDownloading ? 'Đang tải mô hình MuScriptor…' : 'Tải mô hình MuScriptor Small (209 MB)',
+          run: () => void downloadNativeModel(), disabled: nativeDownloading || nativeModelInstalled,
+        }] : []),
         { label: 'Cài đặt NOTIQ', run: () => setShowSettings(true) },
       ],
     },
@@ -753,7 +762,12 @@ function App() {
         <label>Tempo xuất MIDI (BPM)<input type="number" min={40} max={240} value={bpm} onChange={e => setBpm(Math.min(240, Math.max(40, Number(e.target.value) || 120)))} /></label>
         <p>Giới hạn bản thử nghiệm: 45 giây · 50 MB.</p>
         <p>Âm thanh xử lý tại thiết bị của bạn. Mô hình AI tải qua Internet khi cần.</p>
-        <p>Engine MuScriptor đa nhạc cụ của NeuralNote v2 chưa được tích hợp vào bản web này.</p>
+        <p>{nativeReady
+          ? 'Bản Windows có MuScriptor C++ CPU. Mô hình Small 209 MB, giấy phép CC BY-NC 4.0 (phi thương mại).'
+          : 'Cloudflare Web chỉ chạy Basic Pitch; MuScriptor C++ cần ứng dụng Windows được đóng gói native.'}</p>
+        {nativeReady && <p><strong>{nativeModelInstalled ? 'MuScriptor Small đã sẵn sàng' : 'MuScriptor Small chưa tải'}</strong>
+          {!nativeModelInstalled && <button type="button" disabled={nativeDownloading}
+            onClick={() => void downloadNativeModel()}>{nativeDownloading ? 'Đang tải model…' : 'Tải mô hình Small · 209 MB'}</button>}</p>}
       </div>}
       <div className="studio">
         <aside className={"sidebar" + (reviewArea === "tracks" ? " ui-review-highlight" : "")}>
@@ -828,6 +842,10 @@ function App() {
           </div>
           <div className="editor-status">
             <span>{status}</span>
+            <span className="notiq-ai-mode" title={engineMode === 'muscriptor'
+              ? 'MuScriptor C++ native: tách nhạc cụ theo GM · CPU-only' : 'Basic Pitch: nhận diện nốt, chưa nhận diện loại nhạc cụ'}>
+              AI: {engineMode === 'muscriptor' ? 'MuScriptor CPU' : 'Basic Pitch'}
+            </span>
             <span title={soundfontStatus}>{loadingSoundfont ? '◌ Đang tải SoundFont' : '♪ ' + soundfontStatus}</span>
             <span className="piano-edit-hint" title="Thêm nốt: nhấn vào lưới · Di chuyển: kéo nốt · Đổi độ dài: kéo mép phải · Xóa: Del · Hoàn tác: Ctrl+Z">✎ Sửa MIDI · Snap ${SNAP_SECONDS}s · Ctrl+Z</span>
             {phase === 'analyzing' && <div className="progress-track"><div style={{width: progress+'%'}}/></div>}
