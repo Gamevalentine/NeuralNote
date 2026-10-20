@@ -146,7 +146,7 @@ async function transcribeViaNative(input) {
 
 function createWindow() {
   window = new BrowserWindow({
-    title: 'NOTIQ — MuScriptor Desktop Preview', width: 1440, height: 900,
+    title: 'NOTIQ — Giai đoạn 5 · DAW / Kontakt', width: 1440, height: 900,
     minWidth: 980, minHeight: 620, backgroundColor: '#111318',
     autoHideMenuBar: true, show: false,
     webPreferences: {
