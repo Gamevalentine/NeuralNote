@@ -12,9 +12,9 @@
 
 namespace
 {
-const juce::String LOADING_CAPTION = "ĐANG TẢI MÔ HÌNH";
-const juce::String TRANSCRIBING_CAPTION = "ĐANG NHẬN DIỆN";
-const juce::String PAUSED_CAPTION = "TẠM DỪNG";
+const juce::String LOADING_CAPTION = juce::String::fromUTF8("ĐANG TẢI MÔ HÌNH");
+const juce::String TRANSCRIBING_CAPTION = juce::String::fromUTF8("ĐANG NHẬN DIỆN");
+const juce::String PAUSED_CAPTION = juce::String::fromUTF8("TẠM DỪNG");
 constexpr float CAPTION_TRACKING = 0.06f;
 
 constexpr float BAR_CORNER = 2.0f;
