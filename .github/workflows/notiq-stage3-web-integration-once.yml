@@ -1,0 +1,92 @@
+name: NOTIQ Stage 3 - approved web UI with actual WASM smoke test
+on:
+  push:
+    branches:
+      - feature/notiq-stage3-web-integration-performance
+    paths:
+      - .github/workflows/notiq-stage3-web-integration-once.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notiq-stage3-web-actual-wasm
+  cancel-in-progress: true
+
+jobs:
+  web-inference:
+    name: Build approved React UI and transcribe actual licensed WAV in browser
+    runs-on: ubuntu-24.04
+    timeout-minutes: 28
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Install UI packages and compile types + Vite assets
+        run: |
+          npm install --prefix web --no-fund --no-audit
+          VITE_NOTIQ_WEB_AI=1 npm run --prefix web build
+          test -s web/dist/notiq-core/notiq-ai-core.wasm
+          test -s web/dist/notiq-core/notiq-ai-core.js
+          node --test notiq-ai-core/tests/source-integrity.test.mjs
+      - name: Download pinned CC BY 4.0 fixture and GGUF
+        run: |
+          curl -fsSL --retry 3 \
+            'https://raw.githubusercontent.com/DamRsn/muscriptor.cpp/c8adc019677ed3479fa3c22c1a117d662382f347/testdata/audio/fixture_3chunks_16k.wav' \
+            -o /tmp/notiq-audio-15s.wav
+          test "$(git hash-object /tmp/notiq-audio-15s.wav)" = acfa9329d65816633abc3ee5cc3c7662bf403669
+          curl -fL --retry 3 --connect-timeout 30 --max-time 600 \
+            'https://huggingface.co/DamRsn/muscriptor-gguf/resolve/d7045f94e8b19427f4ff9542975035e66596e51c/v1/muscriptor-small-f16.gguf' \
+            -o /tmp/notiq-original-small.gguf
+          echo '925f55af65a20ebc4f8b45ceaf095a12b72493d436cb112623cd0041a1af23d4  /tmp/notiq-original-small.gguf' | sha256sum -c -
+      - name: Test approved NOTIQ interface with real AI Core in Chromium
+        timeout-minutes: 18
+        run: |
+          npm install --prefix /tmp/notiq-playwright --no-fund --no-audit playwright-core@1.56.1
+          npm run --prefix web preview -- --port 4173 >/tmp/notiq-vite-preview.log 2>&1 &
+          sleep 4
+          timeout 17m node --input-type=module <<'JS'
+          import { chromium } from '/tmp/notiq-playwright/node_modules/playwright-core/index.mjs';
+          import { readFileSync } from 'node:fs';
+          const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',
+            headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
+          try {
+            const page=await browser.newPage({acceptDownloads:true});
+            const errors=[];
+            page.on('pageerror',e=>errors.push(e.message));
+            page.on('console',msg=>{if(msg.type()==='error')console.log('CHROME_ERROR:',msg.text())});
+            // The test feeds the genuine model bytes from the runner's local,
+            // SHA-verified download; web still uses the pinned official URL.
+            // Prevent redundant 209MB downloads without altering model bytes.
+            const source=readFileSync('/tmp/notiq-original-small.gguf');
+            await page.route('https://huggingface.co/DamRsn/muscriptor-gguf/**',async route=>{
+              await route.fulfill({status:200,contentType:'application/octet-stream',
+                headers:{'access-control-allow-origin':'*'},body:source});
+            });
+            await page.goto('http://127.0.0.1:4173/',{waitUntil:'domcontentloaded'});
+            console.log('UI_TITLE',await page.title());
+            await page.locator('input[type=file]').setInputFiles('/tmp/notiq-audio-15s.wav');
+            await page.getByRole('button',{name:'Tải mô hình AI'}).click();
+            await page.waitForFunction(()=>{
+              const text=document.body.innerText;
+              return text.includes('MuScriptor AI Core: ') ||
+                text.includes('Không thể nhận diện') ||
+                text.includes('Chưa nạp được MuScriptor');
+            },null,{timeout:16*60*1000});
+            const ui=await page.locator('body').innerText();
+            console.log('UI_HAS_AI',ui.includes('MuScriptor AI Core:'));
+            console.log('UI_NOTES',ui.match(/MuScriptor AI Core: [^\\n]+/g)?.slice(0,2));
+            console.log('JS_PAGE_ERRORS',errors);
+            if(errors.length) throw Error('Frontend JS errors: '+JSON.stringify(errors));
+            if(!ui.includes('MuScriptor AI Core: 451 nốt'))throw Error('NOTIQ UI recognition failed: '+ui.slice(0,1700));
+            const exportMenu=page.getByRole('button',{name:'Xuất',exact:true}).first();
+            await exportMenu.click();
+            const download=page.waitForEvent('download');
+            await page.getByRole('button',{name:/MIDI đa track/}).click();
+            const file=await download;
+            console.log('UI_EXPORTED_FILENAME',file.suggestedFilename());
+            if(!file.suggestedFilename().endsWith('.mid'))throw Error('Real UI did not export MIDI');
+            console.log('NOTIQ_APPROVED_UI_REAL_WASM_PASS');
+          }finally{await browser.close();}
+          JS
