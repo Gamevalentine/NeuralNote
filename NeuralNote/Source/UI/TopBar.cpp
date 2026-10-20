@@ -35,7 +35,7 @@ constexpr float LABEL_TRACKING = 0.08f;
 constexpr int MODEL_BUTTON_PADDING = 11;
 constexpr float MODEL_LABEL_TRACKING = 0.09f;
 
-juce::String modelButtonLabel(const char* inModelName)
+juce::String modelButtonLabel(const juce::String& inModelName)
 {
     return (juce::String::fromUTF8("MÔ HÌNH: ") + juce::String(inModelName)).toUpperCase();
 }
