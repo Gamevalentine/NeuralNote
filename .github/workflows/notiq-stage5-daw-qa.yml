@@ -1,0 +1,49 @@
+name: NOTIQ Stage 5 DAW MIDI Handoff QA
+
+on:
+  push:
+    branches:
+      - feature/notiq-stage5-daw-midi-export
+    paths:
+      - .github/workflows/notiq-stage5-daw-qa.yml
+      - web/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notiq-stage5-daw-qa
+  cancel-in-progress: true
+
+jobs:
+  daw-midi-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout Stage 5 feature
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        working-directory: web
+        run: npm install --no-audit --no-fund
+      - name: DAW multitrack MIDI and ZIP roundtrip regression tests
+        working-directory: web
+        run: npm run test:daw
+      - name: Piano Roll editing regression tests
+        working-directory: web
+        run: npm run test:piano
+      - name: MuScriptor GM program protocol tests
+        working-directory: web
+        run: node --experimental-strip-types --test tests/muscriptor-protocol.test.mts
+      - name: SoundFont instrument tests
+        working-directory: web
+        run: npm run test:soundfont
+      - name: Strict TypeScript and production Vite build
+        working-directory: web
+        run: npm run build
