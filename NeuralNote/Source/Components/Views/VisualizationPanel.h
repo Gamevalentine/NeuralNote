@@ -36,6 +36,9 @@ public:
 
     void resized() override;
 
+    /** Toggle the extra transport/utility toolbar without disabling its commands. */
+    void setCompactMode(bool inCompact);
+
     void clear();
 
     void repaintPianoRoll();
