@@ -1,0 +1,43 @@
+name: NOTIQ Stage 3 SoundFont QA
+
+on:
+  push:
+    branches:
+      - feature/notiq-web-stage3-soundfont
+    paths:
+      - .github/workflows/notiq-soundfont-qa.yml
+      - web/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notiq-soundfont-stage3-qa
+  cancel-in-progress: true
+
+jobs:
+  soundfont-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout Stage 3 preview
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Web dependencies
+        working-directory: web
+        run: npm install --no-audit --no-fund
+      - name: Test Piano Roll notes and history
+        working-directory: web
+        run: npm run test:piano
+      - name: Test SoundFont presets
+        working-directory: web
+        run: npm run test:soundfont
+      - name: Typecheck and bundle Web Audio + SoundFont
+        working-directory: web
+        run: npm run build
