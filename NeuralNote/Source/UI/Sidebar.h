@@ -33,6 +33,9 @@ public:
 
     void paint(juce::Graphics& g) override;
 
+    /** Render the three reference pitch bands only while no real mixer strips exist. */
+    void paintOverChildren(juce::Graphics& g) override;
+
     void resized() override;
 
     /** Re-derives whether the instrument picker can be opened, from the processor's state. */
