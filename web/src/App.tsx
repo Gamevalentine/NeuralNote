@@ -1,9 +1,10 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { DragEvent } from 'react';
+import type { DragEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { AudioWaveform, CircleHelp, Gauge, Headphones, Info, LoaderCircle,
   Music, Settings2, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { fmt, generateDemo, groupFor, GROUPS, makeMidi, noteName, readAudio, transcribe } from './audio';
+import { addNote, copyNotes, removeNote, sameNotes, SNAP_SECONDS, snapSeconds, updateNote, clamp } from './pianoEdit';
 import type { Note, AudioInfo, PitchGroup } from './audio';
 
 type Selection = { file: Blob; name: string; url: string };
@@ -12,6 +13,10 @@ type PlaybackMode = 'original' | 'midi' | 'mix';
 type MenuKey = 'file' | 'edit' | 'play' | 'track' | 'instrument' | 'tools' | 'view' | 'export';
 type MenuAction = { label: string; run: () => void; disabled?: boolean; checked?: boolean; shortcut?: string };
 type AppMenu = { id: MenuKey; label: string; commands: MenuAction[] };
+type NoteGesture = {
+  pointerId: number; index: number; kind: 'move' | 'resize';
+  startX: number; startY: number; original: Note; before: Note[];
+};
 const PITCH_ROW = 16;
 // UI-only review of the future Desktop layout. This does not enable MuScriptor in the browser.
 const desktopReview = new URLSearchParams(window.location.search).get('review') === 'desktop';
@@ -21,6 +26,8 @@ function App() {
   const [selection, setSelection] = useState<Selection | null>(null);
   const [info, setInfo] = useState<AudioInfo | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
+  const [selectedNote, setSelectedNote] = useState<number | null>(null);
+  const [historyTick, setHistoryTick] = useState(0);
   const [phase, setPhase] = useState<Phase>('empty');
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState('Chưa tải tệp âm thanh');
@@ -51,10 +58,15 @@ function App() {
   const firedNotes = useRef<Set<number>>(new Set());
   const previousTime = useRef(0);
   const selectionRef = useRef<Selection | null>(null);
+  const notesRef = useRef<Note[]>([]);
+  const undoRef = useRef<Note[][]>([]);
+  const redoRef = useRef<Note[][]>([]);
+  const gestureRef = useRef<NoteGesture | null>(null);
 
   useEffect(() => {
     selectionRef.current = selection;
   }, [selection]);
+  useEffect(() => { notesRef.current = notes; }, [notes]);
   useEffect(() => () => {
     if (selectionRef.current) URL.revokeObjectURL(selectionRef.current.url);
     if (audioCtx.current) void audioCtx.current.close().catch(() => undefined);
@@ -92,6 +104,10 @@ function App() {
     [muted, solo],
   );
   const visibleNotes = useMemo(() => notes.filter(n => activeGroups.has(groupFor(n.pitchMidi))), [notes, activeGroups]);
+  const visibleIndexedNotes = useMemo(() => notes.map((note, index) => ({note, index}))
+    .filter(({note}) => activeGroups.has(groupFor(note.pitchMidi))), [notes, activeGroups]);
+  const canUndo = historyTick >= 0 && undoRef.current.length > 0;
+  const canRedo = historyTick >= 0 && redoRef.current.length > 0;
   const summary = useMemo(() => {
     if (!notes.length) return 'Chưa có nốt';
     const pitches = notes.map(n => n.pitchMidi);
