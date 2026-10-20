@@ -8,6 +8,8 @@ import { addNote, copyNotes, removeNote, sameNotes, SNAP_SECONDS, snapSeconds, u
 import type { Note, AudioInfo, PitchGroup } from './audio';
 import { DEFAULT_INSTRUMENTS, INSTRUMENTS, instrumentProgram, playSoundfontNote, prepareInstrument } from './soundfont';
 import type { InstrumentId, InstrumentSelection } from './soundfont';
+import { nativeInstrumentPrograms, nativeProgramName } from './muscriptorProtocol';
+import { nativeBridgeAvailable, runMuScriptor } from './muscriptorNative';
 
 type Selection = { file: Blob; name: string; url: string };
 type Phase = 'empty' | 'ready' | 'analyzing' | 'complete' | 'error';
@@ -31,6 +33,13 @@ function App() {
   const [selectedNote, setSelectedNote] = useState<number | null>(null);
   const [historyTick, setHistoryTick] = useState(0);
   const [phase, setPhase] = useState<Phase>('empty');
+  const [engineMode, setEngineMode] = useState<'basic' | 'muscriptor'>('basic');
+  const [nativeReady, setNativeReady] = useState(false);
+  const [nativeModelInstalled, setNativeModelInstalled] = useState(false);
+  const [nativeDownloading, setNativeDownloading] = useState(false);
+  const [nativeMuted, setNativeMuted] = useState<Set<number>>(new Set());
+  const [nativeSolo, setNativeSolo] = useState<number | null>(null);
+  const [nativeGain, setNativeGain] = useState<Record<number, number>>({});
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState('Chưa tải tệp âm thanh');
   const [error, setError] = useState('');
@@ -73,6 +82,17 @@ function App() {
     selectionRef.current = selection;
   }, [selection]);
   useEffect(() => { notesRef.current = notes; }, [notes]);
+  useEffect(() => {
+    if (!nativeBridgeAvailable()) return;
+    let mounted = true;
+    void window.notiqNative!.status().then(native => {
+      if (!mounted || !native.available) return;
+      setNativeReady(true);
+      setNativeModelInstalled(native.modelInstalled);
+      setEngineMode('muscriptor');
+    }).catch(() => {});
+    return () => { mounted = false; };
+  }, []);
   useEffect(() => () => {
     if (selectionRef.current) URL.revokeObjectURL(selectionRef.current.url);
     if (audioCtx.current) void audioCtx.current.close().catch(() => undefined);
@@ -109,9 +129,15 @@ function App() {
     () => new Set(GROUPS.filter(g => !muted.has(g.id) && (!solo || solo === g.id)).map(g => g.id)),
     [muted, solo],
   );
-  const visibleNotes = useMemo(() => notes.filter(n => activeGroups.has(groupFor(n.pitchMidi))), [notes, activeGroups]);
-  const visibleIndexedNotes = useMemo(() => notes.map((note, index) => ({note, index}))
-    .filter(({note}) => activeGroups.has(groupFor(note.pitchMidi))), [notes, activeGroups]);
+  const hasNativeTracks = notes.some(n => n.program !== undefined);
+  const nativePrograms = useMemo(() => nativeInstrumentPrograms(notes), [notes]);
+  const isNoteAudible = (n: Note) => n.program !== undefined
+    ? !nativeMuted.has(n.program) && (nativeSolo === null || nativeSolo === n.program)
+    : activeGroups.has(groupFor(n.pitchMidi));
+  const visibleNotes = useMemo(() => notes.filter(isNoteAudible),
+    [notes, activeGroups, nativeMuted, nativeSolo]);
+  const visibleIndexedNotes = useMemo(() => notes.map((note,index) => ({note,index})).filter(({note}) => isNoteAudible(note)),
+    [notes, activeGroups, nativeMuted, nativeSolo]);
   const canUndo = historyTick >= 0 && undoRef.current.length > 0;
   const canRedo = historyTick >= 0 && redoRef.current.length > 0;
   const summary = useMemo(() => {
