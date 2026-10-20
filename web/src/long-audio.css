@@ -6,3 +6,17 @@
 .song-upload-btn:focus-visible{outline:2px solid #afc9ff;outline-offset:2px}
 .song-upload-btn:disabled{opacity:.45;cursor:not-allowed}
 @media(max-width:820px){.song-upload-btn{font-size:0;gap:0;padding:5px 7px}.song-upload-btn svg{width:16px;height:16px}}
+
+/* Auto-recognition is visible while running; readable even for long songs. */
+.ai-running-indicator{display:flex;align-items:center;gap:7px;min-width:158px;max-width:240px;
+ color:#d9e7ff;font-size:11px;font-weight:650;white-space:nowrap}
+.ai-running-indicator svg{flex:none;color:#b7d1ff}
+.ai-running-indicator span{white-space:nowrap}
+.ai-running-meter{height:4px;flex:1;min-width:24px;max-width:60px;border-radius:99px;background:#374056;overflow:hidden}
+.ai-running-meter>div{height:100%;background:#9cbcff;transition:width .15s ease}
+.ai-retry-button{border:1px solid #7a9acb;background:#31405e;color:#f1f5ff;
+ padding:6px 9px;font-size:11px;font-weight:650;border-radius:5px;cursor:pointer;white-space:nowrap}
+.ai-retry-button:hover:not(:disabled){background:#445c83}
+.ai-retry-button:disabled{opacity:.45;cursor:not-allowed}
+@media(max-width:1100px){.ai-running-meter{display:none}.ai-running-indicator{min-width:0}.ai-running-indicator span{max-width:132px;overflow:hidden;text-overflow:ellipsis}}
+@media(max-width:820px){.ai-running-indicator span{font-size:9px;max-width:70px}.ai-retry-button{font-size:9px;padding:5px}}
