@@ -33,6 +33,7 @@ public:
     void updateEnablements();
 
     NnFlatButton& getClearButton() { return mClearButton; }
+    NnFlatButton& getExportButton() { return mExportButton; }
 
 private:
     void _exportMidiFile();
