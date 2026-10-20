@@ -47,10 +47,7 @@ void TimeRuler::paint(juce::Graphics& g)
     g.fillAll(nn::colours::bgPanel);
     nn::drawBottomBorder(g, getLocalBounds(), nn::colours::divSoft);
 
-    if (!mProcessor->canPlay()) {
-        return;
-    }
-
+    // Keep the time axis visible while there is no audio, just like NOTIQ Web.
     const double pixels_per_second = mBaseNumPixelsPerSecond * mZoomLevel;
     const double division = _chooseDivision();
     const auto width = static_cast<double>(getWidth());
@@ -73,7 +70,8 @@ void TimeRuler::paint(juce::Graphics& g)
         const int seconds = static_cast<int>(time) % 60;
 
         g.setColour(nn::colours::textFaint);
-        g.drawText(juce::String(minutes) + ":" + juce::String(seconds).paddedLeft('0', 2),
+        g.drawText(juce::String(minutes > 0 ? juce::String(minutes) + ":" + juce::String(seconds).paddedLeft('0', 2)
+                                           : juce::String(seconds) + "s"),
                    juce::Rectangle<int>(static_cast<int>(x) + LABEL_INSET, 0, 40, getHeight()),
                    juce::Justification::centredLeft);
     }
