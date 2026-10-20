@@ -14,6 +14,10 @@ set(MUSCRIPTOR_METAL OFF CACHE BOOL "" FORCE)
 set(MUSCRIPTOR_NATIVE OFF CACHE BOOL "" FORCE)
 set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
 set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
+# The pinned ggml version has a dedicated wasm32 CPU backend; avoid native
+# x86 variants. We need a separate .wasm file for the module Worker.
+set(GGML_WASM_SINGLE_FILE OFF CACHE BOOL "" FORCE)
+set(GGML_CPU_ALL_VARIANTS OFF CACHE BOOL "" FORCE)
 
 if(NOT EXISTS "${CMAKE_CURRENT_LIST_DIR}/vendor/muscriptor/cpp/CMakeLists.txt")
   message(FATAL_ERROR "NOTIQ source snapshot missing. Run scripts/snapshot_source.py first.")
@@ -30,6 +34,8 @@ target_link_options(notiq_ai_core PRIVATE
   "SHELL:-sALLOW_MEMORY_GROWTH=1"
   "SHELL:-sMAXIMUM_MEMORY=2147483648"
   "SHELL:-sINITIAL_MEMORY=268435456"
+  "SHELL:-sSTACK_SIZE=8388608"
+  "SHELL:-sASSERTIONS=1"
   "SHELL:-sFILESYSTEM=1"
   "SHELL:-sEXPORTED_FUNCTIONS=['_malloc','_free','_notiq_core_load_model','_notiq_core_transcribe','_notiq_core_progress','_notiq_core_error','_notiq_core_result_json','_notiq_core_unload']"
   "SHELL:-sEXPORTED_RUNTIME_METHODS=['FS','UTF8ToString','stringToUTF8','lengthBytesUTF8']"
