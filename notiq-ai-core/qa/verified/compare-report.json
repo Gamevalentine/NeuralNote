@@ -1,0 +1,12 @@
+{
+  "fixture": "Jon Worthy and the Bends - You Drive Me Insane (first 15 sec), CC BY 4.0",
+  "nativeNotes": 451,
+  "wasmNotes": 451,
+  "matchedNotes": 451,
+  "matchingRatio": 1,
+  "countRatio": 1,
+  "maxMatchedCombinedTimingDeviationSeconds": 0,
+  "midiBytes": 3840,
+  "comparator": "same pitch, instrument and drum flag; onset <=0.15s, duration <=0.2s",
+  "passed": true
+}

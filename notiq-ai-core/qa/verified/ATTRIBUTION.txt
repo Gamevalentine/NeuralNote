@@ -1,0 +1,6 @@
+NOTIQ Stage 3 real 15-second music Audio -> MIDI proof.
+Source: You Drive Me Insane by Jon Worthy and the Bends, Only A Dream.
+Audio excerpt licensed CC BY 4.0, https://freemusicarchive.org/music/Jon_Worthy_and_the_Bends/Only_A_Dream/You_Drive_Me_Insane/ .
+Notes derived from the original 15 seconds using MuScriptor Small GGUF CC BY-NC 4.0 (noncommercial testing).
+These are model-estimated notes and may not be an exact transcription.
+Native and WASM compared with the criteria in compare.mjs; no original audio or GGUF weights committed.

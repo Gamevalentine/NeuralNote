@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8">
+<title>NOTIQ Stage 3 — real WASM audio transcription</title>
+</head><body>
+<h1>NOTIQ AI Core — real audio test, not the production web UI</h1>
+<input id="model" type="file" accept=".gguf">
+<input id="audio" type="file" accept=".wav">
+<button id="run">Recognize 15-second CC BY 4.0 audio</button>
+<pre id="status">Chưa bắt đầu</pre>
+<script type="module">
+import { notesToMidi } from './midi-export.mjs';
+const state = {state: 'idle'};
+window.__notiqStage3 = state;
+const status = document.getElementById('status');
+const set = (phase, note) => {
+  state.state = phase;
+  status.textContent = note;
+  console.log('STAGE3_' + phase.toUpperCase(), note);
+};
+function readFloatWave(buffer) {
+  const v = new DataView(buffer), ascii = (start, count) =>
+    String.fromCharCode(...new Uint8Array(buffer, start, count));
+  if (buffer.byteLength < 44 || ascii(0,4) !== 'RIFF' || ascii(8,4) !== 'WAVE')
+    throw Error('Không phải tệp WAV RIFF');
+  let encoding, channels, rate, bits, begin = -1, length = 0;
+  for (let p = 12; p + 8 <= buffer.byteLength;) {
+    const id = ascii(p,4), size = v.getUint32(p+4,true);
+    const start = p+8;
+    if (size > buffer.byteLength-start) throw Error('WAV bị cắt ngắn');
+    if (id === 'fmt ') {
+      if (size < 16) throw Error('WAV thiếu fmt chunk');
+      encoding = v.getUint16(start,true);
+      channels = v.getUint16(start+2,true);
+      rate = v.getUint32(start+4,true);
+      bits = v.getUint16(start+14,true);
+    }
+    if (id === 'data') {begin=start;length=size;}
+    p=start+size+(size%2);
+  }
+  if (encoding !== 3 || channels !== 1 || rate !== 16000 || bits !== 32 ||
+      begin < 0 || length < 4 || length%4 || length > 15*60*16000*4)
+    throw Error('Chỉ chấp nhận WAV float32 mono 16kHz ≤15 phút');
+  // WAV data chunk is not necessarily 4-byte aligned: DataView -> Float32Array.
+  const pcm = new Float32Array(length / 4);
+  for (let i=0;i<pcm.length;i++) {
+    const sample = v.getFloat32(begin+i*4,true);
+    if (!Number.isFinite(sample) || Math.abs(sample)>1.01) throw Error('WAV sample không hợp lệ');
+    pcm[i]=sample;
+  }
+  return pcm;
+}
+let worker;
+document.getElementById('run').onclick = async () => {
+  try {
+    state.state = 'starting';
+    const modelFile = document.getElementById('model').files[0];
+    const audioFile = document.getElementById('audio').files[0];
+    if (!modelFile || !audioFile) throw Error('Cần chọn GGUF + WAV thật');
+    const pcm = readFloatWave(await audioFile.arrayBuffer());
+    state.audioSamples=pcm.length;
+    set('loading','Đang nạp GGUF MuScriptor');
+    const model = await modelFile.arrayBuffer();
+    worker = new Worker('./worker.mjs',{type:'module'});
+    worker.onerror = event => set('error','Worker: '+event.message);
+    worker.onmessage = ({data}) => {
+      if (data.type === 'progress') return;
+      if (data.type === 'error') return set('error',data.message);
+      if (data.type === 'ready') {
+        set('transcribing','Đã nạp GGUF, đang nhận diện âm thanh thật');
+        worker.postMessage({type:'transcribe',sampleRate:16000,pcm:pcm.buffer},[pcm.buffer]);
+      } else if (data.type === 'complete') {
+        try {
+          const result = data.result;
+          if (!result?.notes?.length) throw Error('MuScriptor trả về 0 nốt trên nhạc thật');
+          const midi = notesToMidi(result);
+          state.result = result;
+          state.midiBytes = [...midi];
+          state.midiLength = midi.length;
+          state.notes = result.notes.length;
+          set('complete', 'WASM nhận diện '+result.notes.length+' nốt; xuất MIDI '+midi.length+' bytes');
+        } catch(e) { set('error',e.message); }
+      }
+    };
+    worker.postMessage({type:'init',moduleUrl:new URL('../notiq-ai-core.js',import.meta.url).href,model},[model]);
+  } catch(error){set('error',error.message || String(error));}
+};
+</script></body></html>

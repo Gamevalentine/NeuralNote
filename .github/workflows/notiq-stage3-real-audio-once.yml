@@ -1,0 +1,128 @@
+name: NOTIQ Stage 3 - actual licensed audio to MIDI QA
+on:
+  push:
+    branches:
+      - test/notiq-stage3-real-audio-20261021
+    paths:
+      - .github/workflows/notiq-stage3-real-audio-once.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: notiq-stage3-one-shot-real-audio
+  cancel-in-progress: true
+
+jobs:
+  real-audio-wasm-vs-native:
+    name: MuScriptor native vs verified NOTIQ WASM 15-second audio
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact NOTIQ experimental branch
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          persist-credentials: true
+      - name: Verify source and existing WASM
+        run: |
+          node --test notiq-ai-core/tests/core-contract.test.mjs notiq-ai-core/tests/source-integrity.test.mjs
+          test -s notiq-ai-core/dist/notiq-ai-core.wasm
+          test -s notiq-ai-core/dist/notiq-ai-core.js
+      - name: Checkout exact pinned ggml for native MuScriptor
+        run: |
+          git init /tmp/notiq-ggml
+          git -C /tmp/notiq-ggml remote add origin https://github.com/ggml-org/ggml.git
+          git -C /tmp/notiq-ggml fetch --depth=1 origin e91ded11bdcd78c42f9c8d3978ff6686eb4c1226
+          git -C /tmp/notiq-ggml checkout --detach FETCH_HEAD
+          test "$(git -C /tmp/notiq-ggml rev-parse HEAD)" = "e91ded11bdcd78c42f9c8d3978ff6686eb4c1226"
+
+      - name: Build true native MuScriptor reference executable
+        run: |
+          cmake -S notiq-ai-core/qa/native -B /tmp/notiq-native-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DFETCHCONTENT_SOURCE_DIR_GGML=/tmp/notiq-ggml -DMUSCRIPTOR_VULKAN=OFF -DMUSCRIPTOR_METAL=OFF
+          cmake --build /tmp/notiq-native-build --target notiq-native-reference --parallel 2
+          /tmp/notiq-native-build/notiq-native-reference --version
+
+      - name: Obtain CC BY 4.0 licensed original 15-second music excerpt
+        run: |
+          curl -fsSL --retry 3 \
+            'https://raw.githubusercontent.com/DamRsn/muscriptor.cpp/c8adc019677ed3479fa3c22c1a117d662382f347/testdata/audio/fixture_3chunks_16k.wav' \
+            -o /tmp/notiq-licensed-15s.wav
+          test "$(stat -c %s /tmp/notiq-licensed-15s.wav)" = 960080
+          test "$(git hash-object /tmp/notiq-licensed-15s.wav)" = acfa9329d65816633abc3ee5cc3c7662bf403669
+          /tmp/notiq-native-build/notiq-native-reference --probe-wav /tmp/notiq-licensed-15s.wav
+
+      - name: Fetch real GGUF weights for ephemeral local test ONLY
+        run: |
+          curl -fL --retry 3 --connect-timeout 30 --max-time 600 \
+            'https://huggingface.co/DamRsn/muscriptor-gguf/resolve/d7045f94e8b19427f4ff9542975035e66596e51c/v1/muscriptor-small-f16.gguf' \
+            -o /tmp/notiq-small-f16.gguf
+          echo '925f55af65a20ebc4f8b45ceaf095a12b72493d436cb112623cd0041a1af23d4  /tmp/notiq-small-f16.gguf' | sha256sum -c -
+          test "$(stat -c %s /tmp/notiq-small-f16.gguf)" = 209425152
+
+      - name: Recognize 15 seconds of real music with original native engine
+        timeout-minutes: 12
+        run: |
+          mkdir -p /tmp/notiq-stage3
+          timeout 11m /tmp/notiq-native-build/notiq-native-reference \
+            /tmp/notiq-licensed-15s.wav /tmp/notiq-small-f16.gguf /tmp/notiq-stage3/native.json
+          node -e "let d=require('/tmp/notiq-stage3/native.json');if (!d.notes.length) process.exit(1);console.log('REAL_NATIVE_NOTES',d.notes.length,JSON.stringify(d.notes.slice(0,3)))"
+
+      - name: Recognize same audio in real NOTIQ WebAssembly on Chromium and export MIDI
+        timeout-minutes: 19
+        run: |
+          mkdir -p notiq-ai-core/.build-wasm/web
+          cp notiq-ai-core/dist/notiq-ai-core.js notiq-ai-core/dist/notiq-ai-core.wasm notiq-ai-core/.build-wasm/
+          cp notiq-ai-core/web/worker.mjs notiq-ai-core/web/midi-export.mjs notiq-ai-core/.build-wasm/web/
+          cp notiq-ai-core/qa/browser.html notiq-ai-core/.build-wasm/web/browser.html
+          npm install --prefix /tmp/notiq-playwright --no-fund --no-audit playwright-core@1.56.1
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory notiq-ai-core/.build-wasm >/tmp/notiq-stage3-web.log 2>&1 &
+          sleep 3
+          timeout 18m node --input-type=module <<'JS'
+          import { chromium } from '/tmp/notiq-playwright/node_modules/playwright-core/index.mjs';
+          import { writeFileSync } from 'node:fs';
+          const started=Date.now();
+          const browser=await chromium.launch({
+            executablePath:'/usr/bin/google-chrome',headless:true,
+            args:['--no-sandbox','--disable-dev-shm-usage','--js-flags=--max-old-space-size=8192']
+          });
+          try {
+            const page=await browser.newPage();
+            page.on('pageerror',e=>console.error('CHROME_PAGE_ERROR:',e.message));
+            page.on('console',m=>{if(/STAGE3|WASM/.test(m.text()))console.log('CHROME',m.text())});
+            await page.goto('http://127.0.0.1:4173/web/browser.html',{waitUntil:'domcontentloaded'});
+            await page.locator('#model').setInputFiles('/tmp/notiq-small-f16.gguf');
+            await page.locator('#audio').setInputFiles('/tmp/notiq-licensed-15s.wav');
+            await page.locator('#run').click();
+            await page.waitForFunction(()=>['complete','error'].includes(window.__notiqStage3?.state),null,{timeout:16*60*1000});
+            const x=await page.evaluate(()=>window.__notiqStage3);
+            console.log('WASM_AUDIO_TEST',x.state,'samples',x.audioSamples,'notes',x.notes,'elapsedMs',Date.now()-started);
+            if(x.state!=='complete'||!x.result?.notes?.length||!x.midiBytes?.length)throw Error('True wasm inference did not complete: '+JSON.stringify(x));
+            writeFileSync('/tmp/notiq-stage3/wasm.json',JSON.stringify(x.result));
+            writeFileSync('/tmp/notiq-stage3/recognized.mid',Buffer.from(x.midiBytes));
+            console.log('NOTIQ_REAL_AUDIO_WASM_COMPLETE',JSON.stringify(x.result.notes.slice(0,3)));
+          } finally{await browser.close();}
+          JS
+
+      - name: Compare real native/WASM notes and validate generated MIDI
+        run: |
+          node notiq-ai-core/qa/compare.mjs /tmp/notiq-stage3/native.json /tmp/notiq-stage3/wasm.json /tmp/notiq-stage3/recognized.mid
+
+      - name: Preserve only real-MIDI QA results and attribution on isolated branch
+        if: success()
+        run: |
+          mkdir -p notiq-ai-core/qa/verified
+          cp /tmp/notiq-stage3/recognized.mid notiq-ai-core/qa/verified/notiq-15-second-demo.mid
+          cp /tmp/notiq-stage3/wasm-qa-summary.json notiq-ai-core/qa/verified/compare-report.json
+          printf '%s\n' 'NOTIQ Stage 3 real 15-second music Audio -> MIDI proof.' \
+            'Source: You Drive Me Insane by Jon Worthy and the Bends, Only A Dream.' \
+            'Audio excerpt licensed CC BY 4.0, https://freemusicarchive.org/music/Jon_Worthy_and_the_Bends/Only_A_Dream/You_Drive_Me_Insane/ .' \
+            'Notes derived from the original 15 seconds using MuScriptor Small GGUF CC BY-NC 4.0 (noncommercial testing).' \
+            'These are model-estimated notes and may not be an exact transcription.' \
+            'Native and WASM compared with the criteria in compare.mjs; no original audio or GGUF weights committed.' \
+            > notiq-ai-core/qa/verified/ATTRIBUTION.txt
+          git add notiq-ai-core/qa/verified
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "test(notiq): verified real 15-second audio-to-MIDI [skip ci]"
+          git push origin HEAD:refs/heads/test/notiq-stage3-real-audio-20261021
