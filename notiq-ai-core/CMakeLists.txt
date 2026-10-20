@@ -44,6 +44,6 @@ target_link_options(notiq_ai_core PRIVATE
   "SHELL:-sASSERTIONS=1"
   "SHELL:-sFILESYSTEM=1"
   "SHELL:-sEXPORTED_FUNCTIONS=['_malloc','_free','_notiq_core_load_model','_notiq_core_transcribe','_notiq_core_progress','_notiq_core_error','_notiq_core_result_json','_notiq_core_unload']"
-  "SHELL:-sEXPORTED_RUNTIME_METHODS=['FS','UTF8ToString','stringToUTF8','lengthBytesUTF8']"
+  "SHELL:-sEXPORTED_RUNTIME_METHODS=['FS','UTF8ToString','stringToUTF8','lengthBytesUTF8','HEAPU8','HEAPF32']"
 )
 set_target_properties(notiq_ai_core PROPERTIES OUTPUT_NAME "notiq-ai-core" SUFFIX ".js")
