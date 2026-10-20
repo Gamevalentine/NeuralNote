@@ -800,6 +800,23 @@ function App() {
             title="Mở bài hát đầy đủ (WAV, MP3, FLAC, M4A… · tối đa 15 phút / 200 MB)">
             <Music size={14}/> Tải bài hát
           </button>
+          {phase === 'analyzing' && <div className="ai-running-indicator" role="status" aria-live="polite"
+            aria-label={'AI đang nhận diện bài hát, ' + progress + ' phần trăm'}
+            title={status}>
+            <LoaderCircle size={14} className="spin"/>
+            <span>Đang nhận diện {progress}%</span>
+            <div className="ai-running-meter"><div style={{width: progress + '%'}}/></div>
+          </div>}
+          {(phase === 'ready' || phase === 'error') && selection && <button type="button"
+            className="ai-retry-button" disabled={busyLoading || nativeDownloading}
+            title="Chạy AI nhận diện âm thanh thành các nốt MIDI"
+            onClick={startInference}>Nhận diện nốt</button>}
+          {nativeReady && engineMode === 'muscriptor' && !nativeModelInstalled &&
+            <button type="button" className="ai-retry-button" disabled={nativeDownloading}
+              title="Tải mô hình MuScriptor Small (~209 MB) để nhận diện nhạc cụ"
+              onClick={() => void downloadNativeModel()}>
+              {nativeDownloading ? 'Đang tải mô hình…' : 'Tải mô hình AI'}
+            </button>}
           <span className="lunor">LUNOR <b>MUSIC</b></span>
           <a href="https://github.com/Gamevalentine/NeuralNote" target="_blank" rel="noreferrer">Mã nguồn ↗</a>
           {desktopReview && <button type="button" className="desktop-review-toggle" aria-expanded={showDesktopReview} onClick={() => { setActiveMenu(null); setShowSettings(false); setShowDesktopReview(value => !value); }}><Info size={14}/> Duyệt Desktop <span>UI v0.3</span></button>}
