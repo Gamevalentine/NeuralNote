@@ -1,0 +1,74 @@
+.osbar{height:44px;min-height:44px;max-height:44px}
+.app-menu-items{display:flex;flex:1}
+.menu-trigger{background:transparent;color:#ddd;border:0;padding:9px}
+.menu-dropdown{position:fixed;background:#20242d;z-index:9999}
+
+.osbar{height:44px;min-height:44px;max-height:44px;gap:14px;padding:0 14px;background:#171a21;position:relative;z-index:110}
+.os-title{display:flex;align-items:center;flex:none;gap:8px;white-space:nowrap}
+.os-title strong{font-size:16px;letter-spacing:1px}
+.os-title b{font-size:9px;padding:3px 6px}
+.app-menu-items{display:flex;align-items:center;align-self:stretch;flex:1;min-width:0;gap:1px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+.app-menu-items::-webkit-scrollbar{display:none}
+.menu-slot{display:flex;align-items:center;flex:none}
+.menu-trigger{height:36px;min-height:36px;padding:0 11px;background:transparent;border:1px solid transparent;border-radius:4px;color:#e0e4f1;font-size:12px;font-weight:500;white-space:nowrap}
+.menu-trigger:hover,.menu-trigger.active{background:#2d3140;color:#fff;border-color:#424a60}
+.menu-trigger.active{box-shadow:inset 0 -2px 0 #a49af9}
+.menu-dropdown{position:fixed;z-index:9999;width:266px;max-width:calc(100vw - 16px);max-height:calc(100vh - 65px);overflow-y:auto;background:#20242d;border:1px solid #475064;border-radius:7px;padding:6px;box-shadow:0 15px 45px #000b}
+
+.menu-command{display:flex;align-items:center;gap:8px;width:100%;min-height:35px;text-align:left;padding:6px 8px;border:0;border-radius:4px;color:#e0e5ef;background:transparent;font-size:12px}
+.menu-command:hover:not(:disabled){background:#343c53;color:#fff}
+.menu-command:disabled{opacity:.35}
+.menu-checked{width:13px;flex:none;color:#ad9fff;font-size:14px;font-weight:800}
+.menu-command-name{flex:1;min-width:0}
+.menu-shortcut{color:#77859a;font-size:10px}
+.menu-settings{display:flex;flex-direction:column;gap:7px;padding:11px 10px 7px;margin-top:5px;border-top:1px solid #343c4b;color:#9facbf;font-size:11px}
+.menu-settings input[type=range]{width:100%;accent-color:#aba0ff}
+.menu-settings select,.menu-settings input[type=number]{width:100%;height:30px;background:#181d27;border:1px solid #3e485e;border-radius:5px;color:#edf1fa;padding:5px 8px;font-size:12px}
+.menu-settings small{color:#8c97b2}
+.menu-note{border-top:1px solid #363e4e;color:#96a2b7;line-height:1.55;font-size:10px;margin:5px 0 0;padding:11px 9px 6px}
+.os-actions{flex:none;margin-left:auto;gap:17px;white-space:nowrap}
+.os-settings{padding:5px}
+.settings-popup{top:47px}
+.compact-clock{color:#a1aac1;font-family:ui-monospace,Consolas,monospace;font-size:11px;white-space:nowrap}
+
+@media(max-width:1080px){
+  .osbar{gap:9px;padding:0 9px}
+  .menu-trigger{padding:0 8px}
+  .os-actions{gap:8px}
+  .os-actions a{display:none}
+}
+@media(max-width:760px){
+  .osbar{height:42px;min-height:42px;max-height:42px}
+  .os-title{gap:5px}
+  .os-title strong{font-size:13px}
+  .os-title b{display:none}
+  .os-actions .lunor{display:none}
+  .menu-trigger{padding:0 7px;font-size:11px}
+  .compact-clock{display:none}
+}
+@media(max-width:450px){
+  .osbar{padding:0 6px;gap:6px}
+  .os-actions{display:none}
+  .menu-trigger{padding:0 6px}
+}
+
+
+/* Opt-in visual review, activated only with ?review=desktop.
+   Default NOTIQ Web visitors see the original UI unchanged. */
+.desktop-review-toggle{display:inline-flex;align-items:center;gap:6px;flex:none;white-space:nowrap;border:1px solid #58638a;border-radius:5px;background:#242b3c;color:#d6e1ff;padding:6px 9px;font-size:11px;font-weight:650}
+.desktop-review-toggle span{color:#aab7d9;font-size:9px}
+.desktop-review-panel{position:absolute;z-index:200;right:13px;top:51px;width:min(370px,calc(100vw - 24px));background:#1e2330;border:1px solid #515e7a;border-radius:9px;box-shadow:0 16px 45px #000c;padding:14px;color:#e6eaf2;font-size:12px}
+.desktop-review-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.desktop-review-head strong{font-size:12px}
+.desktop-review-head button{display:flex;align-items:center;justify-content:center;border:0;background:transparent;color:#c1cbdd;padding:4px}
+.desktop-review-panel p{color:#abb6c9;line-height:1.5;margin:12px 0}
+.desktop-review-subtitle{font-size:11px}
+.desktop-review-areas{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}
+.desktop-review-areas button{border:1px solid #47536d;border-radius:5px;padding:7px 10px;background:#282f41;color:#dce5f4;font-size:11px}
+.desktop-review-areas button.selected{border-color:#9fa9fa;background:#3a4369;color:white}
+.desktop-review-panel .desktop-review-note{margin-bottom:9px}
+.desktop-review-note strong{color:#e4e9ff}
+.desktop-review-help{display:block;color:#8e9db4;line-height:1.5;font-size:11px}
+.ui-review-highlight{outline:2px solid #a5a0ff;outline-offset:-2px;position:relative;z-index:1}
+@media(max-width:850px){.desktop-review-toggle{padding:6px}.desktop-review-toggle span{display:none}}
+@media(max-width:650px){.desktop-review-toggle{font-size:10px;gap:3px}.desktop-review-panel{top:46px}}
