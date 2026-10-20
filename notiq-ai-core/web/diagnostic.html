@@ -28,9 +28,12 @@ const wasmUrl = new URL('../notiq-ai-core.wasm', import.meta.url);
 let worker;
 function log(message) { status.textContent = message; }
 try {
-  const response = await fetch(wasmUrl, {method:'HEAD',cache:'no-store'});
+  const response = await fetch(wasmUrl, {cache:'no-store'});
   if (!response.ok) throw new Error('WASM chưa được build/triển khai (' + response.status + ')');
-  log('Đã thấy tệp WASM. Chọn tệp GGUF hợp lệ để thử nạp.');
+  const bytes = await response.arrayBuffer();
+  if (bytes.byteLength < 1024 || !WebAssembly.validate(bytes))
+    throw new Error('Đường dẫn không trả về WebAssembly thật (có thể là trang HTML dự phòng).');
+  log('WASM đã qua kiểm tra định dạng. Chọn GGUF MuScriptor Small để thử nạp.');
   picker.onchange = () => {button.disabled = !picker.files?.length;};
 } catch(error) {
   log('Chưa sẵn sàng: ' + (error?.message || error));
@@ -43,7 +46,8 @@ button.onclick = async () => {
     const buffer = await picker.files[0].arrayBuffer();
     worker = new Worker(workerUrl,{type:'module'});
     worker.onmessage = ({data}) => {
-      if (data.type === 'ready') log('NẠP MÔ HÌNH THẬT THÀNH CÔNG: ' + data.message);
+      if (data.type === 'progress') log('MuScriptor C++ đang thực thi: ' + data.percent + '%');
+      else if (data.type === 'ready') log('NẠP MÔ HÌNH THẬT THÀNH CÔNG: ' + data.message);
       else if (data.type === 'error') {log('KHÔNG NẠP ĐƯỢC: ' + data.message);button.disabled=false;}
       else if (data.message) log(data.message);
     };
