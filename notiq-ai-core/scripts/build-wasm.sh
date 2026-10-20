@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 MODULE="$ROOT/notiq-ai-core"
 # Fail early on an incomplete toolchain instead of starting a false build.
+node --test "$MODULE/tests/core-contract.test.mjs" "$MODULE/tests/source-integrity.test.mjs"
 node "$MODULE/tests/toolchain-preflight.mjs"
 if [ ! -f "$MODULE/vendor/muscriptor/cpp/CMakeLists.txt" ]; then
   if [ ! -f "$ROOT/ThirdParty/muscriptor.cpp/cpp/CMakeLists.txt" ]; then
