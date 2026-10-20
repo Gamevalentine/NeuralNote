@@ -17,4 +17,5 @@ emcmake cmake -S "$MODULE" -B "$MODULE/.build-wasm" -G Ninja \
   -DMUSCRIPTOR_VULKAN=OFF -DMUSCRIPTOR_METAL=OFF \
   -DMUSCRIPTOR_BUILD_TESTS=OFF -DMUSCRIPTOR_BUILD_BENCH=OFF
 cmake --build "$MODULE/.build-wasm" --target notiq_ai_core -j 2
-echo "Compiled WASM; recognition with the real GGUF model is NOT yet tested."
+node "$MODULE/tests/verify-wasm.mjs"
+echo "WebAssembly binary validation passed; REAL GGUF inference still remains unverified."
