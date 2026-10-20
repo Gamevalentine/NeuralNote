@@ -1,4 +1,4 @@
-// NOTIQ AI Core — proprietary NOTIQ adapter around the MIT-licensed
+// NOTIQ AI Core — NOTIQ-specific adapter around the MIT-licensed
 // MuScriptor implementation already checked out with this repository.
 // This is the real inference API. No pitch heuristic, demo notes or server call.
 #include <muscriptor/muscriptor.hpp>
@@ -10,6 +10,7 @@
 #include <iomanip>
 #include <optional>
 #include <sstream>
+#include <stdexcept>
 #include <span>
 #include <string>
 #include <utility>
