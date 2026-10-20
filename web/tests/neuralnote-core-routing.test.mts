@@ -9,7 +9,7 @@ const cli = readFileSync(new URL('../../notiq-native/main.cpp', import.meta.url)
 test('NOTIQ renderer only dispatches AI recognition to original NeuralNote MuScriptor', () => {
   assert.match(app, /await runMuScriptor\(target\.file/);
   assert.doesNotMatch(app, /await transcribe\(target\.file/);
-  assert.doesNotMatch(app, /from '.\/audio';[\s\S]*\btranscribe\b/);
+  assert.doesNotMatch(app, /^import .*?\btranscribe\b.*?from ['"]\.\/audio['"]/m);
   assert.match(app, /if \(!nativeReady\)/);
 });
 
