@@ -1,0 +1,40 @@
+name: NOTIQ Stage 2 Piano Roll QA
+
+on:
+  push:
+    branches:
+      - feature/notiq-web-pianoroll-editor
+    paths:
+      - .github/workflows/notiq-pianoroll-qa.yml
+      - web/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notiq-piano-qa
+  cancel-in-progress: true
+
+jobs:
+  piano-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install app dependencies
+        working-directory: web
+        run: npm install --no-audit --no-fund
+      - name: Run MIDI note edit regression tests
+        working-directory: web
+        run: npm run test:piano
+      - name: Typecheck and build NOTIQ Web
+        working-directory: web
+        run: npm run build

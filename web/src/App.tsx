@@ -1,9 +1,10 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { DragEvent } from 'react';
+import type { DragEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { AudioWaveform, CircleHelp, Gauge, Headphones, Info, LoaderCircle,
   Music, Settings2, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { fmt, generateDemo, groupFor, GROUPS, makeMidi, noteName, readAudio, transcribe } from './audio';
+import { addNote, copyNotes, removeNote, sameNotes, SNAP_SECONDS, snapSeconds, updateNote, clamp } from './pianoEdit';
 import type { Note, AudioInfo, PitchGroup } from './audio';
 
 type Selection = { file: Blob; name: string; url: string };
@@ -12,6 +13,10 @@ type PlaybackMode = 'original' | 'midi' | 'mix';
 type MenuKey = 'file' | 'edit' | 'play' | 'track' | 'instrument' | 'tools' | 'view' | 'export';
 type MenuAction = { label: string; run: () => void; disabled?: boolean; checked?: boolean; shortcut?: string };
 type AppMenu = { id: MenuKey; label: string; commands: MenuAction[] };
+type NoteGesture = {
+  pointerId: number; index: number; kind: 'move' | 'resize';
+  startX: number; startY: number; original: Note; before: Note[];
+};
 const PITCH_ROW = 16;
 // UI-only review of the future Desktop layout. This does not enable MuScriptor in the browser.
 const desktopReview = new URLSearchParams(window.location.search).get('review') === 'desktop';
@@ -21,6 +26,8 @@ function App() {
   const [selection, setSelection] = useState<Selection | null>(null);
   const [info, setInfo] = useState<AudioInfo | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
+  const [selectedNote, setSelectedNote] = useState<number | null>(null);
+  const [historyTick, setHistoryTick] = useState(0);
   const [phase, setPhase] = useState<Phase>('empty');
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState('Chưa tải tệp âm thanh');
@@ -51,10 +58,15 @@ function App() {
   const firedNotes = useRef<Set<number>>(new Set());
   const previousTime = useRef(0);
   const selectionRef = useRef<Selection | null>(null);
+  const notesRef = useRef<Note[]>([]);
+  const undoRef = useRef<Note[][]>([]);
+  const redoRef = useRef<Note[][]>([]);
+  const gestureRef = useRef<NoteGesture | null>(null);
 
   useEffect(() => {
     selectionRef.current = selection;
   }, [selection]);
+  useEffect(() => { notesRef.current = notes; }, [notes]);
   useEffect(() => () => {
     if (selectionRef.current) URL.revokeObjectURL(selectionRef.current.url);
     if (audioCtx.current) void audioCtx.current.close().catch(() => undefined);
@@ -92,11 +104,65 @@ function App() {
     [muted, solo],
   );
   const visibleNotes = useMemo(() => notes.filter(n => activeGroups.has(groupFor(n.pitchMidi))), [notes, activeGroups]);
+  const visibleIndexedNotes = useMemo(() => notes.map((note, index) => ({note, index}))
+    .filter(({note}) => activeGroups.has(groupFor(note.pitchMidi))), [notes, activeGroups]);
+  const canUndo = historyTick >= 0 && undoRef.current.length > 0;
+  const canRedo = historyTick >= 0 && redoRef.current.length > 0;
   const summary = useMemo(() => {
     if (!notes.length) return 'Chưa có nốt';
     const pitches = notes.map(n => n.pitchMidi);
     return notes.length.toLocaleString('vi-VN') + ' nốt · ' + noteName(Math.min(...pitches)) + ' – ' + noteName(Math.max(...pitches));
   }, [notes]);
+
+  const clearHistory = (next: Note[] = []) => {
+    undoRef.current = [];
+    redoRef.current = [];
+    gestureRef.current = null;
+    notesRef.current = next;
+    setNotes(next);
+    setSelectedNote(null);
+    setHistoryTick(tick => tick + 1);
+  };
+
+  const commitNotes = (next: Note[]) => {
+    if (phase === 'analyzing' || sameNotes(next, notesRef.current)) return;
+    undoRef.current = [...undoRef.current.slice(-49), copyNotes(notesRef.current)];
+    redoRef.current = [];
+    notesRef.current = next;
+    setNotes(next);
+    firedNotes.current.clear();
+    setHistoryTick(tick => tick + 1);
+  };
+
+  const undoEdit = () => {
+    if (phase === 'analyzing') return;
+    const previous = undoRef.current.pop();
+    if (!previous) return;
+    redoRef.current.push(copyNotes(notesRef.current));
+    notesRef.current = previous;
+    setNotes(previous);
+    setSelectedNote(null);
+    firedNotes.current.clear();
+    setHistoryTick(tick => tick + 1);
+  };
+
+  const redoEdit = () => {
+    if (phase === 'analyzing') return;
+    const next = redoRef.current.pop();
+    if (!next) return;
+    undoRef.current.push(copyNotes(notesRef.current));
+    notesRef.current = next;
+    setNotes(next);
+    setSelectedNote(null);
+    firedNotes.current.clear();
+    setHistoryTick(tick => tick + 1);
+  };
+
+  const deleteSelected = () => {
+    if (selectedNote === null || phase === 'analyzing') return;
+    commitNotes(removeNote(notesRef.current, selectedNote));
+    setSelectedNote(null);
+  };
 
   const setAudio = async (file: Blob, name: string) => {
     if (phase === 'analyzing' || busyLoading) return;
@@ -116,7 +182,7 @@ function App() {
     setSelection(null);
     setError('');
     setPlaying(false);
-    setNotes([]);
+    clearHistory();
     setInfo(null);
     setTime(0);
     setProgress(0);
@@ -152,7 +218,7 @@ function App() {
         setStatus(message);
         setProgress(percentage);
       });
-      setNotes(detected);
+      clearHistory(detected);
       setProgress(100);
       setPhase('complete');
       setStatus(detected.length ? 'Đã nhận diện ' + detected.length + ' nốt' : 'Không tìm thấy nốt rõ ràng trong âm thanh');
@@ -180,6 +246,103 @@ function App() {
     oscillator.start();
     oscillator.stop(ctx.currentTime + Math.max(0.07, length) + 0.02);
   };
+
+  const addNoteAtPointer = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || phase === 'analyzing') return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = clamp(event.clientX - rect.left, 0, rect.width);
+    const y = clamp(event.clientY - rect.top, 0, rect.height - 1);
+    const pitch = clamp(pitchTop - Math.floor(y / PITCH_ROW), pitchBottom, pitchTop);
+    const next = addNote(notesRef.current, pitch, x / rect.width * totalSeconds, totalSeconds);
+    commitNotes(next);
+    setSelectedNote(next.length - 1);
+    setStatus('Đã thêm nốt ' + noteName(pitch) + ' · có thể kéo nốt hoặc kéo mép phải');
+    void oscPreview(pitch);
+  };
+
+  const beginNoteGesture = (event: ReactPointerEvent<HTMLButtonElement>, index: number, kind: 'move' | 'resize') => {
+    if (event.button !== 0 || phase === 'analyzing') return;
+    event.stopPropagation();
+    event.preventDefault();
+    const original = notesRef.current[index];
+    if (!original) return;
+    const element = event.currentTarget;
+    element.setPointerCapture(event.pointerId);
+    element.focus();
+    gestureRef.current = {
+      pointerId: event.pointerId, index, kind, original,
+      before: copyNotes(notesRef.current), startX: event.clientX, startY: event.clientY,
+    };
+    setSelectedNote(index);
+    void oscPreview(original.pitchMidi, Math.min(0.36, original.durationSeconds));
+  };
+
+  const moveNoteGesture = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const gesture = gestureRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    event.stopPropagation();
+    const deltaSeconds = snapSeconds((event.clientX - gesture.startX) / timelineWidth * totalSeconds);
+    const next = gesture.kind === 'move'
+      ? updateNote(gesture.before, gesture.index, {
+          startTimeSeconds: gesture.original.startTimeSeconds + deltaSeconds,
+          pitchMidi: clamp(gesture.original.pitchMidi
+            - Math.round((event.clientY - gesture.startY) / PITCH_ROW), pitchBottom, pitchTop),
+        }, totalSeconds)
+      : updateNote(gesture.before, gesture.index, {
+          durationSeconds: gesture.original.durationSeconds + deltaSeconds,
+        }, totalSeconds);
+    if (sameNotes(next, notesRef.current)) return;
+    notesRef.current = next;
+    setNotes(next);
+  };
+
+  const endNoteGesture = (event: ReactPointerEvent<HTMLButtonElement>, cancelled = false) => {
+    const gesture = gestureRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    gestureRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId))
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    if (cancelled) {
+      notesRef.current = gesture.before;
+      setNotes(gesture.before);
+    } else if (!sameNotes(gesture.before, notesRef.current)) {
+      undoRef.current = [...undoRef.current.slice(-49), gesture.before];
+      redoRef.current = [];
+      firedNotes.current.clear();
+      setHistoryTick(tick => tick + 1);
+      const result = notesRef.current[gesture.index];
+      if (result) {
+        setStatus((gesture.kind === 'resize' ? 'Đã đổi độ dài: ' : 'Đã chuyển nốt: ')
+          + noteName(result.pitchMidi) + ' · ' + fmt(result.startTimeSeconds));
+        if (gesture.kind === 'move' && result.pitchMidi !== gesture.original.pitchMidi)
+          void oscPreview(result.pitchMidi, 0.25);
+      }
+    }
+  };
+
+  useEffect(() => {
+    const shortcuts = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (target instanceof HTMLElement
+          && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return;
+      if ((event.ctrlKey || event.metaKey) && !event.altKey) {
+        if (event.key.toLowerCase() === 'z') {
+          event.preventDefault();
+          if (event.shiftKey) redoEdit(); else undoEdit();
+        } else if (event.key.toLowerCase() === 'y') {
+          event.preventDefault();
+          redoEdit();
+        }
+      } else if ((event.key === 'Delete' || event.key === 'Backspace') && selectedNote !== null) {
+        event.preventDefault();
+        deleteSelected();
+      } else if (event.key === 'Escape') {
+        setSelectedNote(null);
+      }
+    };
+    document.addEventListener('keydown', shortcuts);
+    return () => document.removeEventListener('keydown', shortcuts);
+  });
 
   useEffect(() => {
     if (!playing || !notes.length || playbackMode === 'original') return;
@@ -261,7 +424,7 @@ function App() {
     stop();
     setSelection(null);
     setInfo(null);
-    setNotes([]);
+    clearHistory();
     setTime(0);
     setPhase('empty');
     setError('');
@@ -291,7 +454,10 @@ function App() {
     },
     {
       id: 'edit', label: 'Chỉnh sửa', commands: [
-        { label: 'Xóa kết quả nhận diện', run: () => { setNotes([]); setPhase(selection ? 'ready' : 'empty'); setStatus('Đã xóa kết quả MIDI'); firedNotes.current.clear(); }, disabled: notes.length === 0 || phase === 'analyzing' },
+        { label: 'Hoàn tác (Undo)', run: undoEdit, disabled: !canUndo || phase === 'analyzing', shortcut: 'Ctrl+Z' },
+        { label: 'Làm lại (Redo)', run: redoEdit, disabled: !canRedo || phase === 'analyzing', shortcut: 'Ctrl+Y' },
+        { label: 'Xóa nốt đã chọn', run: deleteSelected, disabled: selectedNote === null || phase === 'analyzing', shortcut: 'Del' },
+        { label: 'Xóa kết quả nhận diện', run: () => { commitNotes([]); setSelectedNote(null); setPhase(selection ? 'ready' : 'empty'); setStatus('Đã xóa kết quả MIDI'); }, disabled: notes.length === 0 || phase === 'analyzing' },
         { label: 'Về đầu bản nhạc', run: () => seekTo(0), disabled: !info },
       ],
     },
@@ -471,20 +637,32 @@ function App() {
                 <div className="ruler">
                   {markers.map(n => <button type="button" key={n} className="tick" style={{ left: n/totalSeconds*100 + '%' }} onClick={() => seekTo(n)}>{n}s</button>)}
                 </div>
-                <div className="roll" style={{ height: gridHeight }}>
+                <div className={'roll piano-editable' + (phase === 'analyzing' ? ' editing-disabled' : '')}
+                  style={{ height: gridHeight }} onPointerDown={addNoteAtPointer}
+                  role="group" aria-label="Piano Roll: nhấn lưới để thêm nốt, kéo nốt để di chuyển">
                   {pitches.map(pitch => <div className={'pitch-grid ' + (pitch%12 === 0 ? 'octave' : '')} key={pitch} style={{top:(pitchTop-pitch)*PITCH_ROW,height:PITCH_ROW}}/>)}
                   {markers.map(n => <div key={n} className="beat-grid" style={{left: n/totalSeconds*100 + '%'}}/>)}
-                  {visibleNotes.map((n,i) => (
-                    <button className="note" key={i} title={noteName(n.pitchMidi) + ' · ' + fmt(n.startTimeSeconds) + ' · ' + n.durationSeconds.toFixed(2) + 's'}
-                      onClick={() => void oscPreview(n.pitchMidi, Math.min(0.45,n.durationSeconds))}
+                  {visibleIndexedNotes.map(({note:n,index}) => (
+                    <button type="button" className={'note editable-note' + (selectedNote === index ? ' selected-note' : '')}
+                      key={index} aria-label={'Nốt ' + noteName(n.pitchMidi) + ', bắt đầu ' + fmt(n.startTimeSeconds)}
+                      aria-pressed={selectedNote === index}
+                      title={noteName(n.pitchMidi) + ' · ' + fmt(n.startTimeSeconds) + ' · ' + n.durationSeconds.toFixed(2) + 's · Kéo để chuyển nốt, kéo mép phải để đổi độ dài'}
+                      onPointerDown={event => beginNoteGesture(event, index,
+                        event.target instanceof HTMLElement && event.target.closest('.note-resize-handle') ? 'resize' : 'move')}
+                      onPointerMove={moveNoteGesture}
+                      onPointerUp={event => endNoteGesture(event)}
+                      onPointerCancel={event => endNoteGesture(event, true)}
                       style={{
                         top:(pitchTop-n.pitchMidi)*PITCH_ROW + 1,
                         left:n.startTimeSeconds/totalSeconds*100 + '%',
-                        width:Math.max(3,n.durationSeconds/totalSeconds*timelineWidth-1),
+                        width:Math.max(6,n.durationSeconds/totalSeconds*timelineWidth-1),
                         backgroundColor:midiColor(n.pitchMidi),borderColor:midiColor(n.pitchMidi),
-                      }}>{n.durationSeconds/totalSeconds*timelineWidth > 39 ? noteName(n.pitchMidi) : ''}</button>
+                      }}>
+                      {n.durationSeconds/totalSeconds*timelineWidth > 39 ? noteName(n.pitchMidi) : ''}
+                      <span className="note-resize-handle" aria-hidden="true"/>
+                    </button>
                   ))}
-                  {!notes.length && <div className="empty-roll">{phase === 'analyzing' ? <><LoaderCircle className="spin" size={26}/><strong>AI đang nhận diện nốt...</strong></> : <><Music size={27}/><strong>{selection ? 'Đã tải âm thanh — nhấn Nhận diện' : 'Piano Roll đang trống'}</strong><small>Chỉ hiển thị nốt thật sau khi chạy AI</small></>}</div>}
+                  {!notes.length && <div className="empty-roll">{phase === 'analyzing' ? <><LoaderCircle className="spin" size={26}/><strong>AI đang nhận diện nốt...</strong></> : <><Music size={27}/><strong>Piano Roll đang trống</strong><small>Nhấn vào lưới để thêm nốt, hoặc tải âm thanh để nhận diện bằng AI</small></>}</div>}
                 </div>
                 {info && <div className="playhead" style={{left:cursorX,height:28+gridHeight}}/>}
               </div>
@@ -492,6 +670,7 @@ function App() {
           </div>
           <div className="editor-status">
             <span>{status}</span>
+            <span className="piano-edit-hint" title="Thêm nốt: nhấn vào lưới · Di chuyển: kéo nốt · Đổi độ dài: kéo mép phải · Xóa: Del · Hoàn tác: Ctrl+Z">✎ Sửa MIDI · Snap ${SNAP_SECONDS}s · Ctrl+Z</span>
             {phase === 'analyzing' && <div className="progress-track"><div style={{width: progress+'%'}}/></div>}
             <span>{phase === 'analyzing' ? progress+'%' : summary}</span>
             <span className="compact-clock">{fmt(time)} / {fmt(info?.duration || 0)}</span>

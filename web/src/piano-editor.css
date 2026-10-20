@@ -1,0 +1,11 @@
+/* Stage 2 — interactive MIDI editing; leaves the approved NOTIQ look intact. */
+.piano-editable{cursor:crosshair}
+.piano-editable.editing-disabled{cursor:progress}
+.editable-note{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
+.editable-note:active{cursor:grabbing}
+.editable-note.selected-note{outline:2px solid #f2f2ff;outline-offset:1px;z-index:10;filter:brightness(1.16)}
+.editable-note:focus-visible{outline:2px solid #d8dcff;outline-offset:1px}
+.note-resize-handle{display:block;position:absolute;top:0;bottom:0;right:0;width:9px;cursor:ew-resize;background:#fff3;border-left:1px solid #ffffff88;opacity:0;touch-action:none}
+.editable-note:hover .note-resize-handle,.editable-note.selected-note .note-resize-handle{opacity:1}
+.piano-edit-hint{color:#b5bafa;font-size:10px;letter-spacing:.1px;white-space:nowrap;flex:none!important}
+@media(max-width:1040px){.piano-edit-hint{display:none}}
