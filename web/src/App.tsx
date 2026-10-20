@@ -236,21 +236,43 @@ function App() {
     }
   };
 
-  const oscPreview = async (pitch: number, length = 0.35, volume = 0.65) => {
+  const getAudioContext = () => {
     const ctx = audioCtx.current || new AudioContext();
     audioCtx.current = ctx;
-    if (ctx.state !== 'running') await ctx.resume();
-    const oscillator = ctx.createOscillator();
-    const env = ctx.createGain();
-    oscillator.type = 'triangle';
-    oscillator.frequency.value = 440 * Math.pow(2, (pitch - 69) / 12);
-    const level = Math.max(0.004, Math.min(0.2, volume * 0.15));
-    env.gain.setValueAtTime(0.0001, ctx.currentTime);
-    env.gain.exponentialRampToValueAtTime(level, ctx.currentTime + 0.014);
-    env.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + Math.max(0.06, length));
-    oscillator.connect(env).connect(ctx.destination);
-    oscillator.start();
-    oscillator.stop(ctx.currentTime + Math.max(0.07, length) + 0.02);
+    return ctx;
+  };
+
+  const warmInstrument = async (instrument: InstrumentId) => {
+    try {
+      setLoadingSoundfont(true);
+      setSoundfontStatus('Đang tải mẫu SoundFont: ' + (INSTRUMENTS.find(item => item.id === instrument)?.label || instrument));
+      const ctx = getAudioContext();
+      if (ctx.state !== 'running') await ctx.resume();
+      await prepareInstrument(ctx, instrument);
+      setSoundfontStatus('SoundFont đã sẵn sàng: ' + (INSTRUMENTS.find(item => item.id === instrument)?.label || instrument));
+    } catch (cause) {
+      setSoundfontStatus('Không tải được bộ tiếng — kiểm tra kết nối Internet');
+      setError('Không tải được mẫu SoundFont FluidR3. '
+        + (cause instanceof Error ? cause.message : 'Hãy thử chọn lại tiếng nhạc cụ.'));
+    } finally {
+      setLoadingSoundfont(false);
+    }
+  };
+
+  const changeInstrument = (group: PitchGroup, instrument: InstrumentId) => {
+    setInstrumentSelection(previous => ({ ...previous, [group]: instrument }));
+    void warmInstrument(instrument);
+  };
+
+  const previewNote = async (pitch: number, length = 0.35, volume = 0.65) => {
+    try {
+      const ctx = getAudioContext();
+      await playSoundfontNote(ctx, instrumentSelection[groupFor(pitch)], pitch, length, volume);
+    } catch (cause) {
+      setSoundfontStatus('Lỗi tải / phát SoundFont');
+      setError('Không thể nghe tiếng nhạc cụ. '
+        + (cause instanceof Error ? cause.message : 'Kiểm tra mạng và chọn lại nhạc cụ.'));
+    }
   };
 
   const addNoteAtPointer = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -263,7 +285,7 @@ function App() {
     commitNotes(next);
     setSelectedNote(next.length - 1);
     setStatus('Đã thêm nốt ' + noteName(pitch) + ' · có thể kéo nốt hoặc kéo mép phải');
-    void oscPreview(pitch);
+    void previewNote(pitch);
   };
 
   const beginNoteGesture = (event: ReactPointerEvent<HTMLButtonElement>, index: number, kind: 'move' | 'resize') => {
@@ -280,7 +302,7 @@ function App() {
       before: copyNotes(notesRef.current), startX: event.clientX, startY: event.clientY,
     };
     setSelectedNote(index);
-    void oscPreview(original.pitchMidi, Math.min(0.36, original.durationSeconds));
+    void previewNote(original.pitchMidi, Math.min(0.36, original.durationSeconds));
   };
 
   const moveNoteGesture = (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -321,7 +343,7 @@ function App() {
         setStatus((gesture.kind === 'resize' ? 'Đã đổi độ dài: ' : 'Đã chuyển nốt: ')
           + noteName(result.pitchMidi) + ' · ' + fmt(result.startTimeSeconds));
         if (gesture.kind === 'move' && result.pitchMidi !== gesture.original.pitchMidi)
-          void oscPreview(result.pitchMidi, 0.25);
+          void previewNote(result.pitchMidi, 0.25);
       }
     }
   };
@@ -362,7 +384,7 @@ function App() {
         if (!activeGroups.has(group) || firedNotes.current.has(i)) continue;
         if (n.startTimeSeconds >= now - 0.10 && n.startTimeSeconds <= now + 0.055) {
           firedNotes.current.add(i);
-          void oscPreview(n.pitchMidi, Math.min(0.85, n.durationSeconds), gain[group] * masterVolume);
+          void previewNote(n.pitchMidi, Math.min(0.85, n.durationSeconds), gain[group] * masterVolume);
         }
       }
     }, 45);
@@ -636,7 +658,7 @@ function App() {
           <div className="workarea">
             <div className="keyboard" ref={keyColumn}>
               <div className="ruler-key-label">THỜI GIAN</div>
-              {pitches.map(pitch => <button key={pitch} type="button" onClick={() => void oscPreview(pitch)} title={'Nghe nốt ' + noteName(pitch)} className={'key ' + ([1,3,6,8,10].includes(pitch%12) ? 'black' : 'white')}>{pitch % 12 === 0 ? noteName(pitch) : ''}</button>)}
+              {pitches.map(pitch => <button key={pitch} type="button" onClick={() => void previewNote(pitch)} title={'Nghe nốt ' + noteName(pitch)} className={'key ' + ([1,3,6,8,10].includes(pitch%12) ? 'black' : 'white')}>{pitch % 12 === 0 ? noteName(pitch) : ''}</button>)}
             </div>
             <div className="scroller" ref={timelineViewport} onDragOver={event => event.preventDefault()} onDrop={onDropFile} onScroll={event => { if (keyColumn.current) keyColumn.current.scrollTop = event.currentTarget.scrollTop; }}>
               <div className="timeline" style={{ width: timelineWidth }}>
