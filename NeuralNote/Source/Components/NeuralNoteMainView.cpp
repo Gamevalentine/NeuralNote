@@ -362,7 +362,7 @@ void NeuralNoteMainView::_handleWebStyleMenuAction(int command)
         case 601:
             mVisualizationPanel.triggerTranscription(); break;
         case 602:
-            mTopBar.getModelButton().triggerClick(); break;
+            mVisualizationPanel.setModelPanelOpen(!mVisualizationPanel.isModelPanelVisible()); break;
         case 603:
             _buildSettingsMenu();
             mSettingsMenu->showMenuAsync(
