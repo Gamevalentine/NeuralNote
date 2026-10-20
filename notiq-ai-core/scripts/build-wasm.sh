@@ -6,6 +6,10 @@ MODULE="$ROOT/notiq-ai-core"
 # Fail early on an incomplete toolchain instead of starting a false build.
 node "$MODULE/tests/toolchain-preflight.mjs"
 if [ ! -f "$MODULE/vendor/muscriptor/cpp/CMakeLists.txt" ]; then
+  if [ ! -f "$ROOT/ThirdParty/muscriptor.cpp/cpp/CMakeLists.txt" ]; then
+    # Git submodule is fixed by the repo gitlink; never use floating upstream.
+    git -C "$ROOT" submodule update --init ThirdParty/muscriptor.cpp
+  fi
   python3 "$MODULE/scripts/snapshot_source.py"
 fi
 emcmake cmake -S "$MODULE" -B "$MODULE/.build-wasm" -G Ninja \
