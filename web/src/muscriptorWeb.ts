@@ -32,7 +32,7 @@ async function parseJson(response: Response): Promise<Record<string, unknown>> {
 function accessKey(): string {
   // Credentials stay on the Codespace's server: Vite injects the real private key.
   // This mode is only for the private forwarded Codespaces port.
-  if (import.meta.env.VITE_NOTIQ_MUSCRIPTOR_API === 'self') return 'private-forwarded-port';
+  if ((import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env?.VITE_NOTIQ_MUSCRIPTOR_API === 'self') return 'private-forwarded-port';
   let key = '';
   try { key = sessionStorage.getItem(KEY_NAME) || ''; } catch { /* private mode */ }
   if (!key) {
