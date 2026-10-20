@@ -70,7 +70,7 @@ private:
 
     State mPrevState = EmptyAudioAndMidiRegions;
 
-    std::array<std::unique_ptr<juce::TextButton>, 8> mWebMenuButtons;
+    std::array<std::unique_ptr<NnFlatButton>, 8> mWebMenuButtons;
     juce::Rectangle<int> mWebMenuBounds;
     bool mShowAdvancedControls = false;
 
