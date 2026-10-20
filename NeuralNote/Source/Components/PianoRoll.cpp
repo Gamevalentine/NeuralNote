@@ -21,7 +21,7 @@ constexpr float MUTED_NOTE_ALPHA = 0.16f;
 constexpr double DRUM_MIN_DRAWN_SECONDS = 0.1;
 
 /** How far the lane stripes fall back while there is nothing drawn on them. */
-constexpr float EMPTY_LANE_ALPHA = 0.55f;
+constexpr float EMPTY_LANE_ALPHA = 1.0f;
 } // namespace
 
 PianoRoll::PianoRoll(NeuralNoteAudioProcessor* inProcessor, Keyboard& keyboard, double inBaseNumPixelsPerSecond)
@@ -71,12 +71,24 @@ void PianoRoll::paint(Graphics& g)
 {
     g.fillAll(nn::colours::bgRoot);
 
-    if (!mProcessor->canPlay()) {
-        return;
+    // A DAW-style editor retains its pitch lanes and timeline even before a file is loaded.
+    // The engine's actual note vector remains untouched.
+    _drawLanes(g);
+
+    const double pixelsPerSecond = mBaseNumPixelsPerSecond * mZoomLevel;
+    if (pixelsPerSecond > 0.0) {
+        const auto clip = g.getClipBounds();
+        const int firstSecond = juce::jmax(0, static_cast<int>(std::floor(clip.getX() / pixelsPerSecond)));
+        const int lastSecond = static_cast<int>(std::ceil(clip.getRight() / pixelsPerSecond));
+        for (int second = firstSecond; second <= lastSecond; ++second) {
+            const int x = juce::roundToInt(second * pixelsPerSecond);
+            g.setColour(second % 5 == 0 ? nn::colours::divStrong : nn::colours::divSoft);
+            g.fillRect(x, 0, 1, getHeight());
+        }
     }
 
-    _drawLanes(g);
-    _drawNotes(g);
+    if (mProcessor->canPlay())
+        _drawNotes(g);
 
     const auto playhead_x = mPlayhead.isVisible() ? static_cast<int>(std::round(mPlayhead.getPlayheadX())) : 0;
 
@@ -191,7 +203,8 @@ void PianoRoll::changeListenerCallback(ChangeBroadcaster* source)
 
 void PianoRoll::mouseDown(const MouseEvent& event)
 {
-    mPlayhead.setPlayheadTime(_pixelToTime(static_cast<float>(event.x)));
+    if (mProcessor->canPlay())
+        mPlayhead.setPlayheadTime(_pixelToTime(static_cast<float>(event.x)));
 }
 
 void PianoRoll::_onVBlankCallback()

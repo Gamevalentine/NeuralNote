@@ -132,7 +132,7 @@ const GroupDisplay* findDisplayForProgram(int inProgram)
 InstrumentDisplay instrumentDisplayFor(int inProgram)
 {
     if (const GroupDisplay* display = findDisplayForProgram(inProgram)) {
-        return {display->name, display->abbreviation};
+        return {juce::String::fromUTF8(display->name), juce::String(display->abbreviation)};
     }
 
     // An unnamed singleton group. The library's own label is the honest thing to show, and its
@@ -147,7 +147,7 @@ InstrumentDisplay instrumentDisplayForGroup(msl::InstrumentGroup inGroup)
     // Every enumerator has a row, which the static_assert above is what keeps true.
     jassert(display != nullptr);
 
-    return display != nullptr ? InstrumentDisplay {display->name, display->abbreviation}
+    return display != nullptr ? InstrumentDisplay {juce::String::fromUTF8(display->name), juce::String(display->abbreviation)}
                               : InstrumentDisplay {juce::String(std::string(msl::instrumentName(inGroup))), "???"};
 }
 

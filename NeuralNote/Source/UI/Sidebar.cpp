@@ -5,6 +5,7 @@
 #include "Sidebar.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 #include "InstrumentSelection.h"
@@ -50,7 +51,7 @@ void paintMasterPanel(juce::Graphics& g, juce::Rectangle<int> inBounds)
 
     g.setColour(nn::colours::textLabel);
     nn::drawTrackedText(g,
-                        "TỔNG",
+                        juce::String::fromUTF8("TỔNG"),
                         nn::fonts::sectionHeader(),
                         label_row.toFloat(),
                         juce::Justification::centredLeft,
@@ -144,6 +145,59 @@ void Sidebar::paint(juce::Graphics& g)
 
     _paintHeader(g, mHeaderBounds);
     paintMasterPanel(g, mMasterBounds);
+}
+
+void Sidebar::paintOverChildren(juce::Graphics& g)
+{
+    if (!mProcessor.getInstrumentMixer()->getEntries().empty())
+        return;
+
+    // The Web Studio's three reference pitch bands are visual guides, not
+    // synthetic tracks. Once MuScriptor discovers real instruments, the native
+    // InstrumentStrip components take over instead.
+    const int sectionHeight = 112;
+    const int baseY = mHeaderBounds.getBottom() + 22;
+    const std::array<juce::Colour, 3> accents {
+        nn::colours::rgb(0xe3b44b), nn::colours::rgb(0x36bba4), nn::colours::rgb(0x8a77e6)
+    };
+    const std::array<const char*, 3> titles {"Dải cao", "Dải trung", "Dải trầm"};
+    const std::array<const char*, 3> ranges {"C5 trở lên", "C4 - B4", "Dưới C4"};
+    for (int i = 0; i < 3; ++i) {
+        auto area = juce::Rectangle<int>(0, baseY + i * sectionHeight,
+                                         getWidth() - 1, sectionHeight);
+        if (area.getBottom() > mMasterBounds.getY())
+            break;
+        g.setColour(nn::colours::divSoft);
+        g.fillRect(area.getX(), area.getBottom() - 1, area.getWidth(), 1);
+
+        const auto chip = juce::Rectangle<int>(12, area.getY() + 15, 31, 25);
+        g.setColour(accents[static_cast<size_t>(i)].withAlpha(0.17f));
+        g.fillRoundedRectangle(chip.toFloat(), 5.0f);
+        g.setColour(accents[static_cast<size_t>(i)]);
+        g.drawRoundedRectangle(chip.toFloat(), 5.0f, 1.0f);
+        g.setFont(nn::fonts::metaStrong());
+        g.drawFittedText(i == 0 ? "HI" : i == 1 ? "MID" : "LOW", chip, juce::Justification::centred, 1);
+
+        g.setColour(nn::colours::textBright);
+        g.setFont(nn::fonts::instrumentName());
+        g.drawText(juce::String::fromUTF8(titles[static_cast<size_t>(i)]),
+                   52, area.getY() + 12, getWidth() - 62, 20,
+                   juce::Justification::centredLeft, true);
+        g.setColour(nn::colours::textLabel);
+        g.setFont(nn::fonts::meta());
+        g.drawText("0 " + juce::String::fromUTF8("nốt") + juce::String::fromUTF8("  ·  ")
+                       + juce::String::fromUTF8(ranges[static_cast<size_t>(i)]),
+                   52, area.getY() + 31, getWidth() - 62, 18,
+                   juce::Justification::centredLeft, true);
+
+        // Decorative inactive level line: becomes real mixer controls when tracks exist.
+        g.setColour(nn::colours::faderTrack);
+        g.fillRoundedRectangle(43.0f, static_cast<float>(area.getY() + 77),
+                               static_cast<float>(getWidth() - 68), 4.0f, 2.0f);
+        g.setColour(accents[static_cast<size_t>(i)].withAlpha(0.65f));
+        g.fillRoundedRectangle(43.0f, static_cast<float>(area.getY() + 77),
+                               70.0f, 4.0f, 2.0f);
+    }
 }
 
 void Sidebar::changeListenerCallback(juce::ChangeBroadcaster* inSource)
@@ -272,7 +326,7 @@ void Sidebar::_paintHeader(juce::Graphics& g, juce::Rectangle<int> inBounds) con
 
     g.setColour(nn::colours::textLabel);
     nn::drawTrackedText(
-        g, "NHẠC CỤ", nn::fonts::sectionHeader(), content, juce::Justification::centredLeft, HEADER_TRACKING);
+        g, juce::String::fromUTF8("NHÓM NỐT / DẢI ÂM"), nn::fonts::sectionHeader(), content, juce::Justification::centredLeft, HEADER_TRACKING);
 
     g.setColour(nn::colours::textFainter);
     g.setFont(nn::fonts::mono(10.0f, 400));
