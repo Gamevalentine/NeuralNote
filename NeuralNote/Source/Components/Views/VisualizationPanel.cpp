@@ -140,6 +140,16 @@ void VisualizationPanel::_updateNoteRange(bool inMayShrink)
     }
 }
 
+void VisualizationPanel::setCompactMode(bool inCompact)
+{
+    if (mCompactMode == inCompact)
+        return;
+
+    mCompactMode = inCompact;
+    mToolbar.setVisible(!mCompactMode);
+    resized();
+}
+
 void VisualizationPanel::resized()
 {
     auto bounds = getLocalBounds();
