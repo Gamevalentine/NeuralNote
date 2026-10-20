@@ -88,6 +88,7 @@ private:
 
     NeuralNoteAudioProcessor* mProcessor;
 
+    bool mCompactMode = true;
     NnToolbar mToolbar;
     TimelineGutter mGutter;
     Keyboard mKeyboard;
