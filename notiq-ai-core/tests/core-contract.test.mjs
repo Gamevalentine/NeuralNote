@@ -34,4 +34,5 @@ test('NOTIQ browser worker is offline, requires actual model and engine', () => 
   assert.match(wasm, /if\(NOT EMSCRIPTEN\)/);
   assert.match(wasm, /MUSCRIPTOR_VULKAN OFF/);
   assert.match(wasm, /-sALLOW_MEMORY_GROWTH=1/);
+  assert.match(wasm, /PFFFT_SIMD_DISABLE=1/);
 });
