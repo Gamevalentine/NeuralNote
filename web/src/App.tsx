@@ -466,7 +466,9 @@ function App() {
       // output. Failed V2 never deletes the existing MuScriptor MIDI.
       clearHistory(detected);
       setPedalEvents(piano?.pedalEvents || []);
-      setPedalTrack('*');
+      // Display Piano CC64 points on its GM Piano track immediately; the
+      // existing '*' filter only shows user-created global pedal points.
+      setPedalTrack(piano ? 'gm-0' : '*');
       setNativeMuted(new Set());
       setNativeSolo(null);
       setNativeSelectedProgram(detected.find(n => n.program !== undefined)?.program ?? null);
