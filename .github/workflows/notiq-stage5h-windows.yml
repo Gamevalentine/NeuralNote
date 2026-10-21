@@ -1,0 +1,86 @@
+name: NOTIQ Stage 5H Dual AI Windows Portable
+on:
+  push:
+    branches: [feature/notiq-stage5h-dual-engine-comparison]
+    paths:
+      - .github/workflows/notiq-stage5h-windows.yml
+      - web/src/App.tsx
+      - web/src/ComparisonPanel.tsx
+      - web/src/ComparisonOverlay.tsx
+      - web/src/compareEngines.ts
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  stage5h-windows:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify matcher unit tests
+        shell: pwsh
+        working-directory: web
+        run: |
+          node --experimental-strip-types --test tests/compare-engines.test.mts
+          if ($LASTEXITCODE -ne 0) {throw '5H comparison unit tests failed'}
+      - name: Compile exact NOTIQ 5H UI
+        shell: pwsh
+        working-directory: web
+        run: |
+          npm install --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) {throw 'NPM install failed'}
+          npm run build
+          if ($LASTEXITCODE -ne 0) {throw '5H build failed'}
+      - name: Retrieve Stage5G verified portable (original C++ and Python setup preserved)
+        uses: actions/download-artifact@v4
+        with:
+          name: NOTIQ-Stage5G-TranskunV2-Piano-Windows-Preview
+          repository: Gamevalentine/NeuralNote
+          run-id: 39689294931
+          github-token: ${{ github.token }}
+          path: notiq-stage5h-base
+      - name: Repack only renderer; preserve native MuScriptor/Transkun engines
+        shell: pwsh
+        run: |
+          npm install --prefix package-tools --no-audit --no-fund @electron/asar@3
+          if ($LASTEXITCODE -ne 0) {throw 'ASAR installer failure'}
+          $base=(Resolve-Path 'notiq-stage5h-base').Path
+          $asar=Get-ChildItem $base -File -Recurse -Filter 'app.asar' | Select-Object -First 1
+          if (-not $asar) {throw 'Original Electron ASAR missing'}
+          $resources=Split-Path $asar.FullName -Parent
+          $native=Join-Path $resources 'bridge-bin/notiq-muscriptor-cli.exe'
+          if (-not (Test-Path $native)) {throw 'MuScriptor binary missing'}
+          $test=& $native --self-test
+          if ($LASTEXITCODE -ne 0 -or $test -notmatch '"ready":true') {throw 'MuScriptor native CLI self-test failed'}
+          node desktop-preview/repack-5g.cjs "$($asar.FullName)" "$((Resolve-Path 'web/dist').Path)"
+          if ($LASTEXITCODE -ne 0) {throw 'Failed to pack 5H renderer'}
+          $exeDir=Split-Path $resources -Parent
+          $exe=Get-ChildItem $exeDir -File -Filter '*.exe' | Select-Object -First 1
+          if (-not $exe) {throw 'NOTIQ portable exe missing'}
+          @(
+            'NOTIQ Stage5H: Two-AI comparison for Piano, Windows Portable'
+            'No change to original MuScriptor/Transkun inference algorithms.'
+            'Choose E: (or desired drive) and extract ENTIRE ZIP.'
+            'Install MuScriptor and Transkun V2 Piano using UI if missing.'
+            'Open piano audio and click So sanh MuScriptor-Transkun V2.'
+            'Both engines process the SAME converted WAV sequentially. Large CPU may be slow.'
+            'Shows matched pitch/onsets <=100ms, disagreements and average timing/duration offsets.'
+            'Comparison is NOT accuracy versus music ground truth, and does not auto-merge notes.'
+            'MIDI on Piano Roll is preserved until explicitly selecting one of the versions.'
+            'Transkun/PyTorch are optional downloads and are not bundled into ZIP.'
+            'QA results and reviewer approval required before any production merge.'
+          ) -join [Environment]::NewLine | Set-Content -Path (Join-Path $exeDir 'README-STAGE5H.txt')
+          Write-Host 'NOTIQ_STAGE5H_WINDOWS_PACKAGING_PASS'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NOTIQ-Stage5H-Dual-AI-Windows-Preview
+          path: notiq-stage5h-base/
+          compression-level: 6
+          retention-days: 7
+          if-no-files-found: error
