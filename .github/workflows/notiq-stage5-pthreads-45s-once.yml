@@ -1,0 +1,72 @@
+name: NOTIQ Stage 5 - pthread4 genuine 45-second audio stress
+on:
+  push:
+    branches: [experiment/notiq-stage5-wasm-pthreads]
+    paths: [.github/workflows/notiq-stage5-pthreads-45s-once.yml]
+permissions:
+  contents: write
+concurrency:
+  group: notiq-pthread4-stress-one-shot
+  cancel-in-progress: true
+jobs:
+  verify-longer-music:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          submodules: false
+      - name: Verify original vendor source and pinned versions
+        run: |
+          node --test notiq-ai-core/tests/source-integrity.test.mjs
+      - name: Prepare Emscripten v4.0.7 and pinned ggml source
+        run: |
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git /tmp/notiq-emsdk
+          /tmp/notiq-emsdk/emsdk install 4.0.7
+          /tmp/notiq-emsdk/emsdk activate 4.0.7
+          git init /tmp/notiq-ggml
+          git -C /tmp/notiq-ggml remote add origin https://github.com/ggml-org/ggml.git
+          git -C /tmp/notiq-ggml fetch --depth 1 origin e91ded11bdcd78c42f9c8d3978ff6686eb4c1226
+          git -C /tmp/notiq-ggml checkout --detach FETCH_HEAD
+          test "$(git -C /tmp/notiq-ggml rev-parse HEAD)" = e91ded11bdcd78c42f9c8d3978ff6686eb4c1226
+      - name: Compile isolated multithreaded MuScriptor C++ and WASM
+        run: |
+          . /tmp/notiq-emsdk/emsdk_env.sh
+          emcmake cmake -S notiq-ai-core -B /tmp/notiq-pthread4 -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DNOTIQ_WASM_PTHREADS=ON \
+            -DFETCHCONTENT_SOURCE_DIR_GGML=/tmp/notiq-ggml
+          cmake --build /tmp/notiq-pthread4 --target notiq_ai_core --parallel 2
+          test -s /tmp/notiq-pthread4/notiq-ai-core.js
+          node -e "const fs=require('fs');const b=fs.readFileSync('/tmp/notiq-pthread4/notiq-ai-core.wasm');if(!WebAssembly.validate(b))throw Error('pthread4 wasm invalid'); console.log('NOTIQ_VALID_PTHREAD4_WASM',b.length)"
+      - name: Download exact original model and create licensed 45-second repeat
+        run: |
+          curl -fsSL --retry 3 \
+            'https://raw.githubusercontent.com/DamRsn/muscriptor.cpp/c8adc019677ed3479fa3c22c1a117d662382f347/testdata/audio/fixture_3chunks_16k.wav' \
+            -o /tmp/notiq-original.wav
+          test "$(git hash-object /tmp/notiq-original.wav)" = acfa9329d65816633abc3ee5cc3c7662bf403669
+          python3 notiq-ai-core/qa/make_repeated_fixture.py /tmp/notiq-original.wav /tmp/notiq-45s.wav --count 3
+          curl -fL --retry 3 --connect-timeout 30 --max-time 600 \
+            'https://huggingface.co/DamRsn/muscriptor-gguf/resolve/d7045f94e8b19427f4ff9542975035e66596e51c/v1/muscriptor-small-f16.gguf' \
+            -o /tmp/notiq-small.gguf
+          echo '925f55af65a20ebc4f8b45ceaf095a12b72493d436cb112623cd0041a1af23d4  /tmp/notiq-small.gguf' | sha256sum -c -
+      - name: Detect 45 seconds of real audio on Chromium with four ggml threads
+        timeout-minutes: 18
+        run: |
+          mkdir -p /tmp/notiq-45s-browser/web
+          cp /tmp/notiq-pthread4/notiq-ai-core.js /tmp/notiq-pthread4/notiq-ai-core.wasm /tmp/notiq-45s-browser/
+          cp notiq-ai-core/web/worker.mjs notiq-ai-core/web/midi-export.mjs /tmp/notiq-45s-browser/web/
+          cp notiq-ai-core/qa/browser.html /tmp/notiq-45s-browser/web/
+          npm install --prefix /tmp/notiq-pthreads45-playwright --no-fund --no-audit playwright-core@1.56.1
+          timeout 17m node notiq-ai-core/qa/pthreads-45s.mjs
+      - name: Preserve ONLY successful pthread4 JS and WASM on isolated branch
+        if: success()
+        run: |
+          mkdir -p notiq-ai-core/qa/pthread4-artifacts
+          cp /tmp/notiq-pthread4/notiq-ai-core.js /tmp/notiq-pthread4/notiq-ai-core.wasm notiq-ai-core/qa/pthread4-artifacts/
+          git add -f notiq-ai-core/qa/pthread4-artifacts/notiq-ai-core.js notiq-ai-core/qa/pthread4-artifacts/notiq-ai-core.wasm
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "test(notiq): verified pthread4 WASM after real 45-second audio QA [skip ci]"
+          git push origin HEAD:refs/heads/experiment/notiq-stage5-wasm-pthreads

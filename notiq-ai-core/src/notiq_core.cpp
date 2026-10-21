@@ -121,7 +121,13 @@ EMSCRIPTEN_KEEPALIVE int notiq_core_transcribe(const float* samples, int sampleC
     percent = 15;
     try {
         msl::TranscribeOptions options{};
-        options.n_threads = 1; // First WASM proof: no SharedArrayBuffer/pthreads.
+        #if defined(__EMSCRIPTEN_PTHREADS__)
+        // Experimental fixed-size prewarmed Emscripten pool; avoid relying on
+        // hardware_concurrency (which varies between Chrome/Firefox/iPhone).
+        options.n_threads = 4;
+#else
+        options.n_threads = 1; // Validated single-thread baseline.
+#endif
         auto recognized = engine->transcribe(
             std::span<const float>(samples, static_cast<std::size_t>(sampleCount)),
             options,
