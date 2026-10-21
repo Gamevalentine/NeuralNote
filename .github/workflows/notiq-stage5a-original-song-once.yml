@@ -1,4 +1,5 @@
-name: NOTIQ Stage 5A - 180s original piano music followup QA
+name: NOTIQ Stage 5A - 180s original piano PCM-repair QA
+# PR24 Cloudflare Preview exercises only the 22 documented over-range PCM samples
 # 60s original music already PASS (730 notes, 281714ms): GitHub run 39648348425
 # Capture React error banner on 180s failure; do not misclassify quick errors as performance timeout
 # Recheck after runner-only installation of ffmpeg/ffprobe
