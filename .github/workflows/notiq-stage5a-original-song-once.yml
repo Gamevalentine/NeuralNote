@@ -1,0 +1,83 @@
+name: NOTIQ Stage 5A - 180s original piano PCM-repair QA
+# PR24 Cloudflare Preview exercises only the 22 documented over-range PCM samples
+# 60s original music already PASS (730 notes, 281714ms): GitHub run 39648348425
+# Capture React error banner on 180s failure; do not misclassify quick errors as performance timeout
+# Recheck after runner-only installation of ffmpeg/ffprobe
+on:
+  push:
+    branches: [test/notiq-stage5a-long-real-music]
+    paths: [.github/workflows/notiq-stage5a-original-song-once.yml]
+permissions:
+  contents: write
+concurrency:
+  group: notiq-stage5a-original-song
+  cancel-in-progress: true
+jobs:
+  original-song:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 49
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          submodules: false
+      - name: Validate no modification of pinned MuScriptor source
+        run: |
+          node --test notiq-ai-core/tests/source-integrity.test.mjs
+          test -s notiq-ai-core/qa/pthread4-artifacts/notiq-ai-core.wasm
+      - name: Install FFmpeg only inside the ephemeral GitHub runner
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          ffmpeg -version | head -n 1
+          ffprobe -version | head -n 1
+      - name: Obtain a legally credited independent 3m13s piano recording
+        timeout-minutes: 5
+        run: |
+          python3 - <<'PY' >/tmp/notiq-5a-source-url
+          from hashlib import md5
+          from urllib.parse import quote
+          name='The_Entertainer_by_Kevin_MacLeod.ogg'
+          digest=md5(name.encode()).hexdigest()
+          print('https://upload.wikimedia.org/wikipedia/commons/'+digest[:1]+'/'+digest[:2]+'/'+quote(name))
+          PY
+          curl -fL --retry 3 --retry-delay 2 --connect-timeout 30 --max-time 240 \
+            "$(cat /tmp/notiq-5a-source-url)" -o /tmp/notiq-entertainer-original.ogg
+          echo '45111a083a1d5ea88142e4813a6727320cca5d4f  /tmp/notiq-entertainer-original.ogg' | sha1sum -c -
+          test "$(stat -c '%s' /tmp/notiq-entertainer-original.ogg)" = 4278460
+          ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1 /tmp/notiq-entertainer-original.ogg
+          ffmpeg -hide_banner -loglevel error -nostdin -y \
+            -i /tmp/notiq-entertainer-original.ogg -t 60 \
+            -vn -ac 1 -ar 16000 -c:a pcm_f32le -f wav /tmp/notiq-5a-60s.wav
+          ffmpeg -hide_banner -loglevel error -nostdin -y \
+            -i /tmp/notiq-entertainer-original.ogg -t 180 \
+            -vn -ac 1 -ar 16000 -c:a pcm_f32le -f wav /tmp/notiq-5a-180s.wav
+          ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1 /tmp/notiq-5a-60s.wav
+          ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1 /tmp/notiq-5a-180s.wav
+          # Both excerpts are the opening 60s / 180s of a single independent
+          # recording; no loops and no synthesized data.
+          echo 'SOURCE: Kevin MacLeod - The Entertainer (193.38s recording), CC BY 4.0'
+          echo 'https://commons.wikimedia.org/wiki/File:The_Entertainer_by_Kevin_MacLeod.ogg'
+      - name: Run 1min and 3min real music end-to-end against deployed HTTPS AI preview
+        timeout-minutes: 40
+        run: |
+          npm install --prefix /tmp/notiq-5a-playwright --no-fund --no-audit playwright-core@1.56.1
+          NOTIQ_5A_CASE=180 timeout 39m node notiq-ai-core/qa/long-real-music-qa.mjs
+      - name: Save only successful QA metadata and attribution on test branch
+        if: success()
+        run: |
+          mkdir -p notiq-ai-core/qa/verified
+          cp /tmp/notiq-stage5a-result.json notiq-ai-core/qa/verified/stage5a-180s-results.json
+          printf '%s\n' \
+            'Independent recorded piano: The Entertainer by Kevin MacLeod, from incompetech.com' \
+            'Recording source: https://commons.wikimedia.org/wiki/File:The_Entertainer_by_Kevin_MacLeod.ogg' \
+            'CC BY 4.0: https://creativecommons.org/licenses/by/4.0/' \
+            'WAV transformed to mono 16000Hz IEEE float32; took first 60 and 180 seconds, no repetition.' \
+            'NOTIQ inference uses original MuScriptor Small GGUF model, weights CC BY-NC 4.0 for noncommercial testing.' \
+            'DO NOT claim transcribed notes are ground truth; QA validates completeness, duration, MIDI and runtime.' \
+            > notiq-ai-core/qa/verified/stage5a-ATTRIBUTION.txt
+          git add notiq-ai-core/qa/verified/stage5a-180s-results.json notiq-ai-core/qa/verified/stage5a-ATTRIBUTION.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "test(notiq-stage5a): verified genuine 60s and 180s piano recording QA [skip ci]"
+          git push origin HEAD:refs/heads/test/notiq-stage5a-long-real-music
