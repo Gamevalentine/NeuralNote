@@ -100,7 +100,11 @@ export function scoreAgainstReference(reference:ReferenceNote[],predictions:Note
 export function benchmarkComparison(result:Comparison,reference:MidiReference,mode:MusicMode,offsetSeconds=0):BenchmarkResult{
  if(!['piano','ensemble','guided'].includes(mode))throw Error('Chế độ nhạc không hợp lệ.');
  // Guided evaluation scores full reference. In auto recommendation, no classification of the audio is claimed.
- const effectiveMode=mode==='guided'?'ensemble':mode;
+ // In guided mode the *reference's declared GM instruments* determine the
+ // scoring scope: Piano GM0-7 if all notes belong to Piano, ensemble otherwise.
+ // This does NOT claim to classify unknown audio without a MIDI reference.
+ const effectiveMode=mode==='guided'?
+  (reference.notes.every(n=>n.program>=0&&n.program<8)?'piano':'ensemble'):mode;
  const ref=effectiveMode==='piano'?reference.notes.filter(n=>n.program>=0&&n.program<8):reference.notes;
  if(!ref.length)throw Error('MIDI tham chiếu không có track Piano GM0–7 trong chế độ Piano.');
  const left=scoreAgainstReference(ref,chosenCandidates(result.muscriptor.notes,effectiveMode),offsetSeconds);
