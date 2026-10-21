@@ -537,6 +537,24 @@ function App() {
     }
   };
 
+  const useComparedResult = (engine:'muscriptor'|'transkun-v2'|'original') => {
+    if(!comparison||phase==='analyzing')return;
+    const chosen=engine==='original'?comparisonBaseline:
+      engine==='muscriptor'?comparison.muscriptor:comparison.transkun;
+    if(!chosen)return;
+    stop();
+    commitNotes(copyNotes(chosen.notes));
+    setPedalEvents(chosen.pedalEvents.map(p=>({...p})));
+    setPedalTrack(engine==='transkun-v2'?'gm-0':'*');
+    setNativeMuted(new Set());
+    setNativeSolo(null);
+    setNativeSelectedProgram(chosen.notes[0]?.program??null);
+    setPhase('complete');
+    setStatus(engine==='original'?'Đã khôi phục bản MIDI trước 5H.':
+      'Đã chọn MIDI '+(engine==='muscriptor'?'MuScriptor':'Transkun V2')+
+      '; hai kết quả vẫn lưu trong bảng 5H.');
+  };
+
   const startInference = () => {
     if (selection) void runRecognition(selection);
   };
