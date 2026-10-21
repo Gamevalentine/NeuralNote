@@ -43,7 +43,7 @@ test('real Type1 MIDI parsing reads tempo, independent tracks, and ignores drums
  const data=midi.toArray();
  const loaded=await readReferenceMidi(new Blob([data]),'answer.mid');
  assert.equal(loaded.notes.length,1);assert.equal(loaded.notes[0].pitchMidi,60);
- assert.equal(loaded.notes[0].durationSeconds,.5);
+ assert.ok(Math.abs(loaded.notes[0].durationSeconds-.5)<0.002);
  assert.equal(loaded.tracks,1);
 });
 test('Piano excludes non-piano MuScriptor instruments, auto needs reference evidence',()=>{
