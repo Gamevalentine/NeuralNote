@@ -55,7 +55,7 @@ try{
  await page.waitForFunction(()=>document.querySelector('.notiq-ai-mode')?.textContent.includes('MuScriptor (Windows)'));
  const transport=page.getByRole('group',{name:'Điều khiển phát lại'});
  assert(await transport.isVisible(),'Transport missing');
- assert(await page.getByRole('button',{name:'Phát',exact:true}).isDisabled(),'Play should be disabled without notes/audio');
+ assert(await transport.getByRole('button',{name:'Phát',exact:true}).isDisabled(),'Play should be disabled without notes/audio');
  await page.locator('input[type=file]').setInputFiles({name:'qa-piano.wav',mimeType:'audio/wav',buffer:fixture});
  const overlay=page.getByRole('status',{name:'Tiến trình nhận diện nốt'});
  await overlay.waitFor({timeout:12000});
@@ -63,7 +63,7 @@ try{
  assert(notice.includes('NOTIQ đang nhận diện âm thanh'),'Centered recognition title missing');
  assert(notice.includes('Đã chạy:'),'Elapsed time missing');
  assert(notice.includes('chưa cung cấp %'),'No disclosure of indeterminate progress');
- assert(await page.getByRole('button',{name:'Phát',exact:true}).isDisabled(),'Play should be disabled during recognition');
+ assert(await transport.getByRole('button',{name:'Phát',exact:true}).isDisabled(),'Play should be disabled during recognition');
  await page.waitForFunction(()=>document.querySelector('.notiq-ai-card')?.innerText.includes('Giai đoạn 2/2'),null,{timeout:10000});
  await page.screenshot({path:'/tmp/notiq-5d-progress-overlay.png',fullPage:true});
  await overlay.waitFor({state:'hidden',timeout:15000});
@@ -71,26 +71,26 @@ try{
  // Explicitly select only the original audio: no SoundFont network download needed.
  await page.getByRole('button',{name:'Phát lại',exact:true}).click();
  await page.locator('#playmode-menu').selectOption('original');
- await page.getByRole('button',{name:'Phát',exact:true}).click();
- await page.getByRole('button',{name:'Tạm dừng',exact:true}).waitFor({timeout:10000});
+ await transport.getByRole('button',{name:'Phát',exact:true}).click();
+ await transport.getByRole('button',{name:'Tạm dừng',exact:true}).waitFor({timeout:10000});
  await page.waitForFunction(()=>document.querySelector('audio')?.currentTime>0.3,null,{timeout:8000});
- await page.getByRole('button',{name:'Tạm dừng',exact:true}).click();
+ await transport.getByRole('button',{name:'Tạm dừng',exact:true}).click();
  const paused=await page.locator('audio').evaluate(a=>({paused:a.paused,time:a.currentTime}));
  await page.waitForTimeout(240);
  const stillPaused=await page.locator('audio').evaluate(a=>({paused:a.paused,time:a.currentTime}));
  assert(paused.paused && stillPaused.paused && Math.abs(paused.time-stillPaused.time)<0.07,'Pause did not hold audio time');
- await page.getByRole('button',{name:'Phát',exact:true}).click();
- await page.getByRole('button',{name:'Tạm dừng',exact:true}).waitFor({timeout:8000});
+ await transport.getByRole('button',{name:'Phát',exact:true}).click();
+ await transport.getByRole('button',{name:'Tạm dừng',exact:true}).waitFor({timeout:8000});
  await page.waitForFunction(t=>document.querySelector('audio')?.currentTime>t+0.1,paused.time,{timeout:5000});
- await page.getByRole('button',{name:'Dừng',exact:true}).click();
+ await transport.getByRole('button',{name:'Dừng',exact:true}).click();
  const stopped=await page.locator('audio').evaluate(a=>({paused:a.paused,time:a.currentTime}));
  assert(stopped.paused&&stopped.time<0.06,'Stop did not pause and rewind audio');
- await page.getByRole('button',{name:'Phát lặp'}).click();
- assert(await page.getByRole('button',{name:'Phát lặp'}).getAttribute('aria-pressed')==='true','Loop toggle did not work');
+ await transport.getByRole('button',{name:'Phát lặp'}).click();
+ assert(await transport.getByRole('button',{name:'Phát lặp'}).getAttribute('aria-pressed')==='true','Loop toggle did not work');
  await page.screenshot({path:'/tmp/notiq-5d-transport.png',fullPage:true});
- await page.getByRole('button',{name:'Đóng bài hát'}).click();
- assert(await page.getByRole('button',{name:'Phát',exact:true}).isDisabled(),'Play should be disabled after close file');
- assert(!await page.getByRole('button',{name:'Đóng bài hát'}).count(),'Close should clear loaded file');
+ await transport.getByRole('button',{name:'Đóng bài hát'}).click();
+ assert(await transport.getByRole('button',{name:'Phát',exact:true}).isDisabled(),'Play should be disabled after close file');
+ assert(!await transport.getByRole('button',{name:'Đóng bài hát'}).count(),'Close should clear loaded file');
  assert(errors.length===0,'Browser errors: '+JSON.stringify(errors));
  const report={status:'PASS',testing:'React UI + mock native bridge; NO real MuScriptor, NO actual Kontakt audio',sha:process.env.GITHUB_SHA,
  overlay:true,elapsedDisplay:true,stage2:true,transport:true,pauseRetainsPosition:true,resume:true,stopRewinds:true,closeClears:true,errors};
