@@ -13,7 +13,10 @@ import type { Note, AudioInfo, PitchGroup } from './audio';
 import { DEFAULT_INSTRUMENTS, INSTRUMENTS, instrumentProgram, playSoundfontNote, prepareInstrument, stopSoundfontNotes } from './soundfont';
 import type { InstrumentId, InstrumentSelection } from './soundfont';
 import { nativeInstrumentPrograms, nativeProgramName } from './muscriptorProtocol';
-import { nativeBridgeAvailable, runMuScriptor } from './muscriptorNative';
+import { nativeBridgeAvailable, runMuScriptor, convertAudioToNativeWav } from './muscriptorNative';
+import {toPianoNotes} from './muscriptorProtocol';
+import {toPianoV2Notes} from './transkunProtocol';
+import {compareEngines, ONSET_TOLERANCE_SECONDS, type Comparison} from './compareEngines';
 import { runPianoV2 } from './transkunNative';
 import { webAiEnabled, installWebModel, recognizeWeb, closeWebModel } from './muscriptorWebLocal';
 
@@ -55,6 +58,9 @@ function App() {
   const [analysisEngine, setAnalysisEngine] = useState<'muscriptor'|'transkun-v2'>('muscriptor');
   const [pianoInstalled, setPianoInstalled] = useState(false);
   const [pianoInstalling, setPianoInstalling] = useState(false);
+  const [comparison, setComparison] = useState<Comparison|null>(null);
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [comparisonBaseline, setComparisonBaseline] = useState<{notes:Note[];pedalEvents:PedalEvent[]}|null>(null);
   const browserAi = webAiEnabled();
   const aiAvailable = nativeReady || browserAi;
   const [nativeModelInstalled, setNativeModelInstalled] = useState(false);
@@ -281,6 +287,9 @@ function App() {
     setTime(0);
     setPedalEvents([]);
     setPedalTrack('*');
+    setComparison(null);
+    setCompareOpen(false);
+    setComparisonBaseline(null);
     setProgress(0);
     firedNotes.current.clear();
     if (audioEl.current) audioEl.current.pause();
@@ -831,6 +840,9 @@ function App() {
   };
   const reset = () => {
     stop();
+    setComparison(null);
+    setCompareOpen(false);
+    setComparisonBaseline(null);
     setSelection(null);
     setInfo(null);
     clearHistory();
