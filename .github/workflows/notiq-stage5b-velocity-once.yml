@@ -1,4 +1,5 @@
 name: NOTIQ Stage 5B - audio-derived velocity experiment QA
+# Final QA after SoundFont preview velocity scaling and experimental result labeling
 on:
   push:
     branches: [experiment/notiq-stage5b-expressive-velocity]
