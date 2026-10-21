@@ -12,16 +12,12 @@ const { Readable, Transform } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
 const { spawn } = require('node:child_process');
 
-const model = Object.freeze({
-  filename: 'muscriptor-small-f16.gguf',
-  bytes: 209425152,
-  sha256: '925f55af65a20ebc4f8b45ceaf095a12b72493d436cb112623cd0041a1af23d4',
-  url: 'https://huggingface.co/DamRsn/muscriptor-gguf/resolve/d7045f94e8b19427f4ff9542975035e66596e51c/v1/muscriptor-small-f16.gguf',
-});
+const { MODELS, getModel } = require('./models.cjs');
+const { hasVerifiedModel, downloadVerifiedModel } = require('./model-download.cjs');
 const portableDir = path.dirname(process.execPath);
 const dataDir = path.join(portableDir, 'NOTIQ-Data');
 const modelsDir = path.join(portableDir, 'models');
-const modelPath = path.join(modelsDir, model.filename);
+const selectedModelPath = () => path.join(modelsDir, getModel(selectedModel).filename);
 const bridgeBinary = path.join(process.resourcesPath, 'bridge-bin', 'notiq-muscriptor-cli.exe');
 
 // Prefer writing Chromium cache, weights, and temporary audio beside the portable
@@ -29,6 +25,13 @@ const bridgeBinary = path.join(process.resourcesPath, 'bridge-bin', 'notiq-muscr
 fs.mkdirSync(dataDir, { recursive: true });
 app.setPath('userData', dataDir);
 app.setPath('sessionData', dataDir);
+const preferencesPath = path.join(dataDir,'model-preferences.json');
+let selectedModel = 'small';
+try {
+  const stored = JSON.parse(fs.readFileSync(preferencesPath,'utf8'));
+  if (stored && typeof stored.selectedModel === 'string' && Object.hasOwn(MODELS,stored.selectedModel))
+    selectedModel = stored.selectedModel;
+} catch { /* first launch or invalid preferences, retain Small */ }
 
 let window = null;
 let downloadJob = null;
@@ -42,64 +45,59 @@ function report(kind, percent, message) {
 }
 
 function bridgeStatus() {
-  let size = 0;
-  try { size = fs.statSync(modelPath).size; } catch {}
+  const model=getModel(selectedModel), filename=selectedModelPath();
+  let size=0;
+  try {size=fs.statSync(filename).size;} catch {}
   return {
     available: process.platform === 'win32' && fs.existsSync(bridgeBinary),
     modelInstalled: size === model.bytes,
+    modelSize: model.id,
+    modelLabel: model.label,
     modelBytes: model.bytes,
     modelLocation: 'models/' + model.filename,
+    availableModels: Object.keys(MODELS),
     license: 'CC BY-NC 4.0; phi thương mại',
     busy: !!transcriptionJob,
     downloading: !!downloadJob,
   };
 }
-
+function selectModel(id) {
+  if (downloadJob || transcriptionJob) throw Error('Hãy kết thúc tải mô hình/nhận diện trước khi đổi model.');
+  // Check against the whitelist before persisting; never accept a file path.
+  const selected=getModel(id);
+  selectedModel=selected.id;
+  fs.writeFileSync(preferencesPath,JSON.stringify({selectedModel},null,2),'utf8');
+  return bridgeStatus();
+}
 async function downloadModel() {
-  if (downloadJob) return downloadJob;
-  downloadJob = (async () => {
-    if (fs.existsSync(modelPath) && (await fsp.stat(modelPath)).size === model.bytes) return bridgeStatus();
-    await fsp.mkdir(modelsDir, { recursive: true });
-    const partial = modelPath + '.partial';
+  if(downloadJob) return downloadJob;
+  const selected=getModel(selectedModel);
+  const filename=path.join(modelsDir,selected.filename);
+  downloadJob=(async()=>{
     try {
-      const response = await fetch(model.url, { redirect: 'follow' });
-      if (!response.ok || !response.body) throw new Error('Máy chủ trả về HTTP ' + response.status);
-      const contentType = response.headers.get('content-type') || '';
-      if (/text\/html/i.test(contentType)) throw new Error('Máy chủ không trả về checkpoint GGUF');
-      const digest = createHash('sha256');
-      let received = 0, lastReported = -1;
-      const checkChunk = new Transform({
-        transform(chunk, _encoding, next) {
-          received += chunk.length;
-          if (received > model.bytes) { next(new Error('Dung lượng model không hợp lệ')); return; }
-          digest.update(chunk);
-          const pct = Math.floor((received / model.bytes) * 100);
-          if (pct !== lastReported) {
-            lastReported = pct;
-            report('download', pct, 'Đang tải MuScriptor Small (' + pct + '%)');
-          }
-          next(null, chunk);
-        },
+      await downloadVerifiedModel(selected,filename,(pct)=>{
+        report('download',pct,'Đang tải MuScriptor '+selected.label+' ('+pct+'%)');
       });
-      await pipeline(Readable.fromWeb(response.body), checkChunk, fs.createWriteStream(partial));
-      if (received !== model.bytes || digest.digest('hex').toLowerCase() !== model.sha256)
-        throw new Error('Checkpoint không khớp kích thước hoặc SHA-256 đã công bố');
-      await fsp.rename(partial, modelPath);
-      report('download', 100, 'Đã xác minh SHA-256 của MuScriptor Small');
+      report('download',100,'MuScriptor '+selected.label+' đã xác minh SHA-256');
       return bridgeStatus();
-    } catch (error) {
-      await fsp.rm(partial, { force: true }).catch(() => {});
-      throw new Error('Không tải được model MuScriptor: ' + (error?.message || String(error)));
+    }catch(error){
+      // A valid partial GGUF is retained beside NOTIQ on the chosen E: drive.
+      throw Error('Tải MuScriptor '+selected.label+' thất bại: '+(error?.message||String(error))
+        + '. Bạn có thể bấm Tải mô hình để tiếp tục.');
     }
   })();
-  try { return await downloadJob; } finally { downloadJob = null; }
+  try{return await downloadJob}finally{downloadJob=null}
 }
 
 async function transcribeViaNative(input) {
   if (transcriptionJob) throw new Error('MuScriptor đang xử lý một bản nhạc khác.');
   if (!bridgeStatus().available) throw new Error('Không tìm thấy MuScriptor native CLI trong bản Windows này.');
+  const model=getModel(selectedModel);
+  const modelPath=path.join(modelsDir,model.filename);
   if (!bridgeStatus().modelInstalled)
-    throw new Error('Chưa tải MuScriptor Small (209 MB). Vui lòng bấm Tải mô hình trước.');
+    throw new Error('Chưa tải MuScriptor '+model.label+'. Hãy chọn Tải mô hình trước.');
+  if (!(await hasVerifiedModel(model,modelPath)))
+    throw new Error('SHA-256 model '+model.label+' không hợp lệ. Hãy tải lại bản chính thức.');
   const raw = input instanceof Uint8Array ? input : new Uint8Array(input);
   if (raw.byteLength < 44 || raw.byteLength > 15*60*16000*4+4096)
     throw new Error('MuScriptor hỗ trợ tệp đã chuyển đổi tối đa 15 phút.');
@@ -113,7 +111,7 @@ async function transcribeViaNative(input) {
     const output = path.join(work, 'notes.json');
     try {
       await fsp.writeFile(audio, raw);
-      report('transcribe', 0, 'Đang khởi động MuScriptor trên CPU');
+      report('transcribe', 0, 'Đang khởi động MuScriptor '+model.label+' trên CPU (Large có thể rất chậm và dùng nhiều RAM)');
       await new Promise((resolve, reject) => {
         const child = spawn(bridgeBinary, [audio, modelPath, output], {
           shell: false, windowsHide: true, stdio: ['ignore','pipe','pipe'],
@@ -172,6 +170,7 @@ function createWindow() {
 app.whenReady().then(() => {
   ipcMain.handle('notiq:status', () => bridgeStatus());
   ipcMain.handle('notiq:download-model', () => downloadModel());
+  ipcMain.handle('notiq:select-model', (_event, id) => selectModel(id));
   ipcMain.handle('notiq:transcribe', (_event, bytes) => transcribeViaNative(bytes));
   createWindow();
   app.on('activate', () => {
