@@ -39,9 +39,9 @@ jobs:
             -DNOTIQ_WASM_PTHREADS=ON \
             -DFETCHCONTENT_SOURCE_DIR_GGML=/tmp/notiq-ggml
           cmake --build /tmp/notiq-pthread-build --target notiq_ai_core --parallel 2
+          # Emscripten 4.0.7 embeds pthread bootstrap; no separate worker.js.
           ls -lh /tmp/notiq-pthread-build/notiq-ai-core.js \
-            /tmp/notiq-pthread-build/notiq-ai-core.wasm \
-            /tmp/notiq-pthread-build/notiq-ai-core.worker.js
+            /tmp/notiq-pthread-build/notiq-ai-core.wasm
           node -e "const fs=require('fs');const b=fs.readFileSync('/tmp/notiq-pthread-build/notiq-ai-core.wasm');if(!WebAssembly.validate(b))throw Error('Invalid pthread4 WASM'); console.log('NOTIQ_PTHREAD_BINARY_VALID',b.length)"
       - name: Prepare same original CC BY 4.0 music and pinned noncommercial model
         run: |
@@ -59,7 +59,7 @@ jobs:
           mkdir -p /tmp/notiq-pthreads-ab/baseline/web /tmp/notiq-pthreads-ab/pthread4/web
           cp web/public/notiq-core/notiq-ai-core.js web/public/notiq-core/notiq-ai-core.wasm /tmp/notiq-pthreads-ab/baseline/
           cp /tmp/notiq-pthread-build/notiq-ai-core.js /tmp/notiq-pthread-build/notiq-ai-core.wasm \
-            /tmp/notiq-pthread-build/notiq-ai-core.worker.js /tmp/notiq-pthreads-ab/pthread4/
+            /tmp/notiq-pthreads-ab/pthread4/
           for d in baseline pthread4; do
             cp notiq-ai-core/web/worker.mjs notiq-ai-core/web/midi-export.mjs /tmp/notiq-pthreads-ab/$d/web/
             cp notiq-ai-core/qa/browser.html /tmp/notiq-pthreads-ab/$d/web/
