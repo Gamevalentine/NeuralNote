@@ -1,4 +1,5 @@
 name: NOTIQ Stage 5A - original full-song 60s and 180s HTTPS QA
+# Recheck after runner-only installation of ffmpeg/ffprobe
 on:
   push:
     branches: [test/notiq-stage5a-long-real-music]
