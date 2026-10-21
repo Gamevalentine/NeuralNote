@@ -1,4 +1,5 @@
 name: NOTIQ Stage 5 - compare baseline WASM vs O3 experimental candidate
+# Repeat with preserved named WASM ABI after O3 export minification check
 on:
   push:
     branches:
