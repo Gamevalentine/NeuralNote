@@ -9,3 +9,18 @@
 .editable-note:hover .note-resize-handle,.editable-note.selected-note .note-resize-handle{opacity:1}
 .piano-edit-hint{color:#b5bafa;font-size:10px;letter-spacing:.1px;white-space:nowrap;flex:none!important}
 @media(max-width:1040px){.piano-edit-hint{display:none}}
+
+/* Stage 5C: optional manual CC64 controller lane. The piano notes and approved layout remain intact. */
+.pedal-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:6px 9px;background:#171e2c;border-top:1px solid #343e52;padding:7px 10px;color:#cfd7e9;font-size:11px}
+.pedal-toolbar strong{white-space:nowrap;color:#f4d58b}
+.pedal-toolbar select{max-width:185px;min-width:145px;padding:5px 6px;border:1px solid #526074;border-radius:5px;background:#222c40;color:#f3f5fa}
+.pedal-toolbar button{padding:5px 8px;border-radius:5px;background:#283448;color:#f3f5fa;border:1px solid #526074;cursor:pointer}
+.pedal-toolbar button:hover:not(:disabled){border-color:#f4d58b;background:#39445a}
+.pedal-toolbar button:disabled{opacity:.48;cursor:not-allowed}
+.pedal-toolbar small{color:#aebcd0;font-size:10px}
+.pedal-lane{position:relative;height:24px;border-top:1px solid #556178;background:#1b2639;overflow:hidden}
+.pedal-lane-caption{position:sticky;left:3px;z-index:2;color:#aabdd3;font-size:9px;pointer-events:none}
+.pedal-marker{position:absolute;top:3px;transform:translateX(-50%);min-width:15px;height:18px;line-height:16px;padding:0 2px;border:1px solid #fff6;border-radius:3px;font-size:9px;cursor:pointer;color:#101721;z-index:3}
+.pedal-marker.pedal-on{background:#f4c671}
+.pedal-marker.pedal-off{background:#7ec8b2}
+.pedal-marker:focus-visible{outline:2px solid white}

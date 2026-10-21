@@ -1,0 +1,47 @@
+name: NOTIQ Stage 5C Chromium CC64 Browser QA
+on:
+  push:
+    branches:
+      - feature/notiq-stage5c-manual-pedal-cc64
+    paths:
+      - .github/workflows/notiq-stage5c-browser-qa.yml
+      - notiq-ai-core/qa/pedal-browser.mjs
+      - web/src/pedal.ts
+      - web/src/dawMidi.ts
+      - web/src/App.tsx
+      - web/src/piano-editor.css
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser-cc64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build NOTIQ with TypeScript and Vite
+        working-directory: web
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+      - name: Install Chromium automation for isolated local site
+        run: npm install --prefix /tmp/notiq-5c-playwright --no-fund --no-audit playwright-core@1.56.1
+      - name: Browser click-through and binary MIDI CC64 verification
+        run: node notiq-ai-core/qa/pedal-browser.mjs
+      - name: Save QA report and screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: notiq-stage5c-browser-qa
+          path: |
+            /tmp/notiq-5c-pedal-results.json
+            /tmp/notiq-5c-pedal-qa.png
+            /tmp/notiq-5c-cc64-demo.mid
+            /tmp/notiq-5c-kontakt-stems.zip
+            /tmp/notiq-5c-failure.png
+          if-no-files-found: warn

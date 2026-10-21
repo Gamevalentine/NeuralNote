@@ -1,0 +1,43 @@
+name: NOTIQ Stage 5C Cloudflare Hosted Browser QA
+on:
+  push:
+    branches:
+      - feature/notiq-stage5c-manual-pedal-cc64
+    paths:
+      - .github/workflows/notiq-stage5c-cloudflare-qa.yml
+      - notiq-ai-core/qa/pedal-browser.mjs
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  cloudflare-public-cc64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Prepare MIDI decoder for downloaded live-file validation
+        working-directory: web
+        run: npm install --no-audit --no-fund
+      - name: Install local Playwright driver
+        run: npm install --prefix /tmp/notiq-5c-playwright --no-fund --no-audit playwright-core@1.56.1
+      - name: Chromium real click, download and binary MIDI check on immutable public Cloudflare deployment
+        env:
+          NOTIQ_HOSTED_URL: https://27a94faa.neuralnote-e4c.pages.dev/
+        run: node notiq-ai-core/qa/pedal-browser.mjs
+      - name: Upload live-site QA evidence and MIDI demo
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: notiq-stage5c-cloudflare-live-qa
+          path: |
+            /tmp/notiq-5c-pedal-results.json
+            /tmp/notiq-5c-pedal-qa.png
+            /tmp/notiq-5c-cc64-demo.mid
+            /tmp/notiq-5c-kontakt-stems.zip
+            /tmp/notiq-5c-failure.png
+          if-no-files-found: warn
