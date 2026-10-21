@@ -1245,6 +1245,27 @@ function App() {
       {comparison&&compareOpen&&nativeReady&&<ComparisonPanel result={comparison}
         onUse={useComparedResult} onSeek={seekTo} onClose={()=>setCompareOpen(false)}
         disabled={phase==='analyzing'} canRestore={!!comparisonBaseline}/>}
+      {nativeReady && selection && <section className="notiq-5i-toggle">
+        <strong>AI 5I</strong>
+        <button type="button" aria-label="Mở kiểm tra MIDI chuẩn 5I"
+          aria-expanded={showBenchmark}
+          onClick={()=>setShowBenchmark(v=>!v)}>
+          {showBenchmark?'Ẩn 5I · MIDI chuẩn':'5I · Đo nốt đúng/sai bằng MIDI chuẩn'}
+        </button>
+        <span>Chọn Piano / Đa nhạc cụ · F1 tính khi có MIDI tham chiếu</span>
+      </section>}
+      {nativeReady && selection && showBenchmark && <BenchmarkPanel
+        mode={musicMode} onMode={chooseMusicMode}
+        reference={referenceMidi} onFile={file=>void loadReference(file)}
+        onClear={()=>{setReferenceMidi(null);setShowScores(false)}}
+        offset={referenceOffset} onOffset={setReferenceOffset}
+        benchmark={benchmark}
+        running={phase==='analyzing'||busyLoading}
+        canCompare={nativeModelInstalled&&pianoInstalled}
+        onEvaluate={evaluateReference}
+        onCompare={()=>void runComparison()}
+        onUse={useComparedResult}
+      />}
       {desktopReview && showDesktopReview && <section className="desktop-review-panel" aria-label="Duyệt giao diện NOTIQ Desktop">
         <div className="desktop-review-head"><strong>NOTIQ Desktop · Bản duyệt giao diện</strong><button type="button" aria-label="Đóng bảng duyệt" onClick={() => { setShowDesktopReview(false); setReviewArea(null); }}><X size={16}/></button></div>
         <p>Trang này là bản mẫu giao diện. Piano Roll, SoundFont và xuất MIDI hoạt động; việc tự động nhận diện nốt dùng engine MuScriptor gốc NeuralNote trên Windows.</p>
