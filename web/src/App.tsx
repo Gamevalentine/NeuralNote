@@ -18,6 +18,7 @@ import {toPianoNotes} from './muscriptorProtocol';
 import {toPianoV2Notes} from './transkunProtocol';
 import {type Comparison} from './compareEngines';
 import {compareOriginalAudio} from './dualEngineNative';
+import {ComparisonPanel} from './ComparisonPanel';
 import { runPianoV2 } from './transkunNative';
 import { webAiEnabled, installWebModel, recognizeWeb, closeWebModel } from './muscriptorWebLocal';
 
@@ -898,6 +899,9 @@ function App() {
     setComparison(null);
     setCompareOpen(false);
     setComparisonBaseline(null);
+    setComparison(null);
+    setCompareOpen(false);
+    setComparisonBaseline(null);
     setSelection(null);
     setInfo(null);
     clearHistory();
@@ -970,6 +974,9 @@ function App() {
     {
       id: 'tools', label: 'Công cụ', commands: [
         { label: phase === 'analyzing' ? 'Đang nhận diện…' : 'Nhận diện Audio → MIDI', run: () => void startInference(), disabled: !selection || phase === 'analyzing' },
+        { label:'5H · So sánh MuScriptor và Transkun',run:()=>void runComparison(),
+          disabled:!nativeReady||!selection||!nativeModelInstalled||!pianoInstalled||phase==='analyzing' },
+        { label:'5H · Xem đối chiếu',run:()=>setCompareOpen(true),disabled:!comparison },
         { label: nativeReady ? 'AI: MuScriptor (NeuralNote gốc) — đang sử dụng'
             : 'MuScriptor gốc NeuralNote — yêu cầu NOTIQ Windows',
           run: () => {}, disabled: true, checked: nativeReady },
