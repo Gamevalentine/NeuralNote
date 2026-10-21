@@ -25,6 +25,16 @@ async function downloadVerifiedModel(model,dest,onProgress=()=>{},fetchImpl=fetc
   let previous=0;
   try {previous=(await fsp.stat(partial)).size} catch {}
   if(previous>model.bytes) {await fsp.rm(partial,{force:true});previous=0}
+  if(previous===model.bytes) {
+    if(await hasVerifiedModel(model,partial)) {
+      await fsp.rm(dest,{force:true});
+      await fsp.rename(partial,dest);
+      onProgress(100,model.bytes,model.bytes);
+      return {alreadyInstalled:false};
+    }
+    await fsp.rm(partial,{force:true});
+    previous=0;
+  }
   // Hash the existing bytes and append only after the server has honored Range.
   let response=await fetchImpl(model.url,{redirect:'follow',headers:previous?{Range:'bytes='+previous+'-'}:{}});
   if(!response.ok||!response.body)throw Error('Máy chủ tải GGUF trả về HTTP '+response.status);
@@ -56,6 +66,7 @@ async function downloadVerifiedModel(model,dest,onProgress=()=>{},fetchImpl=fetc
     await fsp.rm(partial,{force:true});
     throw Error('SHA-256 không khớp bản GGUF gốc, đã xóa bản tải lỗi');
   }
+  await fsp.rm(dest,{force:true});
   await fsp.rename(partial,dest);
   onProgress(100,model.bytes,model.bytes);
   return {alreadyInstalled:false};
