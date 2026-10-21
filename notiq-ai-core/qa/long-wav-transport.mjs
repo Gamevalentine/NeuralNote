@@ -50,9 +50,9 @@ try {
  await transport.getByRole('button',{name:'Tạm dừng',exact:true}).waitFor({timeout:60000});
  await page.waitForFunction(()=>Number(document.querySelector('.notiq-transport-clock')?.textContent?.match(/:(\d+)\./)?.[1]||0)>=2,null,{timeout:60000});
  if(!(await page.locator('audio').evaluate(a=>a.paused)))throw Error('MIDI mode triggered source audio playback');
- if(!audioNodes.includes('AudioBufferSourceNode'))
+ if(!audioNodes.includes('AudioBufferSource'))
    throw Error('MIDI clock moved but no real AudioBufferSourceNode created. Audio may still be silent: '+JSON.stringify(audioNodes.slice(-20)));
- console.log('NOTIQ_STAGE5E_4MIN_CLOCK_PASS',await transport.locator('.notiq-transport-clock').innerText(), 'source nodes='+audioNodes.filter(n=>n==='AudioBufferSourceNode').length);
+ console.log('NOTIQ_STAGE5E_4MIN_CLOCK_PASS',await transport.locator('.notiq-transport-clock').innerText(), 'source nodes='+audioNodes.filter(n=>n==='AudioBufferSource').length);
  await transport.getByRole('button',{name:'Tạm dừng',exact:true}).click();
  const paused=await transport.locator('.notiq-transport-clock').innerText();
  await page.waitForTimeout(250);
