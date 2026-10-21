@@ -49,7 +49,14 @@ async function exportVia(menuPattern,ext){
 }
 function ensure(condition,msg){if(!condition)throw Error(msg)}
 try{
-  await page.goto('http://127.0.0.1:4175/',{waitUntil:'domcontentloaded',timeout:30000});
+  const url=process.env.NOTIQ_HOSTED_URL || 'http://127.0.0.1:4175/';
+  await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});
+  const isolation=await page.evaluate(()=>({
+    crossOriginIsolated:self.crossOriginIsolated,
+    sharedArrayBuffer:typeof SharedArrayBuffer==='function'
+  }));
+  ensure(isolation.crossOriginIsolated && isolation.sharedArrayBuffer,
+    'Missing COOP/COEP/SharedArrayBuffer required by real MuScriptor preview: '+JSON.stringify(isolation));
   await page.locator('.roll.piano-editable').waitFor();
   ensure(await page.getByRole('group',{name:'Biên tập pedal MIDI CC64'}).isVisible(),'CC64 toolbar not visible');
   // Local, human-style note entry in the piano roll; no fake AI output.
@@ -97,7 +104,7 @@ try{
   ensure(clean.every(t=>t.pedal.length===0),'Clear CC64 leaked controller events to exported MIDI');
   ensure(JSON.stringify(clean.map(t=>({name:t.name,notes:t.notes})))===originalNotes,'Clearing CC64 edited note contents');
   ensure(errors.length===0,'Browser errors: '+JSON.stringify(errors));
-  const result={status:'PASS',browser:'Chrome headless',scope:'manual notes + CC64 UI + MIDI Type1 + ZIP stems, not AI/piano sound',head:process.env.GITHUB_SHA,
+  const result={status:'PASS',browser:'Chrome headless',site:process.env.NOTIQ_HOSTED_URL || 'local build',scope:'manual notes + CC64 UI + MIDI Type1 + ZIP stems, not AI/piano sound',head:process.env.GITHUB_SHA,
     notes:untouched.reduce((n,t)=>n+t.notes.length,0),tracks:untouched.length,cc64Tested:true,
     pedalTrack:onTrack.name,pedalTimes:onTrack.pedal.map(p=>p.time),pedalValues:onTrack.pedal.map(p=>p.value),
     noPedalAfterClear:true,unchangedNotes:true,jsErrors:errors};
