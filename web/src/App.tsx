@@ -552,6 +552,47 @@ function App() {
     }
   };
 
+  const loadReference = async(file:File) => {
+    if(phase==='analyzing'||busyLoading)return;
+    setError('');
+    try {
+      const parsed=await readReferenceMidi(file,file.name);
+      setReferenceMidi(parsed);
+      setShowScores(false);
+      setShowBenchmark(true);
+      setStatus('Đã tải MIDI chuẩn '+file.name+' · '+parsed.notes.length+
+        ' nốt. Chọn So sánh hai AI rồi chấm F1.');
+    } catch(cause){
+      setReferenceMidi(null);
+      setShowScores(false);
+      setError('Không đọc được MIDI chuẩn: '+
+        (cause instanceof Error?cause.message:'Tệp không hợp lệ'));
+    }
+  };
+  const chooseMusicMode = (mode:MusicMode) => {
+    if(phase==='analyzing')return;
+    setMusicMode(mode);
+    if(mode==='piano')setAnalysisEngine('transkun-v2');
+    if(mode==='ensemble')setAnalysisEngine('muscriptor');
+    setShowScores(false);
+    setStatus(mode==='piano'?'5I: chế độ Piano ưu tiên Transkun V2, dùng MuScriptor khi đối chiếu.' :
+      mode==='ensemble'?'5I: chế độ đa nhạc cụ dùng MuScriptor.' :
+      '5I: tự đề xuất chỉ dựa trên F1 của MIDI tham chiếu, không tự thay MIDI.');
+  };
+  const evaluateReference = () => {
+    if(!referenceMidi)return;
+    if(comparison){
+      try {
+        benchmarkComparison(comparison,referenceMidi,musicMode,referenceOffset);
+        setShowScores(true);
+        setStatus('5I: kết quả điểm F1 so với MIDI chuẩn đã hiển thị.');
+      }catch(cause){setError(cause instanceof Error?cause.message:'Không chấm được MIDI chuẩn.')}
+    }else{
+      setShowScores(true);
+      void runComparison();
+    }
+  };
+
   const useComparedResult = (engine:'muscriptor'|'transkun-v2'|'original') => {
     if(!comparison||phase==='analyzing')return;
     const chosen=engine==='original'?comparisonBaseline:
@@ -913,9 +954,10 @@ function App() {
     setComparison(null);
     setCompareOpen(false);
     setComparisonBaseline(null);
-    setComparison(null);
-    setCompareOpen(false);
-    setComparisonBaseline(null);
+    setReferenceMidi(null);
+    setReferenceOffset(0);
+    setShowScores(false);
+    setShowBenchmark(false);
     setSelection(null);
     setInfo(null);
     clearHistory();
