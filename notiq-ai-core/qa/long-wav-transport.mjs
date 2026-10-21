@@ -40,7 +40,7 @@ try {
  b.writeUInt32LE(16,16);b.writeUInt16LE(1,20);b.writeUInt16LE(1,22);
  b.writeUInt32LE(rate,24);b.writeUInt32LE(rate*2,28);
  b.writeUInt16LE(2,32);b.writeUInt16LE(16,34);b.write('data',36);b.writeUInt32LE(n*2,40);
- await page.goto('http://127.0.0.1:4186/',{waitUntil:'domcontentloaded'});
+ await page.goto(process.env.NOTIQ_HOSTED_URL || 'http://127.0.0.1:4186/',{waitUntil:'domcontentloaded'});
  await page.waitForFunction(()=>document.querySelector('.notiq-ai-mode')?.textContent.includes('Windows'));
  await page.locator('input[type=file]').setInputFiles({name:'long.wav',mimeType:'audio/wav',buffer:b});
  await page.waitForFunction(()=>document.querySelectorAll('.editable-note').length===815,null,{timeout:90000});
