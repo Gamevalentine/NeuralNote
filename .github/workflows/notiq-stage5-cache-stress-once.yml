@@ -1,0 +1,110 @@
+name: NOTIQ Stage 5 - real browser cache and 45-second WASM stress QA
+
+on:
+  push:
+    branches:
+      - feature/notiq-stage5-performance-cache-benchmark
+    paths:
+      - .github/workflows/notiq-stage5-cache-stress-once.yml
+
+permissions:
+  contents: read
+concurrency:
+  group: notiq-stage5-public-runner
+  cancel-in-progress: true
+jobs:
+  stage5:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 27
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+          persist-credentials: false
+      - name: Build NOTIQ Web with only genuine WASM enabled
+        run: |
+          npm install --prefix web --no-fund --no-audit
+          VITE_NOTIQ_WEB_AI=1 npm run --prefix web build
+          node --test notiq-ai-core/tests/source-integrity.test.mjs
+          test -s web/dist/notiq-core/notiq-ai-core.wasm
+      - name: Prepare pinned GGUF and licensed 15s + repeated 45s input
+        run: |
+          curl -fsSL --retry 3 \
+            'https://raw.githubusercontent.com/DamRsn/muscriptor.cpp/c8adc019677ed3479fa3c22c1a117d662382f347/testdata/audio/fixture_3chunks_16k.wav' \
+            -o /tmp/notiq-real-15s.wav
+          test "$(git hash-object /tmp/notiq-real-15s.wav)" = acfa9329d65816633abc3ee5cc3c7662bf403669
+          python3 notiq-ai-core/qa/make_repeated_fixture.py /tmp/notiq-real-15s.wav /tmp/notiq-repeated-45s.wav --count 3
+          curl -fL --retry 3 --connect-timeout 30 --max-time 600 \
+            'https://huggingface.co/DamRsn/muscriptor-gguf/resolve/d7045f94e8b19427f4ff9542975035e66596e51c/v1/muscriptor-small-f16.gguf' \
+            -o /tmp/notiq-small-f16.gguf
+          echo '925f55af65a20ebc4f8b45ceaf095a12b72493d436cb112623cd0041a1af23d4  /tmp/notiq-small-f16.gguf' | sha256sum -c -
+      - name: Real Chrome UI benchmark - 15s accuracy, on-device model cache, then 45s clip
+        timeout-minutes: 21
+        run: |
+          npm install --prefix /tmp/notiq-stage5-browser --no-fund --no-audit playwright-core@1.56.1
+          npm run --prefix web preview -- --port 4173 >/tmp/notiq-stage5-vite.log 2>&1 &
+          sleep 4
+          timeout 20m node --input-type=module <<'JS'
+          import { chromium } from '/tmp/notiq-stage5-browser/node_modules/playwright-core/index.mjs';
+          const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',
+            headless:true,args:['--no-sandbox','--disable-dev-shm-usage','--js-flags=--max-old-space-size=8192']});
+          try {
+            const page=await browser.newPage({acceptDownloads:true});
+            const errors=[],timings=[],cacheEvents=[];
+            page.on('pageerror',e=>errors.push(e.message));
+            page.on('crash',()=>errors.push('Chromium renderer crashed'));
+            page.on('console',m=>{
+              const t=m.text();
+              if(t.includes('NOTIQ_CORE_TIMING')||t.includes('NOTIQ_MODEL_READY_MS')) {
+                console.log('STAGE5_TIMING',t);
+                timings.push(t);
+              }
+              if(t.includes('NOTIQ_MODEL_CACHE')) {console.log('STAGE5_CACHE',t);cacheEvents.push(t);}
+              if(m.type()==='error') console.log('BROWSER_ERROR',t.slice(0,220));
+            });
+            await page.goto('http://127.0.0.1:4173/',{waitUntil:'domcontentloaded'});
+            const quota=await page.evaluate(async()=>{
+              if(!navigator.storage?.estimate)return null;
+              const x=await navigator.storage.estimate();
+              return {quota:x.quota,usage:x.usage};
+            });
+            console.log('STAGE5_BROWSER_QUOTA',JSON.stringify(quota));
+            await page.locator('input[type=file]').setInputFiles('/tmp/notiq-real-15s.wav');
+            const start15=Date.now();
+            await page.getByRole('button',{name:'Tải mô hình AI'}).click();
+            await page.waitForFunction(()=>/MuScriptor AI Core: 451 nốt/.test(document.body.innerText),null,{timeout:13*60*1000});
+            const t15=Date.now()-start15;
+            console.log('STAGE5_REAL_15S_PASS',JSON.stringify({ms:t15,notes:451}));
+            const cached=await page.evaluate(async()=>{
+              if(typeof caches==='undefined') return null;
+              const c=await caches.open('notiq-muscriptor-small-noncommercial-v1');
+              const model='https://huggingface.co/DamRsn/muscriptor-gguf/resolve/d7045f94e8b19427f4ff9542975035e66596e51c/v1/muscriptor-small-f16.gguf';
+              const r=await c.match(model);
+              return r?{hit:true,size:r.headers.get('content-length')}: {hit:false};
+            });
+            console.log('STAGE5_CACHE_STATE',JSON.stringify(cached));
+            if(!cached?.hit && quota?.quota && quota.quota-quota.usage > 2*209425152)
+              console.log('STAGE5_CACHE_WARNING', 'Model cache skipped/evicted despite reported space; inference remains valid');
+            const start45=Date.now();
+            await page.locator('input[type=file]').setInputFiles('/tmp/notiq-repeated-45s.wav');
+            await page.waitForFunction(()=>{
+              const text=document.body.innerText;
+              const m=text.match(/MuScriptor AI Core: (\d+) nốt/);
+              return m && Number(m[1])>451;
+            },null,{timeout:11*60*1000});
+            const n=Number((await page.locator('body').innerText()).match(/MuScriptor AI Core: (\d+) nốt/)?.[1]);
+            const t45=Date.now()-start45;
+            console.log('STAGE5_REPEATED_45S_PASS',JSON.stringify({durationSec:45,notes:n,ms:t45,caption:'15s licensed fixture repeated 3x; NOT a different full song'}));
+            const downloadWait=page.waitForEvent('download');
+            await page.getByRole('button',{name:'Xuất',exact:true}).first().click();
+            await page.getByRole('button',{name:/MIDI đa track/}).click();
+            const download=await downloadWait;
+            console.log('STAGE5_EXPORT_45S_PASS',download.suggestedFilename());
+            if(!download.suggestedFilename().endsWith('.mid'))throw Error('MIDI export failed');
+            if(errors.length)throw Error('Uncaught browser errors: '+JSON.stringify(errors));
+            console.log('NOTIQ_STAGE5_REAL_AUDIO_BROWSER_PASS',JSON.stringify({
+              modelSource:'original pinned GGUF',fixture15Notes:451,stress45Notes:n,
+              ms15:t15,ms45:t45,cache:cached,events:timings,cacheEvents
+            }));
+          } finally {await browser.close();}
+          JS

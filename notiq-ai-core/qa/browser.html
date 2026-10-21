@@ -9,7 +9,7 @@
 <pre id="status">Chưa bắt đầu</pre>
 <script type="module">
 import { notesToMidi } from './midi-export.mjs';
-const state = {state: 'idle'};
+const state = {state: 'idle', timings: []};
 window.__notiqStage3 = state;
 const status = document.getElementById('status');
 const set = (phase, note) => {
@@ -64,6 +64,7 @@ document.getElementById('run').onclick = async () => {
     worker.onerror = event => set('error','Worker: '+event.message);
     worker.onmessage = ({data}) => {
       if (data.type === 'progress') return;
+      if (data.type === 'timing') { state.timings.push(data); return; }
       if (data.type === 'error') return set('error',data.message);
       if (data.type === 'ready') {
         set('transcribing','Đã nạp GGUF, đang nhận diện âm thanh thật');

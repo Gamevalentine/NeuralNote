@@ -1,0 +1,115 @@
+name: NOTIQ Stage 5 - compare baseline WASM vs O3 experimental candidate
+# Trial must validate minified O3 exports via real JavaScript worker rather than internal Emscripten settings
+on:
+  push:
+    branches:
+      - feature/notiq-stage5-performance-cache-benchmark
+    paths:
+      - .github/workflows/notiq-stage5-o3-benchmark-once.yml
+
+permissions:
+  contents: read
+concurrency:
+  group: notiq-stage5-speed-ab
+  cancel-in-progress: true
+jobs:
+  real-inference-ab:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 28
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Verify genuine source and baseline WASM
+        run: |
+          node --test notiq-ai-core/tests/source-integrity.test.mjs
+          test -s web/public/notiq-core/notiq-ai-core.wasm
+      - name: Prepare Emscripten toolchain and exact ggml dependency
+        run: |
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git /tmp/notiq-emsdk
+          /tmp/notiq-emsdk/emsdk install 4.0.7
+          /tmp/notiq-emsdk/emsdk activate 4.0.7
+          git init /tmp/notiq-ggml
+          git -C /tmp/notiq-ggml remote add origin https://github.com/ggml-org/ggml.git
+          git -C /tmp/notiq-ggml fetch --depth=1 origin e91ded11bdcd78c42f9c8d3978ff6686eb4c1226
+          git -C /tmp/notiq-ggml checkout --detach FETCH_HEAD
+          test "$(git -C /tmp/notiq-ggml rev-parse HEAD)" = e91ded11bdcd78c42f9c8d3978ff6686eb4c1226
+      - name: Build opt-in O3 WASM candidate, never overwrite baseline artifact
+        run: |
+          . /tmp/notiq-emsdk/emsdk_env.sh
+          emcmake cmake -S notiq-ai-core -B /tmp/notiq-o3-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DFETCHCONTENT_SOURCE_DIR_GGML=/tmp/notiq-ggml \
+            -DNOTIQ_WASM_SPEED_EXPERIMENT=ON \
+            -DMUSCRIPTOR_BUILD_TESTS=OFF -DMUSCRIPTOR_BUILD_BENCH=OFF
+          cmake --build /tmp/notiq-o3-build --target notiq_ai_core --parallel 2
+          mkdir -p notiq-ai-core/.build-wasm
+          cp /tmp/notiq-o3-build/notiq-ai-core.js /tmp/notiq-o3-build/notiq-ai-core.wasm notiq-ai-core/.build-wasm/
+          node -e "const fs=require('fs');const wasm=fs.readFileSync('notiq-ai-core/.build-wasm/notiq-ai-core.wasm'); if(!WebAssembly.validate(wasm))throw Error('Invalid optimized WASM'); console.log('O3_VALID_WASM',wasm.length,'exports',WebAssembly.Module.exports(new WebAssembly.Module(wasm)).length,'(O3 minifies export names; runtime API checked by actual browser)')"
+          ls -lh /tmp/notiq-o3-build/notiq-ai-core.wasm web/public/notiq-core/notiq-ai-core.wasm
+      - name: Download original licensed 15s sample and SHA-verified noncommercial model
+        run: |
+          curl -fsSL --retry 3 \
+            'https://raw.githubusercontent.com/DamRsn/muscriptor.cpp/c8adc019677ed3479fa3c22c1a117d662382f347/testdata/audio/fixture_3chunks_16k.wav' \
+            -o /tmp/notiq-15s.wav
+          test "$(git hash-object /tmp/notiq-15s.wav)" = acfa9329d65816633abc3ee5cc3c7662bf403669
+          curl -fL --retry 3 --connect-timeout 30 --max-time 600 \
+            'https://huggingface.co/DamRsn/muscriptor-gguf/resolve/d7045f94e8b19427f4ff9542975035e66596e51c/v1/muscriptor-small-f16.gguf' \
+            -o /tmp/notiq-small.gguf
+          echo '925f55af65a20ebc4f8b45ceaf095a12b72493d436cb112623cd0041a1af23d4  /tmp/notiq-small.gguf' | sha256sum -c -
+      - name: Run original baseline and optimized candidate on same Chrome with identical music
+        timeout-minutes: 18
+        run: |
+          mkdir -p /tmp/notiq-ab/baseline/web /tmp/notiq-ab/optimized/web
+          cp web/public/notiq-core/notiq-ai-core.js web/public/notiq-core/notiq-ai-core.wasm /tmp/notiq-ab/baseline/
+          cp /tmp/notiq-o3-build/notiq-ai-core.js /tmp/notiq-o3-build/notiq-ai-core.wasm /tmp/notiq-ab/optimized/
+          for dir in baseline optimized; do
+            cp notiq-ai-core/web/worker.mjs notiq-ai-core/web/midi-export.mjs /tmp/notiq-ab/$dir/web/
+            cp notiq-ai-core/qa/browser.html /tmp/notiq-ab/$dir/web/browser.html
+          done
+          npm install --prefix /tmp/notiq-ab-browser --no-fund --no-audit playwright-core@1.56.1
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory /tmp/notiq-ab >/tmp/notiq-ab-web.log 2>&1 &
+          sleep 3
+          timeout 17m node --input-type=module <<'JS'
+          import { chromium } from '/tmp/notiq-ab-browser/node_modules/playwright-core/index.mjs';
+          const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',
+            headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
+          const results=[];
+          try {
+            for (const name of ['baseline','optimized']) {
+              const ctx=await browser.newContext();
+              try {
+                const page=await ctx.newPage();
+                page.on('pageerror',e=>console.error(name,'PAGE_ERROR',e.message));
+                await page.goto('http://127.0.0.1:4173/'+name+'/web/browser.html');
+                await page.locator('#model').setInputFiles('/tmp/notiq-small.gguf');
+                await page.locator('#audio').setInputFiles('/tmp/notiq-15s.wav');
+                const begin=Date.now();
+                await page.locator('#run').click();
+                await page.waitForFunction(()=>['complete','error'].includes(window.__notiqStage3?.state),
+                  null,{timeout:8*60*1000});
+                const result=await page.evaluate(()=>window.__notiqStage3);
+                if(result.state!=='complete'||result.notes!==451) {
+                  throw Error(name+' failed original audio note count: '+JSON.stringify(result).slice(0,1000));
+                }
+                const entry={name,notes:result.notes,wallMs:Date.now()-begin,
+                  timings:result.timings, result:result.result};
+                console.log('NOTIQ_WASM_AB_RESULT',JSON.stringify({...entry,result:undefined}));
+                results.push(entry);
+              } finally {await ctx.close();}
+            }
+            if(JSON.stringify(results[0].result)!==JSON.stringify(results[1].result))
+              throw Error('Optimized WASM differs from verified baseline MIDI notes');
+            const getTranscribe=x=>x.timings.at(-1)?.durationMs||x.wallMs;
+            const oldMs=getTranscribe(results[0]), newMs=getTranscribe(results[1]);
+            const gain=(oldMs-newMs)/oldMs;
+            console.log('NOTIQ_WASM_O3_SPEED_GAIN',JSON.stringify({
+              baselineInferenceMs:oldMs,optimizedInferenceMs:newMs,percent:Math.round(10000*gain)/100,
+              outputsIdentical:true,model:'verified pinned GGUF',audio:'licensed 15-second sample',
+              fasterBy5Percent:gain>=0.05
+            }));
+            if(gain<0.05)console.log('NOTIQ_O3_DECISION keep existing proven .wasm (gain <5%)');
+            else console.log('NOTIQ_O3_DECISION candidate faster; only switch after further 45s QA');
+          } finally {await browser.close();}
+          JS

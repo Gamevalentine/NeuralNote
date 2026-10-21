@@ -1,0 +1,26 @@
+name: NOTIQ Stage 5 - safe default and TypeScript build check
+on:
+  push:
+    branches: [feature/notiq-stage5-performance-cache-benchmark]
+    paths: [.github/workflows/notiq-stage5-safe-build-once.yml]
+permissions:
+  contents: read
+jobs:
+  safe-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Build with browser AI but persistent model cache disabled by default
+        run: |
+          npm install --prefix web --no-fund --no-audit
+          VITE_NOTIQ_WEB_AI=1 npm run --prefix web build
+          test -s web/dist/notiq-core/notiq-ai-core.wasm
+      - name: Build with explicit opt-in for model cache
+        run: |
+          VITE_NOTIQ_WEB_AI=1 VITE_NOTIQ_MODEL_CACHE=1 npm run --prefix web build
+      - name: Ensure C++ source unchanged
+        run: node --test notiq-ai-core/tests/source-integrity.test.mjs
