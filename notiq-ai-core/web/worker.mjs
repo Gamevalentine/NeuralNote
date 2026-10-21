@@ -34,6 +34,7 @@ function cppString(text) {
   return ptr;
 }
 async function loadModel({ moduleUrl, model }) {
+  const started = performance.now();
   if (ready) throw new Error('MuScriptor đang được nạp. Hãy dùng một Worker mới.');
   if (!(model instanceof ArrayBuffer) || model.byteLength !== SMALL_MODEL_BYTES)
     throw new Error('Giai đoạn thử nghiệm chỉ nhận GGUF MuScriptor Small 209 MB đúng bản gốc.');
@@ -64,9 +65,12 @@ async function loadModel({ moduleUrl, model }) {
     try { engine.FS.unlink(memoryPath); } catch { /* may already be removed */ }
   }
   ready = true;
+  report('timing', { durationMs: Math.round(performance.now() - started),
+    wasmHeapBytes: engine.HEAPU8.buffer.byteLength });
   report('ready', { message: 'MuScriptor gốc đã sẵn sàng trong trình duyệt' });
 }
 function transcribe({ pcm, sampleRate }) {
+  const started = performance.now();
   if (!ready) throw new Error('Chưa tải MuScriptor WebAssembly và model thật.');
   if (sampleRate !== 16000 || !(pcm instanceof ArrayBuffer))
     throw new Error('Cần PCM mono 16 kHz Float32.');
@@ -84,6 +88,8 @@ function transcribe({ pcm, sampleRate }) {
     const json = engine.UTF8ToString(engine._notiq_core_result_json());
     const result = JSON.parse(json);
     if (!checkResult(result)) throw new Error('MuScriptor trả dữ liệu MIDI sai định dạng.');
+    report('timing', { durationMs: Math.round(performance.now() - started),
+      wasmHeapBytes: engine.HEAPU8.buffer.byteLength, notes: result.notes.length });
     report('complete', { result });
   } finally {
     engine._free(ptr);
