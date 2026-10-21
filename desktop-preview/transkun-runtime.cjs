@@ -49,7 +49,7 @@ function checkZipEntry(zip,fileName){
     local=b.readUInt32LE(offset+42);
   const name=b.subarray(offset+46,offset+46+nameLen).toString('utf8');
   if(name.toLowerCase().endsWith('/'+fileName)||name.toLowerCase()===fileName){
-    if(raw>30*1024*1024||local+30>b.length||b.readUInt32LE(local)!==0x04034b50)
+    if(raw>160*1024*1024||local+30>b.length||b.readUInt32LE(local)!==0x04034b50)
       throw Error('Unsafe uv.exe ZIP entry');
     const start=local+30+b.readUInt16LE(local+26)+b.readUInt16LE(local+28);
     if(start+compressed>b.length)throw Error('Truncated uv binary');
