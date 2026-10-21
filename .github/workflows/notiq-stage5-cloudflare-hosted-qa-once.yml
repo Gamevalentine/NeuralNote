@@ -1,0 +1,108 @@
+name: NOTIQ Stage 5 - verify real Cloudflare HTTPS preview
+on:
+  push:
+    branches:
+      - preview/notiq-pthread4-https
+    paths:
+      - .github/workflows/notiq-stage5-cloudflare-hosted-qa-once.yml
+
+permissions:
+  contents: read
+concurrency:
+  group: notiq-cloudflare-hosted-once
+  cancel-in-progress: true
+jobs:
+  hosted-https-qa:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Fetch licensed 15-second MuScriptor fixture with pinned original SHA
+        run: |
+          curl -fsSL --retry 3 \
+            'https://raw.githubusercontent.com/DamRsn/muscriptor.cpp/c8adc019677ed3479fa3c22c1a117d662382f347/testdata/audio/fixture_3chunks_16k.wav' \
+            -o /tmp/notiq-licensed-15s.wav
+          test "$(git hash-object /tmp/notiq-licensed-15s.wav)" = acfa9329d65816633abc3ee5cc3c7662bf403669
+      - name: Verify hosted Cloudflare security headers and actual MuScriptor download/inference/export
+        timeout-minutes: 15
+        run: |
+          npm install --prefix /tmp/notiq-hosted-playwright --no-fund --no-audit playwright-core@1.56.1
+          timeout 14m node --input-type=module <<'JS'
+          import {chromium} from '/tmp/notiq-hosted-playwright/node_modules/playwright-core/index.mjs';
+          import {readFile} from 'node:fs/promises';
+          const url='https://preview-notiq-pthread4-https.neuralnote-e4c.pages.dev/';
+          const browser=await chromium.launch({
+            executablePath:'/usr/bin/google-chrome',headless:true,
+            args:['--no-sandbox','--disable-dev-shm-usage','--js-flags=--max-old-space-size=8192']});
+          try{
+            const page=await browser.newPage({acceptDownloads:true});
+            const errors=[],failed=[];
+            page.on('pageerror',e=>errors.push(e.message));
+            page.on('crash',()=>errors.push('CHROMIUM_RENDERER_CRASH'));
+            page.on('requestfailed',req=>{
+              const str=req.url().slice(0,230)+' '+req.failure()?.errorText;
+              console.log('NOTIQ_FAILED_REQUEST',str);
+              failed.push(str);
+            });
+            page.on('console',m=>{
+              const t=m.text();
+              if(m.type()==='error'||/NOTIQ_CORE_TIMING|NOTIQ_MODEL_READY|MuScriptor/i.test(t))
+                console.log('NOTIQ_BROWSER_CONSOLE',m.type(),t.slice(0,450));
+            });
+            const response=await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});
+            if(!response?.ok())throw Error('Cloudflare preview HTTP '+response?.status());
+            const headers=response.headers();
+            const state=await page.evaluate(async()=>{
+              const wasm=await fetch('/notiq-core/notiq-ai-core.wasm',{cache:'no-store'});
+              const magic=new Uint8Array(await wasm.arrayBuffer());
+              const js=await fetch('/notiq-core/notiq-ai-core.js',{cache:'no-store'});
+              return {
+                isolated:crossOriginIsolated,
+                sharedArrayBuffer:typeof SharedArrayBuffer==='function',
+                aiEnabled:document.body.innerText.includes('AI: NOTIQ Core (WebAssembly)'),
+                wasmHttp:wasm.status,wasmSize:magic.length,
+                wasmMagic:[...magic.slice(0,4)].join(','),
+                jsHttp:js.status,
+              };
+            });
+            console.log('NOTIQ_CLOUDFLARE_HEADERS',JSON.stringify({
+              coop:headers['cross-origin-opener-policy'],
+              coep:headers['cross-origin-embedder-policy'],
+              contentType:headers['content-type']}));
+            console.log('NOTIQ_CLOUDFLARE_HEALTH',JSON.stringify(state));
+            if(headers['cross-origin-opener-policy']!=='same-origin'
+              || headers['cross-origin-embedder-policy']!=='require-corp'
+              || !state.isolated||!state.sharedArrayBuffer||!state.aiEnabled
+              ||state.wasmHttp!==200||state.wasmSize!==1321870
+              ||state.wasmMagic!=='0,97,115,109'||state.jsHttp!==200)
+              throw Error('Remote Preview HTTPS security and artifact validation failed');
+            await page.locator('input[type=file]').setInputFiles('/tmp/notiq-licensed-15s.wav');
+            await page.getByRole('button',{name:'Tải mô hình AI'}).click();
+            await page.waitForFunction(()=>{
+              const t=document.body.innerText;
+              return t.includes('MuScriptor AI Core: 451 nốt')
+                || t.includes('Chưa nạp được MuScriptor')
+                || t.includes('Không tải được mô hình');
+            },null,{timeout:11*60*1000});
+            const body=await page.locator('body').innerText();
+            console.log('NOTIQ_CLOUDFLARE_AUDIO_UI',body.match(/MuScriptor AI Core: [^\\n]+/)?.[0]||body.slice(-1400));
+            if(!body.includes('MuScriptor AI Core: 451 nốt'))
+              throw Error('Remote Cloudflare model load or inference failed: '+body.slice(-1300));
+            const downloadWait=page.waitForEvent('download');
+            await page.getByRole('button',{name:'Xuất',exact:true}).first().click();
+            await page.getByRole('button',{name:/MIDI đa track/}).click();
+            const download=await downloadWait;
+            const midi=await readFile(await download.path());
+            console.log('NOTIQ_CLOUDFLARE_MIDI',JSON.stringify({name:download.suggestedFilename(),
+              length:midi.length,magic:midi.toString('ascii',0,4)}));
+            if(midi.toString('ascii',0,4)!=='MThd'||midi.length<2500)
+              throw Error('Real Cloudflare preview did not export valid MIDI');
+            if(errors.length)throw Error('Cloudflare browser page errors: '+JSON.stringify(errors));
+            console.log('NOTIQ_CLOUDFLARE_HTTPS_PTHREAD4_REAL_AUDIO_PASS');
+          }finally{
+            await browser.close();
+          }
+          JS
