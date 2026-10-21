@@ -16,7 +16,8 @@ import { nativeInstrumentPrograms, nativeProgramName } from './muscriptorProtoco
 import { nativeBridgeAvailable, runMuScriptor, convertAudioToNativeWav } from './muscriptorNative';
 import {toPianoNotes} from './muscriptorProtocol';
 import {toPianoV2Notes} from './transkunProtocol';
-import {compareEngines, ONSET_TOLERANCE_SECONDS, type Comparison} from './compareEngines';
+import {type Comparison} from './compareEngines';
+import {compareOriginalAudio} from './dualEngineNative';
 import { runPianoV2 } from './transkunNative';
 import { webAiEnabled, installWebModel, recognizeWeb, closeWebModel } from './muscriptorWebLocal';
 
