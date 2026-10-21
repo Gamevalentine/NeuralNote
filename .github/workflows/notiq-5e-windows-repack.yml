@@ -1,0 +1,79 @@
+name: NOTIQ Stage 5E Windows UI Portable Repack
+on:
+  push:
+    branches: [experiment/notiq-stage5e-audio-clock]
+    paths:
+      - .github/workflows/notiq-5e-windows-repack.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  repack-shared-ui:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build tested NOTIQ 5E React GUI
+        shell: pwsh
+        working-directory: web
+        run: |
+          npm install --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw 'NPM install failed' }
+          npm run build
+          if ($LASTEXITCODE -ne 0) { throw 'NOTIQ 5E GUI build failed' }
+      - name: Retrieve previously verified native Stage 5 Windows Portable
+        uses: actions/download-artifact@v4
+        with:
+          name: NOTIQ-Stage5-FullSong-Windows-x64-Preview
+          repository: Gamevalentine/NeuralNote
+          run-id: 39417407829
+          github-token: ${{ github.token }}
+          path: notiq-stage5e-base
+      - name: Install Electron ASAR utility only, no native rebuild
+        shell: pwsh
+        run: |
+          npm install --prefix package-tools --no-audit --no-fund @electron/asar@3
+          if ($LASTEXITCODE -ne 0) { throw 'Electron ASAR utility install failed' }
+      - name: Replace only embedded NOTIQ React renderer in verified Portable
+        shell: pwsh
+        run: |
+          $base = (Resolve-Path notiq-stage5e-base).Path
+          $archive = Get-ChildItem $base -Recurse -File -Filter app.asar | Select-Object -First 1
+          if (-not $archive) { throw 'Previous Windows Portable artifact has no app.asar' }
+          $dir = Split-Path (Split-Path $archive.FullName -Parent) -Parent
+          $engine = Join-Path $dir 'resources/bridge-bin/notiq-muscriptor-cli.exe'
+          if (-not (Test-Path $engine)) { throw 'Previous MuScriptor CLI binary is absent' }
+          $answer = & $engine --self-test
+          if ($LASTEXITCODE -ne 0 -or $answer -notmatch '"ready":true') {
+            throw 'Inherited native engine did not pass its self-test'
+          }
+          $source = (Resolve-Path 'web/dist').Path
+          node desktop-preview/replace-renderer.cjs "$($archive.FullName)" "$source"
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot repack React renderer in existing EXE' }
+          $gui = Get-ChildItem $dir -File -Filter *.exe | Where-Object { $_.Name -notmatch 'muscriptor' } | Select-Object -First 1
+          if (-not $gui -or $gui.Length -lt 1000000) { throw 'Packaged Electron GUI missing' }
+          $readme = @(
+            'NOTIQ 5E — Windows Portable trial — shared React GUI controls'
+            'Changes: independent MIDI AudioContext clock, visible MIDI/Original/Mix selection, notes keep playing with uploaded audio file.'
+            'Engine: EXACT CLI binary from previous verified Stage5 FullSong run #39417407829; not recompiled.'
+            'Extract whole directory to E: or another chosen drive. Double-click the NOTIQ .exe.'
+            'This artifact does NOT include model GGUF. Place your existing valid GGUF beside app in models/.'
+            'No real music / Kontakt audio acceptance test was executed by this repack workflow.'
+            'GitHub branch: experiment/notiq-stage5e-audio-clock'
+          ) -join [Environment]::NewLine
+          Set-Content -Path (Join-Path $dir 'README-NOTIQ-5E.txt') -Value $readme
+          Write-Host "NOTIQ_5E_WINDOWS_UI_REPACK_PASS originalEngineSelfTest=PASS gui=$($gui.Name)"
+      - name: Upload NOTIQ 5E Windows portable trial
+        uses: actions/upload-artifact@v4
+        with:
+          name: NOTIQ-Stage5E-Windows-UI-Preview
+          path: notiq-stage5e-base/
+          compression-level: 6
+          retention-days: 7
+          if-no-files-found: error
