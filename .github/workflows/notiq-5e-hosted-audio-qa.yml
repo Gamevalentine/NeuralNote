@@ -1,0 +1,26 @@
+name: NOTIQ 5E Cloudflare 4-Minute MIDI Audio QA
+on:
+  push:
+    branches: [experiment/notiq-stage5e-audio-clock]
+    paths:
+      - .github/workflows/notiq-5e-hosted-audio-qa.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  chromium-hosted:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Chrome automation
+        run: npm install --prefix /tmp/notiq-5d-playwright --no-audit --no-fund playwright-core@1.56.1
+      - name: Replay 815 simulated notes with real sampled SoundFont in public Cloudflare URL
+        env:
+          NOTIQ_HOSTED_URL: https://a1a4a386.neuralnote-e4c.pages.dev/
+        run: node notiq-ai-core/qa/long-wav-transport.mjs
