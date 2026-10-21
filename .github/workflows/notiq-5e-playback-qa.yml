@@ -1,0 +1,28 @@
+name: NOTIQ 5E Playback QA
+on:
+  push:
+    branches: [experiment/notiq-stage5e-audio-clock]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  playback:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify TypeScript, MIDI, Piano Roll and SoundFont
+        working-directory: web
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+          npm run test:daw
+          npm run test:piano
+          npm run test:soundfont
+      - name: Browser driver
+        run: npm install --prefix /tmp/notiq-5d-playwright --no-audit --no-fund playwright-core@1.56.1
+      - name: Browser controls
+        run: node notiq-ai-core/qa/transport-progress-browser.mjs
