@@ -3,7 +3,7 @@
 // original MuScriptor GGUF and original pthread4 WASM, UI and exported MIDI.
 import {chromium} from '/tmp/notiq-5a-playwright/node_modules/playwright-core/index.mjs';
 import {readFileSync,writeFileSync} from 'node:fs';
-const url='https://preview-notiq-pthread4-https.neuralnote-e4c.pages.dev/';
+const url='https://test-notiq-stage5a-long-real.neuralnote-e4c.pages.dev/';
 const durations=process.env.NOTIQ_5A_CASE==='180' ? [180] : [60,180];
 function readMidi(data) {
   const b=new Uint8Array(data);
@@ -39,12 +39,13 @@ const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',hea
 const results=[];
 try {
   const page=await browser.newPage({acceptDownloads:true});
-  const errors=[],failures=[],timings=[];
+  const errors=[],failures=[],timings=[],repairs=[];
   page.on('pageerror',e=>{errors.push(e.message);console.log('NOTIQ_5A_PAGE_ERROR',e.message)});
   page.on('crash',()=>{errors.push('Renderer crashed');console.log('NOTIQ_5A_CRASH')});
   page.on('console',m=>{
     const s=m.text();
     if(s.includes('NOTIQ_CORE_TIMING')){timings.push(s);console.log('NOTIQ_5A_TIMING',s)}
+    if(s.includes('NOTIQ_PCM_REPAIR')){repairs.push(s);console.log('NOTIQ_5A_REPAIR',s)}
     if(m.type()==='error')console.log('NOTIQ_5A_CONSOLE_ERROR',s.slice(0,250));
   });
   page.on('requestfailed',req=>{
@@ -96,7 +97,7 @@ try {
     if(midi.lastSecond<seconds*0.60||midi.lastSecond>seconds+4)
       throw Error('MIDI timeline coverage invalid: '+midi.lastSecond+' sec for '+seconds);
     const result={durationSec:seconds,notes:noteCount,midi,elapsedMs:Date.now()-wallStart,
-      browserErrors:errors.length,source:'The Entertainer - Kevin MacLeod, original recording, CC BY 4.0',
+      browserErrors:errors.length,pcmCorrections:repairs,source:'The Entertainer - Kevin MacLeod, original recording, CC BY 4.0',
       audio:'first '+seconds+' seconds of independent 193.38-second recording, NOT repeated'};
     console.log('NOTIQ_5A_REAL_MUSIC_PASS',JSON.stringify(result));
     results.push(result);
