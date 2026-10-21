@@ -1,0 +1,96 @@
+name: NOTIQ Stage 5F Large Windows Portable Preview
+on:
+  push:
+    branches: [feature/notiq-stage5f-large-model-windows]
+    paths:
+      - .github/workflows/notiq-stage5f-large-windows.yml
+      - desktop-preview/main.cjs
+      - desktop-preview/preload.cjs
+      - desktop-preview/models.cjs
+      - desktop-preview/model-download.cjs
+      - desktop-preview/repack-large.cjs
+      - desktop-preview/tests/models.test.cjs
+      - web/src/App.tsx
+      - web/src/muscriptorNative.ts
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  windows-large:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify registry, secure streamed downloader and native JS syntax
+        shell: pwsh
+        run: |
+          node --test desktop-preview/tests/models.test.cjs
+          if ($LASTEXITCODE -ne 0) {throw 'GGUF model tests failed'}
+          node --check desktop-preview/main.cjs
+          node --check desktop-preview/preload.cjs
+          node --check desktop-preview/repack-large.cjs
+          if ($LASTEXITCODE -ne 0) {throw 'Electron source syntax invalid'}
+      - name: Build React GUI and strict TypeScript
+        shell: pwsh
+        working-directory: web
+        run: |
+          npm install --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) {throw 'Install failed'}
+          npm run build
+          if ($LASTEXITCODE -ne 0) {throw 'Web renderer TypeScript failed'}
+      - name: Fetch previously verified native Windows preview (no C++ recompilation)
+        uses: actions/download-artifact@v4
+        with:
+          name: NOTIQ-Stage5E-Windows-UI-Preview
+          repository: Gamevalentine/NeuralNote
+          run-id: 39675383596
+          github-token: ${{ github.token }}
+          path: notiq-stage5f-base
+      - name: Install free ASAR packer
+        shell: pwsh
+        run: |
+          npm install --prefix package-tools --no-audit --no-fund @electron/asar@3
+          if ($LASTEXITCODE -ne 0) {throw 'ASAR install failed'}
+      - name: Package Native Large selector plus original MuScriptor engine
+        shell: pwsh
+        run: |
+          $base = (Resolve-Path notiq-stage5f-base).Path
+          $asar = Get-ChildItem $base -File -Filter app.asar -Recurse | Select-Object -First 1
+          if (-not $asar) {throw 'Previous portable app.asar missing'}
+          $resources = Split-Path $asar.FullName -Parent
+          $exeDir = Split-Path $resources -Parent
+          $engine = Join-Path $resources 'bridge-bin/notiq-muscriptor-cli.exe'
+          if (-not (Test-Path $engine)) {throw 'Verified native CLI missing'}
+          $selfTest = & $engine --self-test
+          if ($LASTEXITCODE -ne 0 -or $selfTest -notmatch '"ready":true') {throw 'Native engine self-test failed'}
+          node desktop-preview/repack-large.cjs "$($asar.FullName)" "$((Resolve-Path 'web/dist').Path)"
+          if ($LASTEXITCODE -ne 0) {throw 'Native renderer repack failed'}
+          $exe = Get-ChildItem $exeDir -File -Filter *.exe | Select-Object -First 1
+          if (-not $exe) {throw 'NOTIQ Portable EXE missing'}
+          $note = @(
+            'NOTIQ Stage 5F Large — CPU Windows Portable (experimental)'
+            'Choose Model AI: Small 209 MB or Large 2.74 GB in the app.'
+            'Large downloads the genuine GGUF v1 directly from pinned Hugging Face revision.'
+            'Download is optional, resumed where possible, and verified with SHA-256.'
+            'Extract complete folder to E: or another drive; launch NOTIQ EXE, no CMD.'
+            'Weights and cache are beside the portable app, NOT Windows C:.'
+            'Large CPU is very slow; 16 GB RAM may become constrained. No Vulkan GPU acceleration.'
+            'No verified 4 GB checkpoint exists and no weights are bundled.'
+            'AI fidelity versus your original music not verified. Do not merge until user testing.'
+          ) -join [Environment]::NewLine
+          Set-Content -Path (Join-Path $exeDir 'README-NOTIQ-5F-LARGE.txt') -Value $note
+          Write-Host 'NOTIQ_STAGE5F_WINDOWS_PORTABLE_PASS modelOptions=small,large nativeCliSelfTest=PASS'
+      - name: Downloadable 5F Windows Portable preview (model not bundled)
+        uses: actions/upload-artifact@v4
+        with:
+          name: NOTIQ-Stage5F-Large-Model-Windows-Preview
+          path: notiq-stage5f-base/
+          retention-days: 7
+          compression-level: 6
+          if-no-files-found: error
