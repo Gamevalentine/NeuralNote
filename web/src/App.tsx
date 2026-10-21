@@ -69,7 +69,9 @@ function App() {
   const [bpm, setBpm] = useState(120);
   const [pedalEvents, setPedalEvents] = useState<PedalEvent[]>([]);
   const [pedalTrack, setPedalTrack] = useState('*');
-  const [playbackMode, setPlaybackMode] = useState<PlaybackMode>('mix');
+  // Transcribed notes are the default listening target; the original recording
+  // is available explicitly from the playback selector.
+  const [playbackMode, setPlaybackMode] = useState<PlaybackMode>('midi');
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(0);
   const [loop, setLoop] = useState(false);
@@ -167,6 +169,7 @@ function App() {
   const gridHeight = (pitchTop - pitchBottom + 1) * PITCH_ROW;
   const pitches = Array.from({ length: pitchTop - pitchBottom + 1 }, (_, i) => pitchTop - i);
   const totalSeconds = Math.max(1, info?.duration || 8);
+  const usesMidiClock = !info || playbackMode === 'midi';
   // Fill the available editor width on large monitors; allow horizontal scrolling when zoomed in.
   const timelineWidth = Math.max(1000, viewportWidth, Math.round(totalSeconds * 80 * zoom));
   const activeGroups = useMemo(
@@ -553,28 +556,41 @@ function App() {
   useEffect(() => {
     if (!playing || !notes.length || playbackMode === 'original') return;
     const interval = window.setInterval(() => {
-      const now = info ? (audioEl.current?.currentTime || 0)
-        : Math.max(0, (audioCtx.current?.currentTime || 0) - (midiOnlyStart.current || 0));
-      if (!info) {
-        setTime(now);
+      // MIDI is timed by AudioContext, even if an original song was uploaded.
+      // A paused/stalled HTML <audio> must never freeze MIDI playback.
+      const ctx = audioCtx.current;
+      const now = usesMidiClock
+        ? Math.max(0, (ctx?.currentTime || 0) - (midiOnlyStart.current ?? (ctx?.currentTime || 0)))
+        : (audioEl.current?.currentTime || 0);
+      if (usesMidiClock) {
+        setTime(Math.min(totalSeconds, now));
         if (now >= totalSeconds) {
-          if (loop) {
-            midiOnlyStart.current = audioCtx.current?.currentTime || null;
+          if (loop && ctx) {
+            midiOnlyStart.current = ctx.currentTime;
+            setTime(0);
+            previousTime.current = 0;
             firedNotes.current.clear();
+            stopSoundfontNotes(ctx);
           } else {
             setPlaying(false);
             midiOnlyStart.current = null;
+            if (ctx) stopSoundfontNotes(ctx);
           }
           return;
         }
       }
-      if (now + 0.25 < previousTime.current || Math.abs(now - previousTime.current) > 0.5) firedNotes.current.clear();
+      const before = previousTime.current;
+      const timeJump = now < before - 0.10 || now > before + 0.65;
+      if (timeJump) firedNotes.current.clear();
+      // Scan crossed onsets rather than require the browser to hit a 155ms
+      // sampling window exactly; otherwise 4-minute songs silently miss notes.
+      const from = timeJump ? Math.max(0, now - 0.12) : Math.max(0, before - 0.075);
       previousTime.current = now;
       for (let i = 0; i < notes.length; i++) {
         const n = notes[i];
         const group = groupFor(n.pitchMidi);
         if (!isNoteAudible(n) || firedNotes.current.has(i)) continue;
-        if (n.startTimeSeconds >= now - 0.10 && n.startTimeSeconds <= now + 0.055) {
+        if (n.startTimeSeconds >= from && n.startTimeSeconds <= now + 0.060) {
           firedNotes.current.add(i);
           const level = n.program === undefined ? gain[group] : (nativeGain[n.program] ?? 0.7);
           // Preserve baseline loudness at MuScriptor's default 100/127;
@@ -589,7 +605,7 @@ function App() {
       }
     }, 45);
     return () => window.clearInterval(interval);
-  }, [playing, notes, playbackMode, activeGroups, gain, masterVolume, info, totalSeconds, loop, instrumentSelection, nativeGain, nativeMuted, nativeSolo]);
+  }, [playing, notes, playbackMode, activeGroups, gain, masterVolume, info, usesMidiClock, totalSeconds, loop, instrumentSelection, nativeGain, nativeMuted, nativeSolo]);
 
   useEffect(() => {
     if (audioEl.current) audioEl.current.volume = playbackMode === 'midi' ? 0 : masterVolume * (playbackMode === 'mix' ? 0.65 : 1);
@@ -601,6 +617,7 @@ function App() {
     const request = ++playbackRequestRef.current;
     if (playing) {
       audio?.pause();
+      // Native HTML media events are not authoritative in MIDI-only mode.
       if (audioCtx.current) stopSoundfontNotes(audioCtx.current);
       midiOnlyStart.current = null; // preserve the paused time in state
       setPlaying(false);
@@ -621,14 +638,17 @@ function App() {
         }
       }
       firedNotes.current.clear();
-      previousTime.current = info ? (audio?.currentTime || 0) : time;
-      if (info && audio) {
+      previousTime.current = usesMidiClock ? time : (audio?.currentTime || time);
+      if (!usesMidiClock && audio) {
         await audio.play();
         if (request !== playbackRequestRef.current) { audio.pause(); return; }
+        if (audio.paused) throw new Error('Trình duyệt chưa phát được âm thanh gốc.');
       } else {
+        if (!visibleNotes.length) throw new Error('Không có nốt MIDI để phát. Hãy nhận diện hoặc thêm nốt.');
+        audio?.pause();
         midiOnlyStart.current = ctx.currentTime - time;
       }
-      setPlaying(true);
+      if (request === playbackRequestRef.current) setPlaying(true);
     } catch (cause) {
       if (request === playbackRequestRef.current) {
         setSoundfontStatus('Lỗi SoundFont / phát lại');
@@ -641,9 +661,12 @@ function App() {
   const seekTo = (seconds: number) => {
     if (audioCtx.current) stopSoundfontNotes(audioCtx.current);
     const clamped = Math.max(0, Math.min(info?.duration || totalSeconds, seconds));
-    if (info && audioEl.current) audioEl.current.currentTime = clamped;
-    else if (midiOnlyStart.current !== null && audioCtx.current)
-      midiOnlyStart.current = audioCtx.current.currentTime - clamped;
+    if (usesMidiClock) {
+      if (midiOnlyStart.current !== null && audioCtx.current)
+        midiOnlyStart.current = audioCtx.current.currentTime - clamped;
+    } else if (info && audioEl.current) {
+      audioEl.current.currentTime = clamped;
+    }
     setTime(clamped);
     previousTime.current = clamped;
     firedNotes.current.clear();
@@ -832,10 +855,18 @@ function App() {
     <main className="notiq-app">
       <audio
         key={selection?.url || 'empty'} ref={audioEl} src={selection?.url} preload="auto"
-        onTimeUpdate={event => setTime(event.currentTarget.currentTime)}
-        onPause={() => setPlaying(false)}
-        onPlay={() => setPlaying(true)}
+        onTimeUpdate={event => { if (!usesMidiClock) setTime(event.currentTarget.currentTime); }}
+        onPause={() => { if (!usesMidiClock) setPlaying(false); }}
+        onPlay={() => { if (!usesMidiClock) setPlaying(true); }}
+        onError={event => {
+          // Surface real codec/HTML audio failures instead of an apparent
+          // running transport with a frozen 00:00 counter.
+          if (playbackMode !== 'midi')
+            setError('Không phát được tệp âm thanh gốc trong trình duyệt này (lỗi media ' +
+              (event.currentTarget.error?.code ?? '?') + '). Hãy chọn Chỉ MIDI.');
+        }}
         onEnded={() => {
+          if (usesMidiClock) return;
           if (loop && audioEl.current) {
             audioEl.current.currentTime = 0;
             firedNotes.current.clear();
@@ -867,7 +898,7 @@ function App() {
                   {menu.id === 'play' && (
                     <div className="menu-settings">
                       <label htmlFor="playmode-menu">Chế độ nghe</label>
-                      <select id="playmode-menu" value={playbackMode} onChange={event => setPlaybackMode(event.target.value as PlaybackMode)}>
+                      <select id="playmode-menu" value={playbackMode} onChange={event => { stop(); setPlaybackMode(event.target.value as PlaybackMode); }}>
                         <option value="mix">Âm gốc + MIDI</option>
                         <option value="original">Chỉ âm gốc</option>
                         <option value="midi">Chỉ MIDI</option>
@@ -934,6 +965,15 @@ function App() {
         <button type="button" className={loop ? 'is-active' : ''}
           aria-label="Phát lặp" aria-pressed={loop} onClick={() => setLoop(value => !value)}
           title="Bật hoặc tắt phát lặp"><RotateCw size={15}/><span>Lặp</span></button>
+        <label className="notiq-transport-mode" htmlFor="notiq-playback-mode">
+          <span>Nghe</span>
+          <select id="notiq-playback-mode" aria-label="Chế độ nghe" value={playbackMode}
+            onChange={event => { stop(); setPlaybackMode(event.target.value as PlaybackMode); }}>
+            <option value="midi">Chỉ MIDI</option>
+            <option value="original" disabled={!info}>Âm gốc</option>
+            <option value="mix" disabled={!info}>Cả hai</option>
+          </select>
+        </label>
         <div className="notiq-transport-clock" aria-label="Thời gian phát">
           {fmt(time)} <span>/</span> {fmt(info?.duration || (notes.length ? totalSeconds : 0))}
         </div>

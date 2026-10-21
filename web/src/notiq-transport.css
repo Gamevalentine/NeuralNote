@@ -24,3 +24,8 @@
 .recognition-status-short{color:#b8c5ef}
 @media(max-width:760px){.notiq-transport{height:43px;min-height:43px;padding:5px 8px}.notiq-transport button{padding:6px 8px}.notiq-ai-card{padding:15px}.notiq-ai-stages{flex-wrap:wrap}.notiq-transport-clock{font-size:10px}}
 @media(prefers-reduced-motion:reduce){.notiq-ai-indeterminate>div{animation:none;width:100%;opacity:.7}}
+
+/* Stage 5E: make MIDI-only clock explicit instead of depending on uploaded media. */
+.notiq-transport-mode{display:flex;align-items:center;gap:6px;padding:0 7px;border-left:1px solid #46506a;color:#bfc9de;font-size:11px;white-space:nowrap;flex-shrink:0}
+.notiq-transport-mode select{height:31px;border-radius:5px;padding:4px 7px;background:#303c55;color:#fff;border:1px solid #657496;font-size:11px}
+.notiq-transport-mode select:focus-visible{outline:2px solid #b5bfff}
