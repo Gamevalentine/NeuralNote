@@ -5,6 +5,9 @@ import {createServer} from 'node:http';
 import {readFile,stat} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
 import {chromium} from '/tmp/notiq-5b-playwright/node_modules/playwright-core/index.mjs';
+import {createRequire} from 'node:module';
+const midiRequire=createRequire(new URL('../../web/package.json',import.meta.url));
+const {Midi}=midiRequire('@tonejs/midi');
 
 const root=resolve('web/dist');
 const server=createServer(async(req,res)=>{
@@ -28,32 +31,17 @@ await new Promise(resolve=>server.listen(4173,'127.0.0.1',resolve));
 const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true,
   args:['--no-sandbox','--disable-dev-shm-usage','--js-flags=--max-old-space-size=8192']});
 function midiStats(buffer){
-  const a=new Uint8Array(buffer),ascii=(start,n)=>String.fromCharCode(...a.subarray(start,start+n));
-  const u16=p=>a[p]*256+a[p+1];
-  const u32=p=>(a[p]*16777216+a[p+1]*65536+a[p+2]*256+a[p+3])>>>0;
-  if(ascii(0,4)!=='MThd'||u32(4)!==6||u16(8)!==1)throw Error('Invalid SMF header');
-  const trackCount=u16(10),velocities=[],cc64=[],onsets=[];let pos=14;
-  for(let t=0;t<trackCount;t++){
-    if(ascii(pos,4)!=='MTrk')throw Error('Invalid MIDI track header');
-    const end=pos+8+u32(pos+4);pos+=8;let running=0,ticks=0;
-    const vlq=()=>{
-      let x=0,z;do{if(pos>=end)throw Error('Truncated MIDI VLQ');z=a[pos++];x=(x<<7)|(z&127)}while(z&128);return x;
-    };
-    while(pos<end){
-      ticks+=vlq();
-      let code=a[pos++];if(code<128){if(!running)throw Error('Invalid running status');pos--;code=running;}
-      else if(code<240)running=code;
-      if(code===255){pos++;pos+=vlq();continue;}
-      if(code===240||code===247){pos+=vlq();continue;}
-      const kind=code&240,first=a[pos++],value=(kind===192||kind===208)?null:a[pos++];
-      if(kind===144&&value>0){velocities.push(value);onsets.push(ticks);}
-      if(kind===176&&first===64)cc64.push({tick:ticks,value});
-    }
-    if(pos!==end)throw Error('Corrupted MIDI track');
-  }
-  return{tracks:trackCount,notes:velocities.length,uniqueVelocity:[...new Set(velocities)].length,
+  // The real SMF decoder handles MIDI running status and meta events.
+  const decoded=new Midi(new Uint8Array(buffer));
+  const all=decoded.tracks.flatMap(track=>track.notes);
+  const velocities=all.map(n=>Math.round(n.velocity*127));
+  const cc64=decoded.tracks.reduce((total,t)=>
+    total+(t.controlChanges?.sustain?.length||t.controlChanges?.[64]?.length||0),0);
+  return{tracks:decoded.tracks.length,notes:all.length,
+    uniqueVelocity:new Set(velocities).size,
     minVelocity:Math.min(...velocities),maxVelocity:Math.max(...velocities),
-    maxOnsetTick:Math.max(...onsets),cc64:cc64.length,bytes:a.byteLength};
+    maxOnsetTick:Math.max(...all.map(n=>n.ticks)),cc64,
+    bytes:buffer.length};
 }
 try{
   const page=await browser.newPage({acceptDownloads:true});
