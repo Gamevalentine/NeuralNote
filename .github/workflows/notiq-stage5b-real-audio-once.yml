@@ -1,0 +1,37 @@
+name: NOTIQ Stage 5B - true MuScriptor audio to expressive MIDI QA
+on:
+  push:
+    branches: [experiment/notiq-stage5b-expressive-velocity]
+    paths: [.github/workflows/notiq-stage5b-real-audio-once.yml]
+permissions:
+  contents: read
+concurrency:
+  group: notiq-stage5b-real-model
+  cancel-in-progress: true
+jobs:
+  real-velocity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 19
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Verify source model adapter and expressive preview UI
+        run: |
+          node --test notiq-ai-core/tests/source-integrity.test.mjs notiq-ai-core/tests/expressive-velocity.test.mjs
+          npm install --prefix web --no-fund --no-audit
+          npm run --prefix web build
+          test -s web/dist/notiq-core/expressive-velocity.mjs
+          cmp -s web/public/notiq-core/notiq-ai-core.wasm notiq-ai-core/qa/pthread4-artifacts/notiq-ai-core.wasm
+      - name: Download original real CC BY 4.0 15 second test music
+        run: |
+          curl -fsSL --retry 3 \
+            'https://raw.githubusercontent.com/DamRsn/muscriptor.cpp/c8adc019677ed3479fa3c22c1a117d662382f347/testdata/audio/fixture_3chunks_16k.wav' \
+            -o /tmp/notiq-5b-audio.wav
+          test "$(git hash-object /tmp/notiq-5b-audio.wav)" = acfa9329d65816633abc3ee5cc3c7662bf403669
+      - name: Chrome on local isolated HTTPS-compatible preview - real GGUF and varied velocity MIDI
+        timeout-minutes: 16
+        run: |
+          npm install --prefix /tmp/notiq-5b-playwright --no-fund --no-audit playwright-core@1.56.1
+          timeout 15m node notiq-ai-core/qa/expressive-velocity-browser.mjs
