@@ -1173,6 +1173,22 @@ function App() {
           disabled={phase === 'analyzing' || busyLoading} onClick={reset}>
           <X size={14}/><span>Đóng bài</span></button>}
       </div>
+      {nativeReady && selection && <section className="notiq-5h-controls" aria-label="So sánh AI Piano">
+        <strong>AI 5H</strong>
+        <button type="button" aria-label="So sánh hai AI" onClick={()=>void runComparison()}
+          disabled={phase==='analyzing'||busyLoading||pianoInstalling||nativeDownloading||
+                    !pianoInstalled||!nativeModelInstalled}>
+          So sánh MuScriptor ↔ Transkun V2
+        </button>
+        {comparison&&<button type="button" onClick={()=>setCompareOpen(v=>!v)}
+          aria-expanded={compareOpen}>{compareOpen?'Ẩn đối chiếu':'Xem đối chiếu'}</button>}
+        {!pianoInstalled&&<small>Cần cài Transkun V2 Piano</small>}
+        {!nativeModelInstalled&&<small>Cần tải mô hình MuScriptor</small>}
+        <span>Chạy 2 AI trên cùng âm thanh · Giữ nguyên MIDI đang chỉnh</span>
+      </section>}
+      {comparison&&compareOpen&&nativeReady&&<ComparisonPanel result={comparison}
+        onUse={useComparedResult} onSeek={seekTo} onClose={()=>setCompareOpen(false)}
+        disabled={phase==='analyzing'} canRestore={!!comparisonBaseline}/>}
       {desktopReview && showDesktopReview && <section className="desktop-review-panel" aria-label="Duyệt giao diện NOTIQ Desktop">
         <div className="desktop-review-head"><strong>NOTIQ Desktop · Bản duyệt giao diện</strong><button type="button" aria-label="Đóng bảng duyệt" onClick={() => { setShowDesktopReview(false); setReviewArea(null); }}><X size={16}/></button></div>
         <p>Trang này là bản mẫu giao diện. Piano Roll, SoundFont và xuất MIDI hoạt động; việc tự động nhận diện nốt dùng engine MuScriptor gốc NeuralNote trên Windows.</p>
