@@ -1,0 +1,34 @@
+name: NOTIQ Stage 5I Reference Benchmark QA
+on:
+  push:
+    branches: [feature/notiq-stage5i-reference-benchmark]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bench-qa:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install NOTIQ Web
+        working-directory: web
+        run: npm install --no-audit --no-fund
+      - name: Build React with strict TypeScript
+        working-directory: web
+        run: npm run build
+      - name: Benchmark against reference MIDI fixtures
+        working-directory: web
+        run: node --experimental-strip-types --test tests/reference-benchmark.test.mts
+      - name: Previous 5H and MIDI regressions
+        working-directory: web
+        run: |
+          node --experimental-strip-types --test tests/compare-engines.test.mts
+          npm run test:daw
+          npm run test:piano
+          npm run test:soundfont
