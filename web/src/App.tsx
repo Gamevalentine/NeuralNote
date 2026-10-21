@@ -18,6 +18,8 @@ import {type Comparison} from './compareEngines';
 import {compareOriginalAudio} from './dualEngineNative';
 import {ComparisonPanel} from './ComparisonPanel';
 import {ComparisonOverlay} from './ComparisonOverlay';
+import {BenchmarkPanel} from './BenchmarkPanel';
+import {readReferenceMidi,benchmarkComparison,type MidiReference,type MusicMode} from './referenceBenchmark';
 import { runPianoV2 } from './transkunNative';
 import { webAiEnabled, installWebModel, recognizeWeb, closeWebModel } from './muscriptorWebLocal';
 
@@ -61,7 +63,17 @@ function App() {
   const [pianoInstalling, setPianoInstalling] = useState(false);
   const [comparison, setComparison] = useState<Comparison|null>(null);
   const [compareOpen, setCompareOpen] = useState(false);
+  const [musicMode, setMusicMode] = useState<MusicMode>('ensemble');
+  const [referenceMidi, setReferenceMidi] = useState<MidiReference|null>(null);
+  const [referenceOffset, setReferenceOffset] = useState(0);
+  const [showBenchmark, setShowBenchmark] = useState(false);
+  const [showScores, setShowScores] = useState(false);
   const [comparisonBaseline, setComparisonBaseline] = useState<{notes:Note[];pedalEvents:PedalEvent[]}|null>(null);
+  const benchmark = useMemo(()=>{
+    if(!referenceMidi||!comparison||!showScores)return null;
+    try{return benchmarkComparison(comparison,referenceMidi,musicMode,referenceOffset)}
+    catch{return null}
+  },[referenceMidi,comparison,musicMode,referenceOffset,showScores]);
   const browserAi = webAiEnabled();
   const aiAvailable = nativeReady || browserAi;
   const [nativeModelInstalled, setNativeModelInstalled] = useState(false);
@@ -291,6 +303,9 @@ function App() {
     setComparison(null);
     setCompareOpen(false);
     setComparisonBaseline(null);
+    setReferenceMidi(null);
+    setReferenceOffset(0);
+    setShowScores(false);
     setProgress(0);
     firedNotes.current.clear();
     if (audioEl.current) audioEl.current.pause();
