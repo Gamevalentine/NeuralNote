@@ -1,0 +1,37 @@
+name: NOTIQ 5D Hosted Cloudflare Transport and Progress QA
+on:
+  push:
+    branches: [feature/notiq-stage5d-transport-ai-progress]
+    paths:
+      - .github/workflows/notiq-stage5d-hosted-qa.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser-hosted-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install lightweight browser driver
+        run: npm install --prefix /tmp/notiq-5d-playwright --no-audit --no-fund playwright-core@1.56.1
+      - name: Chrome real site input/transport/progress UI QA with mocked native bridge
+        env:
+          NOTIQ_HOSTED_URL: https://0e1bc61a.neuralnote-e4c.pages.dev/
+        run: node notiq-ai-core/qa/transport-progress-browser.mjs
+      - name: Save hosted QA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: notiq-5d-cloudflare-hosted-qa
+          path: |
+            /tmp/notiq-5d-progress-overlay.png
+            /tmp/notiq-5d-transport.png
+            /tmp/notiq-5d-report.json
+            /tmp/notiq-5d-error.png
+          if-no-files-found: warn

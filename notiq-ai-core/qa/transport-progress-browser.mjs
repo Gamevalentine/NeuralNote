@@ -51,7 +51,11 @@ try{
    }
   };
  });
- await page.goto('http://127.0.0.1:4179/',{waitUntil:'domcontentloaded'});
+ await page.goto(process.env.NOTIQ_HOSTED_URL || 'http://127.0.0.1:4179/',{waitUntil:'domcontentloaded',timeout:45000});
+ if (process.env.NOTIQ_HOSTED_URL) {
+  const shared=await page.evaluate(()=>self.crossOriginIsolated && typeof SharedArrayBuffer==='function');
+  assert(shared,'Cloudflare Preview must be cross-origin isolated for MuScriptor WASM');
+ }
  await page.waitForFunction(()=>document.querySelector('.notiq-ai-mode')?.textContent.includes('MuScriptor (Windows)'));
  const transport=page.getByRole('group',{name:'Điều khiển phát lại'});
  assert(await transport.isVisible(),'Transport missing');
