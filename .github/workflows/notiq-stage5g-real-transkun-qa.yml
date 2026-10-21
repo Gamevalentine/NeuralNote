@@ -1,0 +1,43 @@
+name: NOTIQ Stage 5G Real Transkun V2 Inference Smoke
+on:
+  push:
+    branches: [feature/notiq-stage5g-transkun-v2-piano]
+    paths:
+      - .github/workflows/notiq-stage5g-real-transkun-qa.yml
+      - desktop-preview/transkun-runner.py
+      - desktop-preview/tests/transkun_fixture.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-v2-cpu:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install official PyTorch CPU wheels
+        run: |
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu torch==2.5.1 torchaudio==2.5.1
+      - name: Install upstream Transkun V2 pretrained package
+        run: |
+          python -m pip install transkun==2.0.1 numpy==1.26.4 'setuptools<81'
+      - name: Load actual Transkun V2 weights
+        run: |
+          python desktop-preview/transkun-runner.py --self-test
+      - name: Run actual V2 CPU inference on locally synthesized test audio
+        run: |
+          python desktop-preview/tests/transkun_fixture.py /tmp/notiq-piano-2s.wav
+          python desktop-preview/transkun-runner.py --input /tmp/notiq-piano-2s.wav --output /tmp/notiq-piano-v2.json
+          python -c "import json;d=json.load(open('/tmp/notiq-piano-v2.json'));assert d['schema']==1 and d['engine']=='transkun-v2' and isinstance(d['notes'],list) and isinstance(d['pedalEvents'],list);print('NOTIQ_STAGE5G_REAL_TRANSKUN_INFERENCE_PASS',len(d['notes']))"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: notiq-stage5g-real-piano-smoke
+          path: /tmp/notiq-piano-v2.json
+          if-no-files-found: warn
+          retention-days: 7
