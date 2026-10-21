@@ -59,7 +59,7 @@ try {
  if(await transport.locator('.notiq-transport-clock').innerText()!==paused)throw Error('Pause did not freeze clock');
  await transport.getByRole('button',{name:'Phát',exact:true}).click();
  await page.waitForFunction(()=>Number(document.querySelector('.notiq-transport-clock')?.textContent?.match(/:(\d+)\./)?.[1]||0)>=3,null,{timeout:15000});
- await transport.getByRole('button',{name:'Dừng'}).click();
+ await transport.getByRole('button',{name:'Dừng',exact:true}).click();
  if(!(await transport.locator('.notiq-transport-clock').innerText()).startsWith('00:00.00'))throw Error('Stop did not rewind');
  if(errors.length)throw Error('Page errors: '+JSON.stringify(errors));
  console.log('NOTIQ_STAGE5E_TRANSPORT_PASS');
