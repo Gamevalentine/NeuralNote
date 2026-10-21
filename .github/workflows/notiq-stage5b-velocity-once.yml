@@ -1,0 +1,39 @@
+name: NOTIQ Stage 5B - audio-derived velocity experiment QA
+# Final QA after respecting real note durations in SoundFont (old 0.85s truncation)
+on:
+  push:
+    branches: [experiment/notiq-stage5b-expressive-velocity]
+    paths: [.github/workflows/notiq-stage5b-velocity-once.yml]
+permissions:
+  contents: read
+concurrency:
+  group: notiq-stage5b-velocity-experiment
+  cancel-in-progress: true
+jobs:
+  velocity-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Verify original MuScriptor source and unmodified pthread4 WASM
+        run: |
+          node --test notiq-ai-core/tests/source-integrity.test.mjs
+          cmp -s web/public/notiq-core/notiq-ai-core.wasm notiq-ai-core/qa/pthread4-artifacts/notiq-ai-core.wasm
+          cmp -s web/public/notiq-core/notiq-ai-core.js notiq-ai-core/qa/pthread4-artifacts/notiq-ai-core.js
+          cmp -s web/public/notiq-core/worker.mjs notiq-ai-core/web/worker.mjs
+          cmp -s web/public/notiq-core/expressive-velocity.mjs notiq-ai-core/web/expressive-velocity.mjs
+      - name: Test acoustic velocity estimator independently of the AI
+        run: |
+          node --test notiq-ai-core/tests/expressive-velocity.test.mjs
+      - name: TypeScript/Vite build - only opt-in expressive Preview
+        run: |
+          npm install --prefix web --no-fund --no-audit
+          npm run --prefix web build
+          test -s web/dist/notiq-core/expressive-velocity.mjs
+          test -s web/dist/notiq-core/notiq-ai-core.wasm
+          grep -q "VITE_NOTIQ_EXPRESSIVE_VELOCITY=1" web/.env.production
+          node --experimental-strip-types --test web/tests/daw-midi.test.mts
+          echo 'NOTIQ_VELOCITY_PREVIEW_BUILD_PASS'

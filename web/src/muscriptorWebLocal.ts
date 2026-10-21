@@ -8,7 +8,8 @@ import { cachedModel, cacheOfficialModel, discardCachedModel } from './muscripto
 
 type Progress = {kind: 'download' | 'transcribe'; percent: number; message: string};
 type WorkerEvent = {type: string; percent?: number; message?: string; result?: MuScriptorResult;
-  durationMs?:number; wasmHeapBytes?:number; notes?:number};
+  durationMs?:number; wasmHeapBytes?:number; notes?:number;
+  method?:string; estimated?:number; unchanged?:number; minAmplitude?:number; maxAmplitude?:number; pedalEstimated?:boolean};
 type Task = {kind:'download'|'transcribe'; resolve:(x:WorkerEvent)=>void; reject:(e:Error)=>void; onProgress:(p:Progress)=>void};
 const MODEL_URL = 'https://huggingface.co/DamRsn/muscriptor-gguf/resolve/d7045f94e8b19427f4ff9542975035e66596e51c/v1/muscriptor-small-f16.gguf';
 const MODEL_BYTES = 209425152;
@@ -38,6 +39,11 @@ function instance() {
         message:data.message||'MuScriptor đang xử lý…'});
     } else if(data.type==='error') {
       active=null;task.reject(new Error(data.message||'MuScriptor WebAssembly gặp lỗi.'));
+    } else if (data.type === 'dynamics') {
+      console.info('NOTIQ_VELOCITY_ESTIMATE',JSON.stringify({method:data.method,
+        estimated:data.estimated,unchanged:data.unchanged,
+        minAmplitude:data.minAmplitude,maxAmplitude:data.maxAmplitude,
+        pedalEstimated:false}));
     } else if (data.type === 'timing') {
       console.info('NOTIQ_CORE_TIMING',JSON.stringify({kind:task.kind,durationMs:data.durationMs,
         wasmHeapMB:data.wasmHeapBytes ? Math.round(data.wasmHeapBytes/1048576) : null,notes:data.notes}));
@@ -195,7 +201,8 @@ export async function recognizeWeb(source:Blob,onProgress:(p:Progress)=>void):Pr
       'Đã điều chỉnh '+corrected.repaired+' mẫu vượt ngưỡng biên độ; giữ nguyên các mẫu còn lại.'});
   }
   onProgress({kind:'transcribe',percent:10,message:'MuScriptor C++ đang nhận diện âm thanh thật…'});
-  const response=await send('transcribe',{type:'transcribe',pcm,sampleRate:16000},[pcm],onProgress);
+  const response=await send('transcribe',{type:'transcribe',pcm,sampleRate:16000,
+    estimateVelocity:import.meta.env.VITE_NOTIQ_EXPRESSIVE_VELOCITY==='1'},[pcm],onProgress);
   if(!response.result)throw new Error('MuScriptor không gửi được nốt MIDI.');
   const notes=toPianoNotes(response.result);
   if(notes.length===0)throw new Error('MuScriptor chưa phát hiện được nốt nhạc.');
