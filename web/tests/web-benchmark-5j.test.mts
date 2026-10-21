@@ -1,6 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {Midi} from '@tonejs/midi';
+import {createRequire} from 'node:module';
+const {Midi}=createRequire(import.meta.url)('@tonejs/midi');
 import {evaluateWebMidi} from '../src/webBenchmark.ts';
 import {readReferenceMidi} from '../src/referenceBenchmark.ts';
 const createNote=(midi:number,time:number,program=0)=>({pitchMidi:midi,startTimeSeconds:time,durationSeconds:0.4,program,isDrum:false,amplitude:0.75});
