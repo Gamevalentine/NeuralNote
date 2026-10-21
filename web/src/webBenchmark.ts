@@ -1,5 +1,5 @@
 import type {Note} from './audio';
-import {scoreAgainstReference,type MidiReference,type MusicMode,type NoteScore} from './referenceBenchmark';
+import {scoreAgainstReference,type MidiReference,type MusicMode,type NoteScore} from './referenceBenchmark.ts';
 
 export type WebEvaluation = {
   current:NoteScore;
