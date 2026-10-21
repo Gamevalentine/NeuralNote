@@ -53,6 +53,6 @@ target_link_options(notiq_ai_core PRIVATE
 option(NOTIQ_WASM_SPEED_EXPERIMENT "Experimental -O3 linker build for A/B QA" OFF)
 if(NOTIQ_WASM_SPEED_EXPERIMENT)
   target_compile_options(notiq_ai_core PRIVATE -O3)
-  target_link_options(notiq_ai_core PRIVATE -O3 "SHELL:-sASSERTIONS=0")
+  target_link_options(notiq_ai_core PRIVATE -O3 "SHELL:-sASSERTIONS=0" "SHELL:-sMINIFY_WASM_IMPORTS_AND_EXPORTS=0")
 endif()
 set_target_properties(notiq_ai_core PROPERTIES OUTPUT_NAME "notiq-ai-core" SUFFIX ".js")
