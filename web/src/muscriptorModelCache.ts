@@ -5,7 +5,9 @@ const CACHE_NAME = 'notiq-muscriptor-small-noncommercial-v1';
 const MODEL_BYTES = 209_425_152;
 const MIN_HEADROOM = MODEL_BYTES * 2;
 function available() {
-  return typeof caches !== 'undefined' && typeof navigator !== 'undefined'
+  // Explicit opt-in: browser site data can otherwise consume the Windows C: drive.
+  return import.meta.env.VITE_NOTIQ_MODEL_CACHE === '1'
+    && typeof caches !== 'undefined' && typeof navigator !== 'undefined'
     && Boolean(navigator.storage?.estimate) && Boolean(globalThis.isSecureContext);
 }
 export async function cachedModel(url: string): Promise<Response | null> {
