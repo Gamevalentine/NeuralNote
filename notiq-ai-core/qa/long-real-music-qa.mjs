@@ -4,7 +4,7 @@
 import {chromium} from '/tmp/notiq-5a-playwright/node_modules/playwright-core/index.mjs';
 import {readFileSync,writeFileSync} from 'node:fs';
 const url='https://preview-notiq-pthread4-https.neuralnote-e4c.pages.dev/';
-const durations=[60,180];
+const durations=process.env.NOTIQ_5A_CASE==='180' ? [180] : [60,180];
 function readMidi(data) {
   const b=new Uint8Array(data);
   const as=(p,n)=>String.fromCharCode(...b.subarray(p,p+n));
@@ -63,15 +63,16 @@ try {
     const wallStart=Date.now();
     console.log('NOTIQ_5A_START',seconds,filename);
     await page.locator('input[type=file]').setInputFiles(filename);
-    if(seconds===60) {
+    if(seconds===durations[0]) {
       await page.getByRole('button',{name:'Tải mô hình AI'}).click();
     }
-    await page.waitForFunction(()=>{
-      const body=document.body.innerText;
-      return body.includes('MuScriptor AI Core: ')||
-        body.includes('Không thể nhận diện bài hát')||
-        body.includes('Chưa nạp được MuScriptor');
-    },null,{timeout:seconds===60?13*60*1000:23*60*1000});
+    // Never accidentally accept the previous song's completion UI.
+    await page.locator('.ai-running-indicator').waitFor({state:'visible',timeout:120000});
+    console.log('NOTIQ_5A_INFERENCE_STARTED',seconds);
+    await page.locator('.ai-running-indicator').waitFor({
+      state:'hidden',timeout:seconds===60?13*60*1000:23*60*1000
+    });
+    console.log('NOTIQ_5A_INFERENCE_FINISHED',seconds);
     const txt=await page.locator('body').innerText();
     const match=txt.match(/MuScriptor AI Core: (\d+) nốt/);
     if(!match)throw Error('No real inference result at '+seconds+'s: '+txt.slice(-1400));
