@@ -19,6 +19,7 @@ import {toPianoV2Notes} from './transkunProtocol';
 import {type Comparison} from './compareEngines';
 import {compareOriginalAudio} from './dualEngineNative';
 import {ComparisonPanel} from './ComparisonPanel';
+import {ComparisonOverlay} from './ComparisonOverlay';
 import { runPianoV2 } from './transkunNative';
 import { webAiEnabled, installWebModel, recognizeWeb, closeWebModel } from './muscriptorWebLocal';
 
@@ -1339,6 +1340,9 @@ function App() {
                   role="group" aria-label="Piano Roll: nhấn lưới để thêm nốt, kéo nốt để di chuyển">
                   {pitches.map(pitch => <div className={'pitch-grid ' + (pitch%12 === 0 ? 'octave' : '')} key={pitch} style={{top:(pitchTop-pitch)*PITCH_ROW,height:PITCH_ROW}}/>)}
                   {markers.map(n => <div key={n} className="beat-grid" style={{left: n/totalSeconds*100 + '%'}}/>)}
+                  {comparison&&compareOpen&&<ComparisonOverlay result={comparison}
+                    pitchTop={pitchTop} rowHeight={PITCH_ROW}
+                    width={timelineWidth} seconds={totalSeconds}/>}
                   {visibleIndexedNotes.map(({note:n,index}) => (
                     <button type="button" className={'note editable-note' + (selectedNote === index ? ' selected-note' : '')}
                       key={index} aria-label={'Nốt ' + noteName(n.pitchMidi) + ', bắt đầu ' + fmt(n.startTimeSeconds)}
