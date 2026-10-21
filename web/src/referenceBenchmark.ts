@@ -1,4 +1,5 @@
-import {Midi} from '@tonejs/midi';
+import * as MidiPackage from '@tonejs/midi';
+const Midi= MidiPackage.Midi || (MidiPackage as unknown as {default:{Midi:typeof MidiPackage.Midi}}).default.Midi;
 import type {Note} from './audio';
 import type {Comparison} from './compareEngines';
 
@@ -32,7 +33,7 @@ export async function readReferenceMidi(file:Blob,fileName:string):Promise<MidiR
   }
  }
  if(!notes.length)throw Error('MIDI tham chiếu không có nốt giai điệu để đối chiếu.');
- const durationSeconds=Math.max(...notes.map(n=>n.startTimeSeconds+n.durationSeconds));
+ const durationSeconds=notes.reduce((end,n)=>Math.max(end,n.startTimeSeconds+n.durationSeconds),0);
  if(durationSeconds>910)throw Error('MIDI tham chiếu dài hơn 15 phút.');
  return {fileName,notes:notes.sort((a,b)=>a.startTimeSeconds-b.startTimeSeconds),durationSeconds,tracks:tracks.length};
 }
