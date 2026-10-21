@@ -1,0 +1,40 @@
+name: NOTIQ Stage 5A - inspect original 180s PCM samples
+on:
+  push:
+    branches: [test/notiq-stage5a-long-real-music]
+    paths: [.github/workflows/notiq-stage5a-pcm-peaks-once.yml]
+permissions:
+  contents: read
+jobs:
+  inspect-pcm:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+          persist-credentials: false
+      - name: Inspect licensed 60s and 180s floating PCM samples
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          curl -fL --retry 3 \
+            'https://upload.wikimedia.org/wikipedia/commons/6/6b/The_Entertainer_by_Kevin_MacLeod.ogg' \
+            -o /tmp/notiq-5a-original.ogg
+          echo '45111a083a1d5ea88142e4813a6727320cca5d4f  /tmp/notiq-5a-original.ogg' | sha1sum -c -
+          for t in 60 180; do
+            ffmpeg -nostdin -v error -y -i /tmp/notiq-5a-original.ogg -t "$t" \
+              -ar 16000 -ac 1 -c:a pcm_f32le -f f32le "/tmp/notiq-$t.raw"
+          done
+          python3 - <<'PY'
+          import math, array
+          for sec in (60,180):
+              a=array.array('f')
+              with open(f'/tmp/notiq-{sec}.raw','rb') as file:a.frombytes(file.read())
+              peak=max((abs(x) for x in a if math.isfinite(x)),default=0)
+              invalid=sum(not math.isfinite(x) for x in a)
+              clips=sum(math.isfinite(x) and abs(x)>1.01 for x in a)
+              soft=sum(math.isfinite(x) and abs(x)>1 for x in a)
+              print(f'NOTIQ_PCM_STATS seconds={sec},samples={len(a)},peak={peak:.7f},invalid={invalid},over_1={soft},over_1_01={clips}')
+              assert len(a)==sec*16000
+          PY
