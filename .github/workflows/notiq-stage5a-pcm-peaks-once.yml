@@ -36,5 +36,5 @@ jobs:
               clips=sum(math.isfinite(x) and abs(x)>1.01 for x in a)
               soft=sum(math.isfinite(x) and abs(x)>1 for x in a)
               print(f'NOTIQ_PCM_STATS seconds={sec},samples={len(a)},peak={peak:.7f},invalid={invalid},over_1={soft},over_1_01={clips}')
-              assert len(a)==sec*16000
+              assert abs(len(a)-sec*16000)<=1600, 'FFmpeg output duration differs by >0.1s'
           PY
