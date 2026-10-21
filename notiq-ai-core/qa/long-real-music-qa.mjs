@@ -75,7 +75,14 @@ try {
     console.log('NOTIQ_5A_INFERENCE_FINISHED',seconds);
     const txt=await page.locator('body').innerText();
     const match=txt.match(/MuScriptor AI Core: (\d+) nốt/);
-    if(!match)throw Error('No real inference result at '+seconds+'s: '+txt.slice(-1400));
+    if(!match) {
+      const alerts=await page.locator('.error-banner').allTextContents();
+      const status=await page.locator('.editor-status').allTextContents();
+      console.log('NOTIQ_5A_FAILURE_DETAILS',JSON.stringify({
+        seconds,alerts,status,consoleErrors:errors,failedRequests:failures,
+        bodySnippet:txt.slice(0,700),bodyTail:txt.slice(-700)}));
+      throw Error('No real inference result at '+seconds+'s; see full error-banner diagnostic above');
+    }
     const noteCount=Number(match[1]);
     if(noteCount<seconds*2)throw Error('Suspect incomplete transcription: '+noteCount);
     const incoming=page.waitForEvent('download',{timeout:25000});
