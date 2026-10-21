@@ -4,9 +4,11 @@
 import type { Note } from './audio';
 import { convertAudioToNativeWav } from './muscriptorNative';
 import { toPianoNotes, type MuScriptorResult } from './muscriptorProtocol';
+import { cachedModel, cacheOfficialModel, discardCachedModel } from './muscriptorModelCache';
 
 type Progress = {kind: 'download' | 'transcribe'; percent: number; message: string};
-type WorkerEvent = {type: string; percent?: number; message?: string; result?: MuScriptorResult};
+type WorkerEvent = {type: string; percent?: number; message?: string; result?: MuScriptorResult;
+  durationMs?:number; wasmHeapBytes?:number; notes?:number};
 type Task = {kind:'download'|'transcribe'; resolve:(x:WorkerEvent)=>void; reject:(e:Error)=>void; onProgress:(p:Progress)=>void};
 const MODEL_URL = 'https://huggingface.co/DamRsn/muscriptor-gguf/resolve/d7045f94e8b19427f4ff9542975035e66596e51c/v1/muscriptor-small-f16.gguf';
 const MODEL_BYTES = 209425152;
@@ -36,6 +38,9 @@ function instance() {
         message:data.message||'MuScriptor đang xử lý…'});
     } else if(data.type==='error') {
       active=null;task.reject(new Error(data.message||'MuScriptor WebAssembly gặp lỗi.'));
+    } else if (data.type === 'timing') {
+      console.info('NOTIQ_CORE_TIMING',JSON.stringify({kind:task.kind,durationMs:data.durationMs,
+        wasmHeapMB:data.wasmHeapBytes ? Math.round(data.wasmHeapBytes/1048576) : null,notes:data.notes}));
     } else if(data.type==='ready'&&task.kind==='download') {
       ready=true;active=null;task.resolve(data);
     } else if(data.type==='complete'&&task.kind==='transcribe') {
@@ -59,11 +64,23 @@ function send(kind:Task['kind'],message:object,transfers:Transferable[],onProgre
 export async function installWebModel(onProgress:(p:Progress)=>void) {
   if(ready) return;
   if(!webAiEnabled()) throw new Error('NOTIQ AI Core chưa bật trên bản Preview này.');
-  onProgress({kind:'download',percent:0,message:'Đang tải MuScriptor Small 209 MB từ nguồn chính thức…'});
-  const response=await fetch(MODEL_URL);
+  onProgress({kind:'download',percent:0,message:'Đang tìm mô hình MuScriptor Small đã lưu trên trình duyệt…'});
+  let response=await cachedModel(MODEL_URL);
+  const hit=Boolean(response);
+  if (!response) {
+    onProgress({kind:'download',percent:0,message:'Đang tải MuScriptor Small 209 MB từ nguồn chính thức…'});
+    response=await fetch(MODEL_URL);
+  }
   if(!response.ok||!response.body)throw new Error('Không tải được mô hình MuScriptor (HTTP '+response.status+').');
   const declared=Number(response.headers.get('content-length'));
-  if(declared&&declared>MODEL_BYTES)throw new Error('GGUF có dung lượng vượt bản Small đã ghim.');
+  if(declared&&declared!==MODEL_BYTES) {
+    if(hit) await discardCachedModel(MODEL_URL);
+    throw new Error('GGUF có kích thước không đúng bản Small đã ghim.');
+  }
+  // Cache a streamed clone while the original is consumed. The worker checks
+  // SHA-256 before accepting bytes, including anything read from CacheStorage.
+  // No intermediate 209 MB Playwright/Node copy is needed.
+  const cacheResult=hit?null:cacheOfficialModel(MODEL_URL,response.clone());
   const data=new Uint8Array(MODEL_BYTES);
   let received=0;
   const reader=response.body.getReader();
@@ -74,14 +91,33 @@ export async function installWebModel(onProgress:(p:Progress)=>void) {
       if(received+chunk.value.length>MODEL_BYTES)throw new Error('GGUF vượt kích thước cho phép.');
       data.set(chunk.value,received);received+=chunk.value.length;
       onProgress({kind:'download',percent:Math.floor(received/MODEL_BYTES*80),
-        message:'Đang tải mô hình: '+Math.floor(received/MODEL_BYTES*100)+'%'});
+        message:(hit?'Đọc mô hình đã lưu: ':'Tải mô hình chính thức: ')+Math.floor(received/MODEL_BYTES*100)+'%'});
     }
+  } catch(error) {
+    if(hit) await discardCachedModel(MODEL_URL);
+    throw error;
   } finally {reader.releaseLock();}
-  if(received!==MODEL_BYTES)throw new Error('GGUF tải chưa đầy đủ: '+received+' byte.');
-  // Web Worker checks SHA-256 of exact original GGUF before accepting it.
-  await send('download',{type:'init',model:data.buffer,
-    moduleUrl:new URL('notiq-ai-core.js',root).href},[data.buffer],onProgress);
-  onProgress({kind:'download',percent:100,message:'MuScriptor Small sẵn sàng trong trình duyệt.'});
+  if(received!==MODEL_BYTES) {
+    if(hit) await discardCachedModel(MODEL_URL);
+    throw new Error('GGUF tải chưa đầy đủ: '+received+' byte.');
+  }
+  const start=performance.now();
+  try {
+    await send('download',{type:'init',model:data.buffer,
+      moduleUrl:new URL('notiq-ai-core.js',root).href},[data.buffer],onProgress);
+  } catch(error) {
+    if(cacheResult) await cacheResult;
+    await discardCachedModel(MODEL_URL);
+    throw error;
+  }
+  if (cacheResult) {
+    // A storage failure is optional; never fail an otherwise valid model load.
+    void cacheResult.then(saved=>console.info('NOTIQ_MODEL_CACHE',saved?'stored':'not-stored'));
+  }
+  console.info('NOTIQ_MODEL_READY_MS',Math.round(performance.now()-start),hit?'cached':'downloaded');
+  onProgress({kind:'download',percent:100,message:
+    (hit?'MuScriptor Small đã khôi phục từ bộ nhớ đệm.':'MuScriptor Small đã sẵn sàng trong trình duyệt.')});
+
 }
 // A conforming float32 WAV must be passed bit-for-bit to MuScriptor: decoding
 // it through AudioContext first resamples to the device rate and back, which
