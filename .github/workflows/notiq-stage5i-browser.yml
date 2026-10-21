@@ -1,0 +1,38 @@
+name: NOTIQ Stage 5I Chrome Reference MIDI QA
+on:
+  push:
+    branches: [feature/notiq-stage5i-reference-benchmark]
+    paths:
+      - .github/workflows/notiq-stage5i-browser.yml
+      - notiq-ai-core/qa/reference-benchmark-browser.mjs
+      - web/src/App.tsx
+      - web/src/BenchmarkPanel.tsx
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser-benchmark:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Compile NOTIQ
+        working-directory: web
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+      - name: Chrome benchmark reference MIDI, measure true F1, confirm recommended engine only on click
+        run: |
+          npm install --prefix /tmp/notiq-stage5g-playwright --no-audit --no-fund playwright-core@1.56.1
+          node notiq-ai-core/qa/reference-benchmark-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: notiq-stage5i-browser-benchmark
+          path: /tmp/notiq-stage5i-reference.png
+          if-no-files-found: warn

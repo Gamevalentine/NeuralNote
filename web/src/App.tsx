@@ -18,6 +18,8 @@ import {type Comparison} from './compareEngines';
 import {compareOriginalAudio} from './dualEngineNative';
 import {ComparisonPanel} from './ComparisonPanel';
 import {ComparisonOverlay} from './ComparisonOverlay';
+import {BenchmarkPanel} from './BenchmarkPanel';
+import {readReferenceMidi,benchmarkComparison,type MidiReference,type MusicMode} from './referenceBenchmark';
 import { runPianoV2 } from './transkunNative';
 import { webAiEnabled, installWebModel, recognizeWeb, closeWebModel } from './muscriptorWebLocal';
 
@@ -61,7 +63,17 @@ function App() {
   const [pianoInstalling, setPianoInstalling] = useState(false);
   const [comparison, setComparison] = useState<Comparison|null>(null);
   const [compareOpen, setCompareOpen] = useState(false);
+  const [musicMode, setMusicMode] = useState<MusicMode>('ensemble');
+  const [referenceMidi, setReferenceMidi] = useState<MidiReference|null>(null);
+  const [referenceOffset, setReferenceOffset] = useState(0);
+  const [showBenchmark, setShowBenchmark] = useState(false);
+  const [showScores, setShowScores] = useState(false);
   const [comparisonBaseline, setComparisonBaseline] = useState<{notes:Note[];pedalEvents:PedalEvent[]}|null>(null);
+  const benchmark = useMemo(()=>{
+    if(!referenceMidi||!comparison||!showScores)return null;
+    try{return benchmarkComparison(comparison,referenceMidi,musicMode,referenceOffset)}
+    catch{return null}
+  },[referenceMidi,comparison,musicMode,referenceOffset,showScores]);
   const browserAi = webAiEnabled();
   const aiAvailable = nativeReady || browserAi;
   const [nativeModelInstalled, setNativeModelInstalled] = useState(false);
@@ -291,6 +303,9 @@ function App() {
     setComparison(null);
     setCompareOpen(false);
     setComparisonBaseline(null);
+    setReferenceMidi(null);
+    setReferenceOffset(0);
+    setShowScores(false);
     setProgress(0);
     firedNotes.current.clear();
     if (audioEl.current) audioEl.current.pause();
@@ -534,6 +549,47 @@ function App() {
     } finally {
       recognitionInFlight.current=false;
       setPhase(beforePhase==='error'?(notesRef.current.length?'complete':'ready'):beforePhase);
+    }
+  };
+
+  const loadReference = async(file:File) => {
+    if(phase==='analyzing'||busyLoading)return;
+    setError('');
+    try {
+      const parsed=await readReferenceMidi(file,file.name);
+      setReferenceMidi(parsed);
+      setShowScores(false);
+      setShowBenchmark(true);
+      setStatus('Đã tải MIDI chuẩn '+file.name+' · '+parsed.notes.length+
+        ' nốt. Chọn So sánh hai AI rồi chấm F1.');
+    } catch(cause){
+      setReferenceMidi(null);
+      setShowScores(false);
+      setError('Không đọc được MIDI chuẩn: '+
+        (cause instanceof Error?cause.message:'Tệp không hợp lệ'));
+    }
+  };
+  const chooseMusicMode = (mode:MusicMode) => {
+    if(phase==='analyzing')return;
+    setMusicMode(mode);
+    if(mode==='piano')setAnalysisEngine('transkun-v2');
+    if(mode==='ensemble')setAnalysisEngine('muscriptor');
+    setShowScores(false);
+    setStatus(mode==='piano'?'5I: chế độ Piano ưu tiên Transkun V2, dùng MuScriptor khi đối chiếu.' :
+      mode==='ensemble'?'5I: chế độ đa nhạc cụ dùng MuScriptor.' :
+      '5I: tự đề xuất chỉ dựa trên F1 của MIDI tham chiếu, không tự thay MIDI.');
+  };
+  const evaluateReference = () => {
+    if(!referenceMidi)return;
+    if(comparison){
+      try {
+        benchmarkComparison(comparison,referenceMidi,musicMode,referenceOffset);
+        setShowScores(true);
+        setStatus('5I: kết quả điểm F1 so với MIDI chuẩn đã hiển thị.');
+      }catch(cause){setError(cause instanceof Error?cause.message:'Không chấm được MIDI chuẩn.')}
+    }else{
+      setShowScores(true);
+      void runComparison();
     }
   };
 
@@ -898,9 +954,10 @@ function App() {
     setComparison(null);
     setCompareOpen(false);
     setComparisonBaseline(null);
-    setComparison(null);
-    setCompareOpen(false);
-    setComparisonBaseline(null);
+    setReferenceMidi(null);
+    setReferenceOffset(0);
+    setShowScores(false);
+    setShowBenchmark(false);
     setSelection(null);
     setInfo(null);
     clearHistory();
@@ -1188,6 +1245,27 @@ function App() {
       {comparison&&compareOpen&&nativeReady&&<ComparisonPanel result={comparison}
         onUse={useComparedResult} onSeek={seekTo} onClose={()=>setCompareOpen(false)}
         disabled={phase==='analyzing'} canRestore={!!comparisonBaseline}/>}
+      {nativeReady && selection && <section className="notiq-5i-toggle">
+        <strong>AI 5I</strong>
+        <button type="button" aria-label="Mở kiểm tra MIDI chuẩn 5I"
+          aria-expanded={showBenchmark}
+          onClick={()=>setShowBenchmark(v=>!v)}>
+          {showBenchmark?'Ẩn 5I · MIDI chuẩn':'5I · Đo nốt đúng/sai bằng MIDI chuẩn'}
+        </button>
+        <span>Chọn Piano / Đa nhạc cụ · F1 tính khi có MIDI tham chiếu</span>
+      </section>}
+      {nativeReady && selection && showBenchmark && <BenchmarkPanel
+        mode={musicMode} onMode={chooseMusicMode}
+        reference={referenceMidi} onFile={file=>void loadReference(file)}
+        onClear={()=>{setReferenceMidi(null);setShowScores(false)}}
+        offset={referenceOffset} onOffset={setReferenceOffset}
+        benchmark={benchmark}
+        running={phase==='analyzing'||busyLoading}
+        canCompare={nativeModelInstalled&&pianoInstalled}
+        onEvaluate={evaluateReference}
+        onCompare={()=>void runComparison()}
+        onUse={useComparedResult}
+      />}
       {desktopReview && showDesktopReview && <section className="desktop-review-panel" aria-label="Duyệt giao diện NOTIQ Desktop">
         <div className="desktop-review-head"><strong>NOTIQ Desktop · Bản duyệt giao diện</strong><button type="button" aria-label="Đóng bảng duyệt" onClick={() => { setShowDesktopReview(false); setReviewArea(null); }}><X size={16}/></button></div>
         <p>Trang này là bản mẫu giao diện. Piano Roll, SoundFont và xuất MIDI hoạt động; việc tự động nhận diện nốt dùng engine MuScriptor gốc NeuralNote trên Windows.</p>
