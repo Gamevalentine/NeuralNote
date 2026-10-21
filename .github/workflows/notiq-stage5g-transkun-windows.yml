@@ -1,0 +1,103 @@
+name: NOTIQ Stage 5G Transkun V2 Windows Portable
+on:
+  push:
+    branches: [feature/notiq-stage5g-transkun-v2-piano]
+    paths:
+      - .github/workflows/notiq-stage5g-transkun-windows.yml
+      - desktop-preview/main.cjs
+      - desktop-preview/preload.cjs
+      - desktop-preview/transkun-runtime.cjs
+      - desktop-preview/transkun-runner.py
+      - desktop-preview/repack-5g.cjs
+      - desktop-preview/tests/transkun.test.cjs
+      - web/src/App.tsx
+      - web/src/transkunNative.ts
+      - web/src/transkunProtocol.ts
+      - web/src/muscriptorNative.ts
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  windows-piano-preview:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify native adapters and Transkun Python syntax
+        shell: pwsh
+        run: |
+          node --test desktop-preview/tests/models.test.cjs desktop-preview/tests/transkun.test.cjs
+          if ($LASTEXITCODE -ne 0) {throw 'Node model/Transkun tests failed'}
+          node --check desktop-preview/main.cjs
+          node --check desktop-preview/preload.cjs
+          node --check desktop-preview/transkun-runtime.cjs
+          node --check desktop-preview/repack-5g.cjs
+          if ($LASTEXITCODE -ne 0) {throw 'Electron syntax invalid'}
+          python -m py_compile desktop-preview/transkun-runner.py
+          if ($LASTEXITCODE -ne 0) {throw 'Python runner syntax invalid'}
+      - name: Validate TypeScript and all existing MIDI regressions
+        working-directory: web
+        shell: pwsh
+        run: |
+          npm install --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) {throw 'web npm install failed'}
+          npm run build
+          if ($LASTEXITCODE -ne 0) {throw 'web build failed'}
+          npm run test:daw
+          if ($LASTEXITCODE -ne 0) {throw 'MIDI tests failed'}
+          npm run test:piano
+          if ($LASTEXITCODE -ne 0) {throw 'Piano tests failed'}
+      - name: Retrieve previous verified NOTIQ 5F native Portable (no C++ build)
+        uses: actions/download-artifact@v4
+        with:
+          name: NOTIQ-Stage5F-Large-Model-Windows-Preview
+          repository: Gamevalentine/NeuralNote
+          run-id: 39682460886
+          github-token: ${{ github.token }}
+          path: notiq-stage5g-base
+      - name: Package original native + new separately installable Piano engine
+        shell: pwsh
+        run: |
+          npm install --prefix package-tools --no-audit --no-fund @electron/asar@3
+          if ($LASTEXITCODE -ne 0) {throw 'ASAR packer install failed'}
+          $base=(Resolve-Path 'notiq-stage5g-base').Path
+          $archive=Get-ChildItem $base -Recurse -File -Filter 'app.asar' | Select-Object -First 1
+          if (-not $archive) {throw 'Previous ASAR missing'}
+          $resources=Split-Path $archive.FullName -Parent
+          $binary=Join-Path $resources 'bridge-bin/notiq-muscriptor-cli.exe'
+          if (-not (Test-Path $binary)) {throw 'Original MuScriptor native missing'}
+          $self=& $binary --self-test
+          if ($LASTEXITCODE -ne 0 -or $self -notmatch '"ready":true') {throw 'MuScriptor native self-test failed'}
+          node desktop-preview/repack-5g.cjs "$($archive.FullName)" "$((Resolve-Path web/dist).Path)"
+          if ($LASTEXITCODE -ne 0) {throw 'Transkun Electron ASAR repack failed'}
+          $root=Split-Path $resources -Parent
+          $exe=Get-ChildItem $root -File -Filter '*.exe' | Select-Object -First 1
+          if (-not $exe) {throw 'Windows Portable EXE missing'}
+          @(
+            'NOTIQ Stage5G: Experimental Transkun V2 Piano engine'
+            'Keep MuScriptor original: Small or Large for multi-instrument MIDI.'
+            'Select Transkun V2 Piano from Engine and press Cài AI Piano.'
+            'This automatically downloads a pinned Python tool + Python 3.11 + PyTorch CPU + official Transkun package.'
+            'No command line required. All runtime files are under NOTIQ-Data beside this app on E: or chosen drive.'
+            'The first install may require well over 1 GB of disk. No runtime/weights bundled in ZIP.'
+            'Transkun is MIT licensed; original MuScriptor is CC BY-NC 4.0 (noncommercial).'
+            'Stage5G experimental: NOT yet validated better pitch/onset on user song. Use original Small if Piano install fails.'
+            'Web Cloudflare remains MuScriptor Small, not server-hosted Python.'
+          ) -join [Environment]::NewLine | Set-Content -Path (Join-Path $root 'README-STAGE5G-PIANO.txt')
+          Write-Host 'NOTIQ_STAGE5G_WINDOWS_PREVIEW_PASS originalMuScriptor=PASS pianoAdapter=PACKAGED'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NOTIQ-Stage5G-TranskunV2-Piano-Windows-Preview
+          path: notiq-stage5g-base/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 6
