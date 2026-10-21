@@ -1,4 +1,5 @@
 name: NOTIQ Stage 5B - true MuScriptor audio to expressive MIDI QA
+# Rerun with canonical @tonejs/midi parser after first 451-note velocity estimator success
 on:
   push:
     branches: [experiment/notiq-stage5b-expressive-velocity]
