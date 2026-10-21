@@ -14,6 +14,10 @@ import { DEFAULT_INSTRUMENTS, INSTRUMENTS, instrumentProgram, playSoundfontNote,
 import type { InstrumentId, InstrumentSelection } from './soundfont';
 import { nativeInstrumentPrograms, nativeProgramName } from './muscriptorProtocol';
 import { nativeBridgeAvailable, runMuScriptor } from './muscriptorNative';
+import {type Comparison} from './compareEngines';
+import {compareOriginalAudio} from './dualEngineNative';
+import {ComparisonPanel} from './ComparisonPanel';
+import {ComparisonOverlay} from './ComparisonOverlay';
 import { runPianoV2 } from './transkunNative';
 import { webAiEnabled, installWebModel, recognizeWeb, closeWebModel } from './muscriptorWebLocal';
 
@@ -55,6 +59,9 @@ function App() {
   const [analysisEngine, setAnalysisEngine] = useState<'muscriptor'|'transkun-v2'>('muscriptor');
   const [pianoInstalled, setPianoInstalled] = useState(false);
   const [pianoInstalling, setPianoInstalling] = useState(false);
+  const [comparison, setComparison] = useState<Comparison|null>(null);
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [comparisonBaseline, setComparisonBaseline] = useState<{notes:Note[];pedalEvents:PedalEvent[]}|null>(null);
   const browserAi = webAiEnabled();
   const aiAvailable = nativeReady || browserAi;
   const [nativeModelInstalled, setNativeModelInstalled] = useState(false);
@@ -281,6 +288,9 @@ function App() {
     setTime(0);
     setPedalEvents([]);
     setPedalTrack('*');
+    setComparison(null);
+    setCompareOpen(false);
+    setComparisonBaseline(null);
     setProgress(0);
     firedNotes.current.clear();
     if (audioEl.current) audioEl.current.pause();
@@ -489,6 +499,60 @@ function App() {
     } finally {
       recognitionInFlight.current = false;
     }
+  };
+
+  const runComparison = async () => {
+    const source=selectionRef.current;
+    if (!source || !nativeReady || !nativeModelInstalled || !pianoInstalled ||
+        recognitionInFlight.current || phase==='analyzing' || busyLoading) {
+      setError('5H cần NOTIQ Windows và hai engine đã cài đầy đủ.');
+      return;
+    }
+    recognitionInFlight.current=true;
+    const beforePhase=phase;
+    const beforeNotes=copyNotes(notesRef.current);
+    const beforePedal=pedalEvents.map(p=>({...p}));
+    stop();
+    recognitionStartedAt.current=Date.now();
+    setRecognitionStage('preparing');
+    setPhase('analyzing');
+    setError('');
+    try {
+      const result=await compareOriginalAudio(source.file,message=>{
+        setStatus('5H: '+message);
+        setRecognitionStage('processing');
+      });
+      setComparison(result);
+      setComparisonBaseline({notes:beforeNotes,pedalEvents:beforePedal});
+      setCompareOpen(true);
+      setStatus('5H: '+result.pairs.length+' nốt chung · '+
+        result.muscriptorOnly.length+' chỉ MuScriptor · '+
+        result.transkunOnly.length+' chỉ Transkun. MIDI không bị thay.');
+    } catch (cause) {
+      setError('5H: '+(cause instanceof Error?cause.message:'So sánh thất bại')+
+        '. MIDI đang chỉnh vẫn được giữ.');
+    } finally {
+      recognitionInFlight.current=false;
+      setPhase(beforePhase==='error'?(notesRef.current.length?'complete':'ready'):beforePhase);
+    }
+  };
+
+  const useComparedResult = (engine:'muscriptor'|'transkun-v2'|'original') => {
+    if(!comparison||phase==='analyzing')return;
+    const chosen=engine==='original'?comparisonBaseline:
+      engine==='muscriptor'?comparison.muscriptor:comparison.transkun;
+    if(!chosen)return;
+    stop();
+    commitNotes(copyNotes(chosen.notes));
+    setPedalEvents(chosen.pedalEvents.map(p=>({...p})));
+    setPedalTrack(chosen.pedalEvents.find(p=>p.trackKey!=='*')?.trackKey || (engine==='transkun-v2'?'gm-0':'*'));
+    setNativeMuted(new Set());
+    setNativeSolo(null);
+    setNativeSelectedProgram(chosen.notes[0]?.program??null);
+    setPhase('complete');
+    setStatus(engine==='original'?'Đã khôi phục bản MIDI trước 5H.':
+      'Đã chọn MIDI '+(engine==='muscriptor'?'MuScriptor':'Transkun V2')+
+      '; hai kết quả vẫn lưu trong bảng 5H.');
   };
 
   const startInference = () => {
@@ -831,6 +895,12 @@ function App() {
   };
   const reset = () => {
     stop();
+    setComparison(null);
+    setCompareOpen(false);
+    setComparisonBaseline(null);
+    setComparison(null);
+    setCompareOpen(false);
+    setComparisonBaseline(null);
     setSelection(null);
     setInfo(null);
     clearHistory();
@@ -903,6 +973,9 @@ function App() {
     {
       id: 'tools', label: 'Công cụ', commands: [
         { label: phase === 'analyzing' ? 'Đang nhận diện…' : 'Nhận diện Audio → MIDI', run: () => void startInference(), disabled: !selection || phase === 'analyzing' },
+        { label:'5H · So sánh MuScriptor và Transkun',run:()=>void runComparison(),
+          disabled:!nativeReady||!selection||!nativeModelInstalled||!pianoInstalled||phase==='analyzing' },
+        { label:'5H · Xem đối chiếu',run:()=>setCompareOpen(true),disabled:!comparison },
         { label: nativeReady ? 'AI: MuScriptor (NeuralNote gốc) — đang sử dụng'
             : 'MuScriptor gốc NeuralNote — yêu cầu NOTIQ Windows',
           run: () => {}, disabled: true, checked: nativeReady },
@@ -1099,6 +1172,22 @@ function App() {
           disabled={phase === 'analyzing' || busyLoading} onClick={reset}>
           <X size={14}/><span>Đóng bài</span></button>}
       </div>
+      {nativeReady && selection && <section className="notiq-5h-controls" aria-label="So sánh AI Piano">
+        <strong>AI 5H</strong>
+        <button type="button" aria-label="So sánh hai AI" onClick={()=>void runComparison()}
+          disabled={phase==='analyzing'||busyLoading||pianoInstalling||nativeDownloading||
+                    !pianoInstalled||!nativeModelInstalled}>
+          So sánh MuScriptor ↔ Transkun V2
+        </button>
+        {comparison&&<button type="button" onClick={()=>setCompareOpen(v=>!v)}
+          aria-expanded={compareOpen}>{compareOpen?'Ẩn đối chiếu':'Xem đối chiếu'}</button>}
+        {!pianoInstalled&&<small>Cần cài Transkun V2 Piano</small>}
+        {!nativeModelInstalled&&<small>Cần tải mô hình MuScriptor</small>}
+        <span>Chạy 2 AI trên cùng âm thanh · Giữ nguyên MIDI đang chỉnh</span>
+      </section>}
+      {comparison&&compareOpen&&nativeReady&&<ComparisonPanel result={comparison}
+        onUse={useComparedResult} onSeek={seekTo} onClose={()=>setCompareOpen(false)}
+        disabled={phase==='analyzing'} canRestore={!!comparisonBaseline}/>}
       {desktopReview && showDesktopReview && <section className="desktop-review-panel" aria-label="Duyệt giao diện NOTIQ Desktop">
         <div className="desktop-review-head"><strong>NOTIQ Desktop · Bản duyệt giao diện</strong><button type="button" aria-label="Đóng bảng duyệt" onClick={() => { setShowDesktopReview(false); setReviewArea(null); }}><X size={16}/></button></div>
         <p>Trang này là bản mẫu giao diện. Piano Roll, SoundFont và xuất MIDI hoạt động; việc tự động nhận diện nốt dùng engine MuScriptor gốc NeuralNote trên Windows.</p>
@@ -1249,6 +1338,9 @@ function App() {
                   role="group" aria-label="Piano Roll: nhấn lưới để thêm nốt, kéo nốt để di chuyển">
                   {pitches.map(pitch => <div className={'pitch-grid ' + (pitch%12 === 0 ? 'octave' : '')} key={pitch} style={{top:(pitchTop-pitch)*PITCH_ROW,height:PITCH_ROW}}/>)}
                   {markers.map(n => <div key={n} className="beat-grid" style={{left: n/totalSeconds*100 + '%'}}/>)}
+                  {comparison&&compareOpen&&<ComparisonOverlay result={comparison}
+                    pitchTop={pitchTop} rowHeight={PITCH_ROW}
+                    width={timelineWidth} seconds={totalSeconds}/>}
                   {visibleIndexedNotes.map(({note:n,index}) => (
                     <button type="button" className={'note editable-note' + (selectedNote === index ? ' selected-note' : '')}
                       key={index} aria-label={'Nốt ' + noteName(n.pitchMidi) + ', bắt đầu ' + fmt(n.startTimeSeconds)}

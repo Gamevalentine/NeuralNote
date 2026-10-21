@@ -1,0 +1,31 @@
+.notiq-5h-controls{display:flex;align-items:center;gap:9px;padding:6px 14px;min-height:38px;background:#202a3b;border-bottom:1px solid #43526e;color:#d2e0f7;flex-wrap:wrap}
+.notiq-5h-controls>strong{font-size:12px;color:#b9c8ff}
+.notiq-5h-controls>span{color:#9eabc3;font-size:11px}
+.notiq-5h-controls button,.notiq-5h-actions button{padding:6px 10px;border:1px solid #526589;border-radius:5px;background:#324365;color:#fff;white-space:nowrap}
+.notiq-5h-controls button:disabled,.notiq-5h-actions button:disabled{opacity:.4;cursor:not-allowed}
+.notiq-5h-controls small{color:#deb7a8}
+.notiq-5h-panel{padding:11px 16px;background:#192435;border-bottom:1px solid #4c5b7a;color:#dce6fc;max-height:360px;overflow:auto;z-index:10}
+.notiq-5h-head{display:flex;align-items:center;justify-content:space-between;font-size:13px}
+.notiq-5h-head button{background:transparent;border:1px solid #526079;border-radius:5px;color:#eee;padding:3px 9px}
+.notiq-5h-stats{display:flex;gap:12px;margin:10px 0;flex-wrap:wrap}
+.notiq-5h-stats>div{min-width:145px;flex:1;padding:9px;border:1px solid #43526d;border-radius:6px;display:flex;flex-direction:column;gap:5px;background:#233047}
+.notiq-5h-stats strong{font-size:16px}
+.notiq-5h-stats small{font-size:10px;color:#b3c2d9}
+.notiq-5h-caution{font-size:11px;color:#c7d5ec;margin:7px 0}
+.notiq-5h-legend{display:flex;gap:14px;margin:8px 0;font-size:11px;flex-wrap:wrap}
+.notiq-5h-legend span{display:inline-flex;gap:5px;align-items:center}
+.notiq-5h-legend b{display:inline-block;width:12px;height:6px;border-radius:3px}
+.notiq-5h-legend b.shared{background:#79e1ac}
+.notiq-5h-legend b.muscriptor{background:#ffc46c}
+.notiq-5h-legend b.transkun{background:#ad9cff}
+.notiq-5h-actions{display:flex;gap:8px;flex-wrap:wrap;margin:9px 0}
+.notiq-5h-disagreements{display:flex;flex-direction:column;gap:7px;font-size:11px}
+.notiq-5h-disagreements>div{display:flex;gap:5px;flex-wrap:wrap}
+.notiq-5h-disagreements button{padding:4px 7px;background:#2c3950;border:1px solid #50617c;border-radius:4px;color:#e6edff;font-size:10px}
+.notiq-5h-disagreements button:hover{background:#3e506b}
+.notiq-5h-footer{display:block;color:#b4bfce;margin-top:9px}
+.notiq-5h-note{position:absolute;z-index:6;height:5px;pointer-events:none;opacity:.9;border-radius:2px}
+.notiq-5h-note.shared{background:#79e1ac}
+.notiq-5h-note.muscriptor{background:#ffc46c}
+.notiq-5h-note.transkun{background:#ad9cff}
+@media(max-width:700px){.notiq-5h-panel{max-height:260px}.notiq-5h-controls{padding:5px 8px}}
