@@ -101,7 +101,7 @@ try {
     test:'Long-form source audio through original MuScriptor pthread4 on HTTPS Preview',
     rights:'Kevin MacLeod - The Entertainer, CC BY 4.0, Wikimedia Commons',
     results,timingMessages:timings,failedRequests:failures},null,2)+'\n');
-  console.log('NOTIQ_STAGE5A_60_AND_180_SECONDS_PASS');
+  console.log('NOTIQ_STAGE5A_'+durations.join('_')+'_SECONDS_PASS');
 }finally{
   await browser.close();
 }
