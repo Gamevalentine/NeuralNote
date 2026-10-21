@@ -30,6 +30,20 @@ const soundfontUrl = (id: string) => SOURCE + id + '-mp3.js';
 
 type Player = Awaited<ReturnType<typeof Soundfont.instrument>>;
 const cache = new WeakMap<AudioContext, Map<InstrumentId, Promise<Player>>>();
+type PlayingVoice = ReturnType<Player['play']>;
+const activeVoices = new WeakMap<AudioContext, Set<PlayingVoice>>();
+const playbackGeneration = new WeakMap<AudioContext, number>();
+
+/** Stop voices already sounding and invalidate async sample loads from earlier playback. */
+export function stopSoundfontNotes(ctx: AudioContext): void {
+  playbackGeneration.set(ctx, (playbackGeneration.get(ctx) || 0) + 1);
+  const voices = activeVoices.get(ctx);
+  if (!voices) return;
+  for (const voice of voices) {
+    try { voice.stop(); } catch { /* voice may already have ended */ }
+  }
+  voices.clear();
+}
 
 export function prepareInstrument(ctx: AudioContext, instrument: InstrumentId): Promise<Player> {
   let instruments = cache.get(ctx);
@@ -55,9 +69,17 @@ export function prepareInstrument(ctx: AudioContext, instrument: InstrumentId): 
 export async function playSoundfontNote(
   ctx: AudioContext, instrument: InstrumentId, pitch: number, duration: number, volume: number,
 ): Promise<void> {
+  const generation = playbackGeneration.get(ctx) || 0;
   if (ctx.state !== 'running') await ctx.resume();
   const player = await prepareInstrument(ctx, instrument);
-  player.play(Math.max(0, Math.min(127, Math.round(pitch))), ctx.currentTime,
-    { duration: Math.max(0.07, Math.min(8, duration)),
-      gain: Math.max(0.001, Math.min(1, volume)) });
+  if ((playbackGeneration.get(ctx) || 0) !== generation) return;
+  const safeDuration = Math.max(0.07, Math.min(8, duration));
+  const voice = player.play(Math.max(0, Math.min(127, Math.round(pitch))), ctx.currentTime,
+    { duration: safeDuration, gain: Math.max(0.001, Math.min(1, volume)) });
+  let voices = activeVoices.get(ctx);
+  if (!voices) { voices = new Set(); activeVoices.set(ctx, voices); }
+  voices.add(voice);
+  // Voice has completed; remove it from the stop registry rather than retaining
+  // every played note for the duration of a full song.
+  window.setTimeout(() => voices?.delete(voice), (safeDuration + 0.5) * 1000);
 }

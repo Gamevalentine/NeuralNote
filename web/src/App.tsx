@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { AudioWaveform, CircleHelp, Gauge, Headphones, Info, LoaderCircle,
-  Music, Settings2, X, ZoomIn, ZoomOut } from 'lucide-react';
+  Music, Pause, Play, Square, FolderOpen, RotateCw, Settings2, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { fmt, generateDemo, groupFor, GROUPS, noteName, readAudio } from './audio';
 import { assertSupportedSong, MAX_SONG_BYTES, MAX_SONG_SECONDS } from './longAudio';
 import { createDawMidi, createDawBundle, extractDawTracks, midiChannelLimitExceeded } from './dawMidi';
@@ -10,7 +10,7 @@ import { addPedalPoint } from './pedal.ts';
 import type { PedalEvent } from './pedal.ts';
 import { addNote, copyNotes, removeNote, sameNotes, SNAP_SECONDS, snapSeconds, updateNote, clamp } from './pianoEdit';
 import type { Note, AudioInfo, PitchGroup } from './audio';
-import { DEFAULT_INSTRUMENTS, INSTRUMENTS, instrumentProgram, playSoundfontNote, prepareInstrument } from './soundfont';
+import { DEFAULT_INSTRUMENTS, INSTRUMENTS, instrumentProgram, playSoundfontNote, prepareInstrument, stopSoundfontNotes } from './soundfont';
 import type { InstrumentId, InstrumentSelection } from './soundfont';
 import { nativeInstrumentPrograms, nativeProgramName } from './muscriptorProtocol';
 import { nativeBridgeAvailable, runMuScriptor } from './muscriptorNative';
@@ -60,6 +60,8 @@ function App() {
   const [nativeSelectedProgram, setNativeSelectedProgram] = useState<number | null>(null);
   const [nativeGain, setNativeGain] = useState<Record<number, number>>({});
   const [progress, setProgress] = useState(0);
+  const [recognitionStage, setRecognitionStage] = useState<'preparing' | 'processing'>('preparing');
+  const [recognitionElapsed, setRecognitionElapsed] = useState(0);
   const [status, setStatus] = useState('Chưa tải tệp âm thanh');
   const [error, setError] = useState('');
   const [busyLoading, setBusyLoading] = useState(false);
@@ -100,6 +102,18 @@ function App() {
   const undoRef = useRef<Note[][]>([]);
   const redoRef = useRef<Note[][]>([]);
   const gestureRef = useRef<NoteGesture | null>(null);
+  const playbackRequestRef = useRef(0);
+  const recognitionStartedAt = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (phase !== 'analyzing') return;
+    setRecognitionElapsed(0);
+    const updateClock = () => setRecognitionElapsed(Math.max(0,
+      Math.floor((Date.now() - (recognitionStartedAt.current ?? Date.now())) / 1000)));
+    updateClock();
+    const interval = window.setInterval(updateClock, 1000);
+    return () => window.clearInterval(interval);
+  }, [phase]);
 
   useEffect(() => {
     selectionRef.current = selection;
@@ -121,7 +135,10 @@ function App() {
   }, []);
   useEffect(() => () => {
     if (selectionRef.current) URL.revokeObjectURL(selectionRef.current.url);
-    if (audioCtx.current) void audioCtx.current.close().catch(() => undefined);
+    if (audioCtx.current) {
+      stopSoundfontNotes(audioCtx.current);
+      void audioCtx.current.close().catch(() => undefined);
+    }
     closeWebModel();
   }, []);
   useEffect(() => {
@@ -236,6 +253,9 @@ function App() {
       return;
     }
     setBusyLoading(true);
+    playbackRequestRef.current++;
+    if (audioCtx.current) stopSoundfontNotes(audioCtx.current);
+    midiOnlyStart.current = null;
     if (selectionRef.current) URL.revokeObjectURL(selectionRef.current.url);
     selectionRef.current = null;
     setSelection(null);
@@ -334,6 +354,11 @@ function App() {
       return;
     }
     recognitionInFlight.current = true;
+    playbackRequestRef.current++;
+    if (audioCtx.current) stopSoundfontNotes(audioCtx.current);
+    midiOnlyStart.current = null;
+    recognitionStartedAt.current = Date.now();
+    setRecognitionStage('preparing');
     if (audioEl.current) audioEl.current.pause();
     setPlaying(false);
     setPhase('analyzing');
@@ -342,7 +367,15 @@ function App() {
     setStatus('MuScriptor C++ (NeuralNote) đang nhận diện bài hát…');
     try {
       const update = ({kind, percent, message}: {kind: 'download' | 'transcribe'; percent: number; message: string}) => {
-        if (kind === 'transcribe') {setStatus(message);setProgress(percent);}
+        if (kind === 'transcribe') {
+          setStatus(message);
+          setProgress(percent);
+          // Neither the pinned MuScriptor WASM worker nor the native bridge
+          // guarantees per-note % updates during blocking inference. Do not
+          // present the preparation percentage as total AI progress.
+          if (/MuScriptor.*(?:đang|nhận diện|xử lý)|nhận diện nốt thật|đang gửi âm thanh|đang xử lý/i.test(message) ||
+              percent >= 15) setRecognitionStage('processing');
+        }
       };
       const detected = nativeReady
         ? await runMuScriptor(target.file, update)
@@ -564,38 +597,49 @@ function App() {
 
   const togglePlayback = async () => {
     const audio = audioEl.current;
-    if (!info && !visibleNotes.length) return;
+    if (phase === 'analyzing' || busyLoading || loadingSoundfont || (!info && !visibleNotes.length)) return;
+    const request = ++playbackRequestRef.current;
     if (playing) {
       audio?.pause();
-      midiOnlyStart.current = null;
+      if (audioCtx.current) stopSoundfontNotes(audioCtx.current);
+      midiOnlyStart.current = null; // preserve the paused time in state
       setPlaying(false);
-    } else {
-      try {
-        const ctx = getAudioContext();
-        if (ctx.state !== 'running') await ctx.resume();
-        if (playbackMode !== 'original' || !info) {
-          const needed = [...new Set(visibleNotes.filter(n => n.program !== 128).map(n => n.program === undefined ? instrumentSelection[groupFor(n.pitchMidi)] : nativeSoundfontPreset(n.program)))];
-          if (needed.length) {
-            setLoadingSoundfont(true);
-            setSoundfontStatus('Đang chuẩn bị các tiếng SoundFont để phát MIDI...');
-            await Promise.all(needed.map(instrument => prepareInstrument(ctx, instrument)));
-            setSoundfontStatus('Đã tải xong ' + needed.length + ' bộ tiếng SoundFont');
-          }
+      return;
+    }
+    try {
+      const ctx = getAudioContext();
+      if (ctx.state !== 'running') await ctx.resume();
+      if (request !== playbackRequestRef.current) return;
+      if (playbackMode !== 'original' || !info) {
+        const needed = [...new Set(visibleNotes.filter(n => n.program !== 128).map(n => n.program === undefined ? instrumentSelection[groupFor(n.pitchMidi)] : nativeSoundfontPreset(n.program)))];
+        if (needed.length) {
+          setLoadingSoundfont(true);
+          setSoundfontStatus('Đang chuẩn bị các tiếng SoundFont để phát MIDI...');
+          await Promise.all(needed.map(instrument => prepareInstrument(ctx, instrument)));
+          if (request !== playbackRequestRef.current) return;
+          setSoundfontStatus('Đã tải xong ' + needed.length + ' bộ tiếng SoundFont');
         }
-        firedNotes.current.clear();
-        previousTime.current = info ? (audio?.currentTime || 0) : 0;
-        if (info && audio) await audio.play();
-        else { midiOnlyStart.current = ctx.currentTime; setTime(0); }
-        setPlaying(true);
-      } catch (cause) {
+      }
+      firedNotes.current.clear();
+      previousTime.current = info ? (audio?.currentTime || 0) : time;
+      if (info && audio) {
+        await audio.play();
+        if (request !== playbackRequestRef.current) { audio.pause(); return; }
+      } else {
+        midiOnlyStart.current = ctx.currentTime - time;
+      }
+      setPlaying(true);
+    } catch (cause) {
+      if (request === playbackRequestRef.current) {
         setSoundfontStatus('Lỗi SoundFont / phát lại');
         setError('Không thể chuẩn bị bộ tiếng: ' + (cause instanceof Error ? cause.message : 'Kiểm tra mạng hoặc thử chọn lại nhạc cụ.'));
-      } finally {
-        setLoadingSoundfont(false);
       }
+    } finally {
+      setLoadingSoundfont(false);
     }
   };
   const seekTo = (seconds: number) => {
+    if (audioCtx.current) stopSoundfontNotes(audioCtx.current);
     const clamped = Math.max(0, Math.min(info?.duration || totalSeconds, seconds));
     if (info && audioEl.current) audioEl.current.currentTime = clamped;
     else if (midiOnlyStart.current !== null && audioCtx.current)
@@ -605,7 +649,9 @@ function App() {
     firedNotes.current.clear();
   };
   const stop = () => {
+    playbackRequestRef.current++;
     if (audioEl.current) audioEl.current.pause();
+    if (audioCtx.current) stopSoundfontNotes(audioCtx.current);
     setPlaying(false);
     midiOnlyStart.current = null;
     seekTo(0);
@@ -851,12 +897,10 @@ function App() {
             title="Mở bài hát đầy đủ (WAV, MP3, FLAC, M4A… · tối đa 15 phút / 200 MB)">
             <Music size={14}/> Tải bài hát
           </button>
-          {phase === 'analyzing' && <div className="ai-running-indicator" role="status" aria-live="polite"
-            aria-label={'AI đang nhận diện bài hát, ' + progress + ' phần trăm'}
-            title={status}>
+          {phase === 'analyzing' && <div className="ai-running-indicator" role="status"
+            aria-label="NOTIQ AI đang phân tích" title={status}>
             <LoaderCircle size={14} className="spin"/>
-            <span>Đang nhận diện {progress}%</span>
-            <div className="ai-running-meter"><div style={{width: progress + '%'}}/></div>
+            <span>{recognitionStage === 'preparing' ? 'Đang chuẩn bị âm thanh' : 'AI đang nhận diện nốt'}</span>
           </div>}
           {aiAvailable && (phase === 'ready' || phase === 'error') && selection && <button type="button"
             className="ai-retry-button" disabled={busyLoading || nativeDownloading}
@@ -874,6 +918,29 @@ function App() {
           <button type="button" className="os-settings" onClick={() => { setActiveMenu(null); setShowSettings(!showSettings); }} title="Cài đặt" aria-label="Cài đặt"><Settings2 size={16} /></button>
         </div>
       </header>
+      <div className="notiq-transport" role="group" aria-label="Điều khiển phát lại">
+        <button type="button" className="notiq-transport-open" aria-label="Mở bài hát"
+          disabled={busyLoading || phase === 'analyzing'}
+          onClick={() => fileInput.current?.click()}><FolderOpen size={15}/> <span>Mở bài</span></button>
+        <button type="button" className="notiq-transport-play"
+          aria-label={playing ? 'Tạm dừng' : 'Phát'}
+          disabled={(!info && !visibleNotes.length) || phase === 'analyzing' || busyLoading || loadingSoundfont}
+          onClick={() => void togglePlayback()}>
+          {playing ? <Pause size={15} fill="currentColor"/> : <Play size={15} fill="currentColor"/>}
+          <span>{playing ? 'Tạm dừng' : 'Phát'}</span>
+        </button>
+        <button type="button" aria-label="Dừng" disabled={!info && !notes.length}
+          onClick={stop}><Square size={14} fill="currentColor"/> <span>Dừng</span></button>
+        <button type="button" className={loop ? 'is-active' : ''}
+          aria-label="Phát lặp" aria-pressed={loop} onClick={() => setLoop(value => !value)}
+          title="Bật hoặc tắt phát lặp"><RotateCw size={15}/><span>Lặp</span></button>
+        <div className="notiq-transport-clock" aria-label="Thời gian phát">
+          {fmt(time)} <span>/</span> {fmt(info?.duration || (notes.length ? totalSeconds : 0))}
+        </div>
+        {selection && <button type="button" className="notiq-transport-close" aria-label="Đóng bài hát"
+          disabled={phase === 'analyzing' || busyLoading} onClick={reset}>
+          <X size={14}/><span>Đóng bài</span></button>}
+      </div>
       {desktopReview && showDesktopReview && <section className="desktop-review-panel" aria-label="Duyệt giao diện NOTIQ Desktop">
         <div className="desktop-review-head"><strong>NOTIQ Desktop · Bản duyệt giao diện</strong><button type="button" aria-label="Đóng bảng duyệt" onClick={() => { setShowDesktopReview(false); setReviewArea(null); }}><X size={16}/></button></div>
         <p>Trang này là bản mẫu giao diện. Piano Roll, SoundFont và xuất MIDI hoạt động; việc tự động nhận diện nốt dùng engine MuScriptor gốc NeuralNote trên Windows.</p>
@@ -976,6 +1043,21 @@ function App() {
           <div className="side-bottom"><strong>ĐẦU RA</strong><div className="bar-dummy"/><p>{summary}</p></div>
         </aside>
         <section className={"editor" + (reviewArea === "roll" ? " ui-review-highlight" : "")}>
+          {phase === 'analyzing' && <div className="notiq-ai-overlay">
+            <section className="notiq-ai-card" role="status" aria-live="polite" aria-label="Tiến trình nhận diện nốt">
+              <div className="notiq-ai-card-heading"><LoaderCircle size={21} className="spin"/><strong>NOTIQ đang nhận diện âm thanh</strong></div>
+              <p className="notiq-ai-filename" title={selection?.name}>{selection?.name || 'Bài nhạc đã chọn'}</p>
+              <div className="notiq-ai-stages">
+                <span className="completed">1. {recognitionStage === 'preparing' ? 'Chuẩn bị âm thanh' : 'Đã chuẩn bị âm thanh'}</span>
+                <span className={recognitionStage === 'processing' ? 'current' : ''}>2. Nhận diện nốt MIDI</span>
+              </div>
+              <div className="notiq-ai-indeterminate" role="progressbar"
+                aria-label="AI đang xử lý, chưa có phần trăm suy luận chính xác"><div/></div>
+              <p className="notiq-ai-stage-message">{status}</p>
+              <div className="notiq-ai-card-footer"><span>Đã chạy: {fmt(recognitionElapsed)}</span><span>{recognitionStage === 'preparing' ? 'Giai đoạn 1/2' : 'Giai đoạn 2/2'}</span></div>
+              <small>AI gốc chưa cung cấp % nhận diện chính xác; thanh chuyển động chỉ báo đang xử lý, không phải thời gian còn lại.</small>
+            </section>
+          </div>}
           <div className="workarea">
             <div className="keyboard" ref={keyColumn}>
               <div className="ruler-key-label">THỜI GIAN</div>
@@ -1053,8 +1135,8 @@ function App() {
             </span>
             <span title={soundfontStatus}>{loadingSoundfont ? '◌ Đang tải SoundFont' : '♪ ' + soundfontStatus}</span>
             <span className="piano-edit-hint" title="Thêm nốt: nhấn vào lưới · Di chuyển: kéo nốt · Đổi độ dài: kéo mép phải · Xóa: Del · Hoàn tác: Ctrl+Z">✎ Sửa MIDI · Snap ${SNAP_SECONDS}s · Ctrl+Z</span>
-            {phase === 'analyzing' && <div className="progress-track"><div style={{width: progress+'%'}}/></div>}
-            <span>{phase === 'analyzing' ? progress+'%' : summary}</span>
+            {phase === 'analyzing' && <span className="recognition-status-short">{recognitionStage === 'preparing' ? 'Chuẩn bị âm thanh' : 'Đang phân tích nốt'}</span>}
+            <span>{phase === 'analyzing' ? 'Đã chạy '+fmt(recognitionElapsed) : summary}</span>
             <span className="compact-clock">{fmt(time)} / {fmt(info?.duration || 0)}</span>
             <div className="zoom-controls"><button onClick={()=>setZoom(Math.max(0.5,zoom/1.25))} title="Thu nhỏ"><ZoomOut size={15}/></button><span>{Math.round(zoom*100)}%</span><button onClick={()=>setZoom(Math.min(4,zoom*1.25))} title="Phóng to"><ZoomIn size={15}/></button></div>
           </div>
