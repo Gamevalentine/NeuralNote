@@ -150,6 +150,27 @@ async function unchangedPcmFromWav(source: Blob): Promise<ArrayBuffer | null> {
   return content.slice(begin,begin+size);
 }
 
+// Real WAV/MP3 codecs can produce intersample overshoots above 1.0.
+// The verified C++ MuScriptor ABI rejects abs(sample) > 1.01. Repair only
+// out-of-contract samples, leaving ordinary audio bit-exact (including the
+// already verified 15-second and 60-second fixtures).
+function repairOutOfRangePcm(buffer: ArrayBuffer): { repaired: number; maxAbs: number } {
+  if (buffer.byteLength%4) throw new Error('PCM float32 bị sai độ dài.');
+  const samples=new Float32Array(buffer);
+  let repaired=0, maxAbs=0;
+  for(let i=0;i<samples.length;i++){
+    const sample=samples[i];
+    if(!Number.isFinite(sample)) throw new Error('Âm thanh có mẫu không hữu hạn, không thể nhận diện.');
+    const magnitude=Math.abs(sample);
+    if(magnitude>maxAbs)maxAbs=magnitude;
+    if(magnitude>1.01){
+      samples[i]=sample>0?1:-1;
+      repaired++;
+    }
+  }
+  return {repaired,maxAbs};
+}
+
 export async function recognizeWeb(source:Blob,onProgress:(p:Progress)=>void):Promise<Note[]> {
   if(!ready)throw new Error('Hãy nạp GGUF MuScriptor Small trước khi nhận diện.');
   onProgress({kind:'transcribe',percent:1,message:'Đang chuẩn bị âm thanh 16 kHz mono…'});
@@ -164,6 +185,14 @@ export async function recognizeWeb(source:Blob,onProgress:(p:Progress)=>void):Pr
     const plainPcm=new ArrayBuffer(wav.byteLength-44);
     new Uint8Array(plainPcm).set(wav.subarray(44));
     pcm=plainPcm;
+  }
+  const corrected=repairOutOfRangePcm(pcm);
+  if(corrected.repaired) {
+    console.info('NOTIQ_PCM_REPAIR',JSON.stringify({
+      samples:pcm.byteLength/4,repaired:corrected.repaired,
+      peakBefore:corrected.maxAbs,method:'clamp-only-invalid-peaks'}));
+    onProgress({kind:'transcribe',percent:10,message:
+      'Đã điều chỉnh '+corrected.repaired+' mẫu vượt ngưỡng biên độ; giữ nguyên các mẫu còn lại.'});
   }
   onProgress({kind:'transcribe',percent:10,message:'MuScriptor C++ đang nhận diện âm thanh thật…'});
   const response=await send('transcribe',{type:'transcribe',pcm,sampleRate:16000},[pcm],onProgress);
