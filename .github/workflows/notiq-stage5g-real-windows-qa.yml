@@ -1,0 +1,28 @@
+name: NOTIQ Stage 5G Real Windows Python Installer QA
+on:
+  push:
+    branches: [feature/notiq-stage5g-transkun-v2-piano]
+    paths:
+      - .github/workflows/notiq-stage5g-real-windows-qa.yml
+      - desktop-preview/transkun-runtime.cjs
+      - desktop-preview/transkun-runner.py
+      - desktop-preview/tests/transkun-windows-smoke.cjs
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-windows-transkun:
+    runs-on: windows-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify no global changes and install Transkun/PyTorch on runner's local NOTIQ drive
+        shell: pwsh
+        run: |
+          node desktop-preview/tests/transkun-windows-smoke.cjs
+          if ($LASTEXITCODE -ne 0) {throw 'Real Transkun V2 Windows installer/inference failed'}
