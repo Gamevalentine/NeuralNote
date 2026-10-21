@@ -1,4 +1,5 @@
-name: NOTIQ Stage 5A - original full-song 60s and 180s HTTPS QA
+name: NOTIQ Stage 5A - 180s original piano music followup QA
+# 60s original music already PASS (730 notes, 281714ms): GitHub run 39648348425
 # Recheck after runner-only installation of ffmpeg/ffprobe
 on:
   push:
@@ -59,12 +60,12 @@ jobs:
         timeout-minutes: 40
         run: |
           npm install --prefix /tmp/notiq-5a-playwright --no-fund --no-audit playwright-core@1.56.1
-          timeout 39m node notiq-ai-core/qa/long-real-music-qa.mjs
+          NOTIQ_5A_CASE=180 timeout 39m node notiq-ai-core/qa/long-real-music-qa.mjs
       - name: Save only successful QA metadata and attribution on test branch
         if: success()
         run: |
           mkdir -p notiq-ai-core/qa/verified
-          cp /tmp/notiq-stage5a-result.json notiq-ai-core/qa/verified/stage5a-60s-180s-results.json
+          cp /tmp/notiq-stage5a-result.json notiq-ai-core/qa/verified/stage5a-180s-results.json
           printf '%s\n' \
             'Independent recorded piano: The Entertainer by Kevin MacLeod, from incompetech.com' \
             'Recording source: https://commons.wikimedia.org/wiki/File:The_Entertainer_by_Kevin_MacLeod.ogg' \
@@ -73,7 +74,7 @@ jobs:
             'NOTIQ inference uses original MuScriptor Small GGUF model, weights CC BY-NC 4.0 for noncommercial testing.' \
             'DO NOT claim transcribed notes are ground truth; QA validates completeness, duration, MIDI and runtime.' \
             > notiq-ai-core/qa/verified/stage5a-ATTRIBUTION.txt
-          git add notiq-ai-core/qa/verified/stage5a-60s-180s-results.json notiq-ai-core/qa/verified/stage5a-ATTRIBUTION.txt
+          git add notiq-ai-core/qa/verified/stage5a-180s-results.json notiq-ai-core/qa/verified/stage5a-ATTRIBUTION.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "test(notiq-stage5a): verified genuine 60s and 180s piano recording QA [skip ci]"
