@@ -19,6 +19,7 @@ import {compareOriginalAudio} from './dualEngineNative';
 import {ComparisonPanel} from './ComparisonPanel';
 import {ComparisonOverlay} from './ComparisonOverlay';
 import {BenchmarkPanel} from './BenchmarkPanel';
+import {WebBenchmarkPanel} from './WebBenchmarkPanel';
 import {readReferenceMidi,benchmarkComparison,type MidiReference,type MusicMode} from './referenceBenchmark';
 import { runPianoV2 } from './transkunNative';
 import { webAiEnabled, installWebModel, recognizeWeb, closeWebModel } from './muscriptorWebLocal';
@@ -65,6 +66,7 @@ function App() {
   const [compareOpen, setCompareOpen] = useState(false);
   const [musicMode, setMusicMode] = useState<MusicMode>('ensemble');
   const [referenceMidi, setReferenceMidi] = useState<MidiReference|null>(null);
+  const [webCandidateMidi,setWebCandidateMidi]=useState<MidiReference|null>(null);
   const [referenceOffset, setReferenceOffset] = useState(0);
   const [showBenchmark, setShowBenchmark] = useState(false);
   const [showScores, setShowScores] = useState(false);
@@ -304,6 +306,7 @@ function App() {
     setCompareOpen(false);
     setComparisonBaseline(null);
     setReferenceMidi(null);
+    setWebCandidateMidi(null);
     setReferenceOffset(0);
     setShowScores(false);
     setProgress(0);
@@ -445,12 +448,12 @@ function App() {
       setError('Bản Web hiện tại không được cấp engine nhận diện.');
       return;
     }
-    if (analysisEngine === 'transkun-v2' && (!nativeReady || !pianoInstalled)) {
+    if (nativeReady && analysisEngine === 'transkun-v2' && !pianoInstalled) {
       setPhase('ready');
       setError('Transkun V2 Piano chưa được cài trong NOTIQ Windows. Nhấn Cài AI Piano.');
       return;
     }
-    if (analysisEngine === 'muscriptor' && !nativeModelInstalled && !modelJustInstalled) {
+    if (!nativeModelInstalled && !modelJustInstalled) {
       setPhase('ready');
       setStatus('Chưa có mô hình MuScriptor · Cần tải AI để nhận diện');
       setError('Hãy tải/nạp mô hình MuScriptor ' + (nativeReady ? selectedModelLabel : 'Small 209 MB') + ' trước khi nhận diện.');
@@ -955,6 +958,7 @@ function App() {
     setCompareOpen(false);
     setComparisonBaseline(null);
     setReferenceMidi(null);
+    setWebCandidateMidi(null);
     setReferenceOffset(0);
     setShowScores(false);
     setShowBenchmark(false);
@@ -1033,6 +1037,7 @@ function App() {
         { label:'5H · So sánh MuScriptor và Transkun',run:()=>void runComparison(),
           disabled:!nativeReady||!selection||!nativeModelInstalled||!pianoInstalled||phase==='analyzing' },
         { label:'5H · Xem đối chiếu',run:()=>setCompareOpen(true),disabled:!comparison },
+        { label:'5J · Chấm MIDI trên Web',run:()=>setShowBenchmark(true),disabled:!selection||!browserAi },
         { label: nativeReady ? 'AI: MuScriptor (NeuralNote gốc) — đang sử dụng'
             : 'MuScriptor gốc NeuralNote — yêu cầu NOTIQ Windows',
           run: () => {}, disabled: true, checked: nativeReady },
@@ -1128,7 +1133,7 @@ function App() {
                     <div className="menu-settings menu-settings-row">
                       <label htmlFor="bpm-menu">BPM xuất MIDI</label>
                       <input id="bpm-menu" type="number" min={40} max={240} value={bpm} onChange={event => setBpm(Math.min(240, Math.max(40, Number(event.target.value) || 120)))}/>
-                      <small>{nativeReady ? 'Engine: NeuralNote MuScriptor C++' : 'Web chỉ xem giao diện · AI cần Windows'}</small>
+                      <small>{nativeReady ? 'Engine: NeuralNote MuScriptor C++' : browserAi ? 'Web: MuScriptor Small WASM thật' : 'Web chưa bật AI'}</small>
                     </div>
                   )}
                   {menu.id === 'instrument' && <p className="menu-note">Các mục này chỉ lọc dải cao độ. AI chưa phân loại Piano, Guitar hay Drums.</p>}
@@ -1245,14 +1250,14 @@ function App() {
       {comparison&&compareOpen&&nativeReady&&<ComparisonPanel result={comparison}
         onUse={useComparedResult} onSeek={seekTo} onClose={()=>setCompareOpen(false)}
         disabled={phase==='analyzing'} canRestore={!!comparisonBaseline}/>}
-      {nativeReady && selection && <section className="notiq-5i-toggle">
+      {selection && (nativeReady || browserAi) && <section className="notiq-5i-toggle">
         <strong>AI 5I</strong>
         <button type="button" aria-label="Mở kiểm tra MIDI chuẩn 5I"
           aria-expanded={showBenchmark}
           onClick={()=>setShowBenchmark(v=>!v)}>
-          {showBenchmark?'Ẩn 5I · MIDI chuẩn':'5I · Đo nốt đúng/sai bằng MIDI chuẩn'}
+          {showBenchmark?'Ẩn bảng MIDI chuẩn':nativeReady?'5I · Đo nốt đúng/sai bằng MIDI chuẩn':'5J · Chấm MIDI trên Web'}
         </button>
-        <span>Chọn Piano / Đa nhạc cụ · F1 tính khi có MIDI tham chiếu</span>
+        <span>{nativeReady ? 'Chọn Piano / Đa nhạc cụ · F1 tính khi có MIDI tham chiếu' : 'MuScriptor Small Web · chấm MIDI chuẩn tại thiết bị'}</span>
       </section>}
       {nativeReady && selection && showBenchmark && <BenchmarkPanel
         mode={musicMode} onMode={chooseMusicMode}
@@ -1265,6 +1270,23 @@ function App() {
         onEvaluate={evaluateReference}
         onCompare={()=>void runComparison()}
         onUse={useComparedResult}
+      />}
+      {!nativeReady && browserAi && selection && showBenchmark && <WebBenchmarkPanel
+        mode={musicMode} onMode={setMusicMode}
+        reference={referenceMidi} onReference={file=>void loadReference(file)}
+        candidate={webCandidateMidi} onCandidate={file=>{
+          void readReferenceMidi(file,file.name).then(parsed=>{
+            setWebCandidateMidi(parsed);
+            setError('');
+            setStatus('Đã nhập MIDI ứng viên '+parsed.fileName+' để đối chiếu; không tự gán engine.');
+          }).catch(cause=>setError('MIDI ứng viên: '+
+            (cause instanceof Error?cause.message:'Không thể đọc file')));
+        }}
+        onClearReference={()=>{setReferenceMidi(null);setShowScores(false)}}
+        onClearCandidate={()=>setWebCandidateMidi(null)}
+        offset={referenceOffset} onOffset={setReferenceOffset}
+        notes={notes} running={phase==='analyzing'||busyLoading}
+        recognitionReady={notes.length>0}
       />}
       {desktopReview && showDesktopReview && <section className="desktop-review-panel" aria-label="Duyệt giao diện NOTIQ Desktop">
         <div className="desktop-review-head"><strong>NOTIQ Desktop · Bản duyệt giao diện</strong><button type="button" aria-label="Đóng bảng duyệt" onClick={() => { setShowDesktopReview(false); setReviewArea(null); }}><X size={16}/></button></div>
