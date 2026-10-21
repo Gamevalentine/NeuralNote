@@ -26,3 +26,5 @@ jobs:
         run: npm install --prefix /tmp/notiq-5d-playwright --no-audit --no-fund playwright-core@1.56.1
       - name: Browser controls
         run: node notiq-ai-core/qa/transport-progress-browser.mjs
+      - name: Four-minute uploaded WAV with 815 simulated MIDI notes
+        run: node notiq-ai-core/qa/long-wav-transport.mjs
