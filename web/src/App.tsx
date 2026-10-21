@@ -501,6 +501,42 @@ function App() {
     }
   };
 
+  const runComparison = async () => {
+    const source=selectionRef.current;
+    if (!source || !nativeReady || !nativeModelInstalled || !pianoInstalled ||
+        recognitionInFlight.current || phase==='analyzing' || busyLoading) {
+      setError('5H cần NOTIQ Windows và hai engine đã cài đầy đủ.');
+      return;
+    }
+    recognitionInFlight.current=true;
+    const beforePhase=phase;
+    const beforeNotes=copyNotes(notesRef.current);
+    const beforePedal=pedalEvents.map(p=>({...p}));
+    stop();
+    recognitionStartedAt.current=Date.now();
+    setRecognitionStage('preparing');
+    setPhase('analyzing');
+    setError('');
+    try {
+      const result=await compareOriginalAudio(source.file,message=>{
+        setStatus('5H: '+message);
+        setRecognitionStage('processing');
+      });
+      setComparison(result);
+      setComparisonBaseline({notes:beforeNotes,pedalEvents:beforePedal});
+      setCompareOpen(true);
+      setStatus('5H: '+result.pairs.length+' nốt chung · '+
+        result.muscriptorOnly.length+' chỉ MuScriptor · '+
+        result.transkunOnly.length+' chỉ Transkun. MIDI không bị thay.');
+    } catch (cause) {
+      setError('5H: '+(cause instanceof Error?cause.message:'So sánh thất bại')+
+        '. MIDI đang chỉnh vẫn được giữ.');
+    } finally {
+      recognitionInFlight.current=false;
+      setPhase(beforePhase==='error'?(notesRef.current.length?'complete':'ready'):beforePhase);
+    }
+  };
+
   const startInference = () => {
     if (selection) void runRecognition(selection);
   };
