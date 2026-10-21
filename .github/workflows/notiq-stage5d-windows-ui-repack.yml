@@ -38,7 +38,7 @@ jobs:
       - name: Install Electron ASAR utility only, no native rebuild
         shell: pwsh
         run: |
-          npm install --prefix package-tools --no-audit --no-fund @electron/asar@3.2.19
+          npm install --prefix package-tools --no-audit --no-fund @electron/asar@3
           if ($LASTEXITCODE -ne 0) { throw 'Electron ASAR utility install failed' }
       - name: Replace only embedded NOTIQ React renderer in verified Portable
         shell: pwsh
