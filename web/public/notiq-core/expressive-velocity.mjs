@@ -8,7 +8,6 @@ export function estimateNoteVelocities(notes, pcm, sampleRate = 16000) {
   if (!(pcm instanceof Float32Array) || sampleRate !== 16000 ||
       !Array.isArray(notes)) throw Error('Expected 16k mono Float32 audio and notes');
   const groups = new Map();
-  const measurements = new Array(notes.length).fill(null);
   const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
   function rms(start, count) {
     let sum=0,n=0;
@@ -44,8 +43,7 @@ export function estimateNoteVelocities(notes, pcm, sampleRate = 16000) {
       if(hz*harmonic>=sampleRate*0.46)break;
       level+=spectral(start,hz*harmonic)/harmonic;
     }
-    const prior=Math.min(n,Math.max(0,onset-0));
-    if(prior>=n && onset>=n) {
+    if (onset>=n) {
       let background=0;
       for(let h=1;h<=3;h++){
         if(hz*h>=sampleRate*0.46)break;
@@ -64,7 +62,6 @@ export function estimateNoteVelocities(notes, pcm, sampleRate = 16000) {
     const program=note.program;
     if(!groups.has(program))groups.set(program,[]);
     groups.get(program).push({index:i,energy});
-    measurements[i]=energy;
   });
   const result=notes.map(note=>({...note}));
   let estimated=0;
@@ -83,12 +80,16 @@ export function estimateNoteVelocities(notes, pcm, sampleRate = 16000) {
       estimated++;
     }
   }
-  const velocities=result.filter(n=>n.velocitySource==='audio-energy-estimate').map(n=>n.amplitude);
+  let minAmplitude=null,maxAmplitude=null;
+  for(const note of result){
+    if(note.velocitySource!=='audio-energy-estimate')continue;
+    minAmplitude=minAmplitude===null?note.amplitude:Math.min(minAmplitude,note.amplitude);
+    maxAmplitude=maxAmplitude===null?note.amplitude:Math.max(maxAmplitude,note.amplitude);
+  }
   return {notes:result,report:{
     method:'spectral-onset-energy (estimated; not native MuScriptor velocity)',
     estimated,unchanged:result.length-estimated,
-    minAmplitude:velocities.length?Math.min(...velocities):null,
-    maxAmplitude:velocities.length?Math.max(...velocities):null,
+    minAmplitude,maxAmplitude,
     pedalEstimated:false
   }};
 }
