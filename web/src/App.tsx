@@ -545,7 +545,7 @@ function App() {
     stop();
     commitNotes(copyNotes(chosen.notes));
     setPedalEvents(chosen.pedalEvents.map(p=>({...p})));
-    setPedalTrack(engine==='transkun-v2'?'gm-0':'*');
+    setPedalTrack(chosen.pedalEvents.find(p=>p.trackKey!=='*')?.trackKey || (engine==='transkun-v2'?'gm-0':'*'));
     setNativeMuted(new Set());
     setNativeSolo(null);
     setNativeSelectedProgram(chosen.notes[0]?.program??null);
