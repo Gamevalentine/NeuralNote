@@ -3,6 +3,8 @@ import type { Midi as MidiType } from '@tonejs/midi';
 const { Midi } = toneMidi;
 import { zipSync, strToU8 } from 'fflate';
 import type { Note, PitchGroup } from './audio';
+import { eventsForPedalTrack } from './pedal';
+import type { PedalEvent } from './pedal';
 // Match NOTIQ's existing pitch boundaries without pulling the AI runtime into MIDI tests.
 const groupFor = (pitch: number): PitchGroup => pitch < 60 ? 'low' : pitch < 72 ? 'mid' : 'high';
 
@@ -69,7 +71,7 @@ export function extractDawTracks(notes: Note[], programs: DawPrograms, includedG
   });
 }
 
-function addNotes(midi: MidiType, group: DawTrack, channel: number) {
+function addNotes(midi: MidiType, group: DawTrack, channel: number, pedalEvents: PedalEvent[]) {
   const track = midi.addTrack();
   track.name = group.name;
   track.channel = channel;
@@ -82,6 +84,9 @@ function addNotes(midi: MidiType, group: DawTrack, channel: number) {
       velocity: constrain(Number.isFinite(note.amplitude) ? note.amplitude : 0.78, 0.01, 1),
     });
   }
+  for (const event of eventsForPedalTrack(group, pedalEvents)) {
+    track.addCC({ number: 64, time: event.timeSeconds, value: event.value / 127 });
+  }
 }
 
 /**
@@ -91,7 +96,7 @@ function addNotes(midi: MidiType, group: DawTrack, channel: number) {
  * More programs are still exported as tracks, but share channels; individual
  * isolated stem MIDI files avoid such conflicts.
  */
-export function createDawMidi(tracks: DawTrack[], bpm: number): Uint8Array {
+export function createDawMidi(tracks: DawTrack[], bpm: number, pedalEvents: PedalEvent[] = []): Uint8Array {
   const midi = new Midi();
   midi.header.name = 'NOTIQ - DAW multitrack';
   midi.header.setTempo(constrain(Math.round(bpm), 40, 240));
@@ -99,7 +104,7 @@ export function createDawMidi(tracks: DawTrack[], bpm: number): Uint8Array {
   for (const track of tracks) {
     addNotes(midi, track, track.isDrum
       ? MIDI_DRUM_CHANNEL
-      : MELODIC_CHANNELS[melodic++ % MELODIC_CHANNELS.length]);
+      : MELODIC_CHANNELS[melodic++ % MELODIC_CHANNELS.length], pedalEvents);
   }
   return midiBuffer(midi);
 }
@@ -108,12 +113,12 @@ function safeFilename(name: string) {
   return name.replace(/[^A-Za-z0-9 _-]/g, '_').replace(/\s+/g,'_').slice(0,78);
 }
 
-export function createDawBundle(tracks: DawTrack[], bpm: number): Uint8Array {
+export function createDawBundle(tracks: DawTrack[], bpm: number, pedalEvents: PedalEvent[] = []): Uint8Array {
   const content: Record<string, Uint8Array> = {};
-  content['NOTIQ_ALL_TRACKS.mid'] = createDawMidi(tracks, bpm);
+  content['NOTIQ_ALL_TRACKS.mid'] = createDawMidi(tracks, bpm, pedalEvents);
   tracks.forEach((track, index) => {
     const filename = String(index + 1).padStart(2, '0') + '_' + safeFilename(track.name) + '.mid';
-    content['MIDI_TRACKS/' + filename] = createDawMidi([track], bpm);
+    content['MIDI_TRACKS/' + filename] = createDawMidi([track], bpm, pedalEvents);
   });
   const guide = [
     'NOTIQ - Cubase / Cakewalk / Kontakt handoff',
@@ -122,7 +127,9 @@ export function createDawBundle(tracks: DawTrack[], bpm: number): Uint8Array {
     'Tempo: ' + constrain(Math.round(bpm), 40, 240) + ' BPM',
     'MIDI Type 1: NOTIQ_ALL_TRACKS.mid',
     'Track stems: MIDI_TRACKS/*.mid (one instrument per file).',
-    'Each file contains notes, timing, velocity and a GM program number.',
+    'Each file contains notes, timing, velocity, GM program and any user-edited CC64 sustain events.',
+    'Pedal CC64 is entered by the user: NOTIQ does not recover original pianist pedal technique.',
+    'The Web SoundFont audition does not render CC64 sustain; import MIDI into a DAW/instrument.',
     '',
     'DAW workflow:',
     '1. Import NOTIQ_ALL_TRACKS.mid in Cubase or Cakewalk, preserving separate MIDI tracks.',

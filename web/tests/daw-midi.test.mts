@@ -77,3 +77,56 @@ test('Warn when more than 15 melodic programs share the limited GM port', () => 
   assert.equal(midiChannelLimitExceeded(tracks), true);
   assert.equal(new Midi(createDawMidi(tracks, 120)).tracks.length, 17);
 });
+
+import { addPedalPoint } from '../src/pedal.ts';
+
+test('CC64 is opt-in: legacy note-only MIDI is unchanged', () => {
+  const tracks = extractDawTracks(notes, programs, groups);
+  const midi = new Midi(createDawMidi(tracks, 126));
+  for (const track of midi.tracks) assert.equal(track.controlChanges[64]?.length || 0, 0);
+});
+
+test('User pedal points write real CC64 on melodic tracks but never on drum channel 10', () => {
+  const tracks = extractDawTracks(notes, programs, groups);
+  const points = addPedalPoint(addPedalPoint([], {trackKey:'*',timeSeconds:0.1,value:127}),
+    {trackKey:'*',timeSeconds:0.6,value:0});
+  const result = new Midi(createDawMidi(tracks, 126, points));
+  for (const track of result.tracks) {
+    const pedal = track.controlChanges[64] || [];
+    if (track.channel === 9) assert.equal(pedal.length, 0);
+    else {
+      assert.equal(pedal.length, 2);
+      assert.ok(Math.abs(pedal[0].time - 0.1) < .002);
+      assert.ok(Math.abs(pedal[1].time - 0.6) < .002);
+      assert.deepEqual(pedal.map(p => Math.round(p.value * 127)), [127,0]);
+    }
+  }
+  assert.deepEqual(result.tracks.map(t=>t.notes.length), [1,1,1]);
+});
+
+test('Pedal specific to one GM track does not contaminate another or leave CC64 stuck', () => {
+  const tracks = extractDawTracks(notes, programs, groups);
+  const points = [{trackKey:'gm-40',timeSeconds:0.2,value:127}];
+  const midi = new Midi(createDawMidi(tracks, 126, points));
+  assert.equal(midi.tracks.find(t=>t.instrument.number === 0)?.controlChanges[64]?.length || 0, 0);
+  const violin = midi.tracks.find(t=>t.instrument.number === 40);
+  assert.ok(violin);
+  const ccs = violin.controlChanges[64];
+  assert.deepEqual(ccs.map(c=>Math.round(c.value*127)), [127,0]);
+  assert.ok(ccs.at(-1).time > violin.notes[0].time + violin.notes[0].duration);
+});
+
+test('Every isolated Kontakt ZIP stem receives only its own CC64', () => {
+  const tracks = extractDawTracks(notes, programs, groups);
+  const events = [
+    {trackKey:'gm-0',timeSeconds:0.1,value:127},
+    {trackKey:'gm-0',timeSeconds:0.3,value:0},
+  ];
+  const zip = unzipSync(createDawBundle(tracks, 126, events));
+  const all = new Midi(zip['NOTIQ_ALL_TRACKS.mid']);
+  assert.equal(all.tracks.filter(t=>(t.controlChanges[64]?.length || 0)>0).length, 1);
+  const stems = Object.keys(zip).filter(name=>name.startsWith('MIDI_TRACKS/') && name.endsWith('.mid'))
+    .map(name=>new Midi(zip[name]).tracks[0]);
+  assert.equal(stems.filter(t=>(t.controlChanges[64]?.length || 0)>0).length,1);
+  assert.match(strFromU8(zip['README_DAW_KONTAKT.txt']), /user-edited CC64/);
+});

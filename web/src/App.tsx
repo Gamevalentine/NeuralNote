@@ -6,6 +6,8 @@ import { AudioWaveform, CircleHelp, Gauge, Headphones, Info, LoaderCircle,
 import { fmt, generateDemo, groupFor, GROUPS, noteName, readAudio } from './audio';
 import { assertSupportedSong, MAX_SONG_BYTES, MAX_SONG_SECONDS } from './longAudio';
 import { createDawMidi, createDawBundle, extractDawTracks, midiChannelLimitExceeded } from './dawMidi';
+import { addPedalPoint } from './pedal';
+import type { PedalEvent } from './pedal';
 import { addNote, copyNotes, removeNote, sameNotes, SNAP_SECONDS, snapSeconds, updateNote, clamp } from './pianoEdit';
 import type { Note, AudioInfo, PitchGroup } from './audio';
 import { DEFAULT_INSTRUMENTS, INSTRUMENTS, instrumentProgram, playSoundfontNote, prepareInstrument } from './soundfont';
@@ -63,6 +65,8 @@ function App() {
   const [busyLoading, setBusyLoading] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [bpm, setBpm] = useState(120);
+  const [pedalEvents, setPedalEvents] = useState<PedalEvent[]>([]);
+  const [pedalTrack, setPedalTrack] = useState('*');
   const [playbackMode, setPlaybackMode] = useState<PlaybackMode>('mix');
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(0);
@@ -240,6 +244,8 @@ function App() {
     clearHistory();
     setInfo(null);
     setTime(0);
+    setPedalEvents([]);
+    setPedalTrack('*');
     setProgress(0);
     firedNotes.current.clear();
     if (audioEl.current) audioEl.current.pause();
@@ -342,6 +348,8 @@ function App() {
         ? await runMuScriptor(target.file, update)
         : await recognizeWeb(target.file, update);
       clearHistory(detected);
+      setPedalEvents([]);
+      setPedalTrack('*');
       setNativeMuted(new Set());
       setNativeSolo(null);
       setNativeSelectedProgram(detected.find(n => n.program !== undefined)?.program ?? null);
@@ -623,6 +631,19 @@ function App() {
     window.setTimeout(() => URL.revokeObjectURL(url), 1500);
   };
 
+  const pedalTracks = extractDawTracks(notes,
+    { high: instrumentProgram(instrumentSelection.high),
+      mid: instrumentProgram(instrumentSelection.mid),
+      low: instrumentProgram(instrumentSelection.low) },
+    new Set<PitchGroup>(['high', 'mid', 'low'])).filter(track => !track.isDrum);
+  const writePedalPoint = (value: 0 | 127) => {
+    if (!notes.length || phase === 'analyzing') return;
+    const at = Math.max(0, Math.min(info?.duration || totalSeconds, time));
+    setPedalEvents(previous => addPedalPoint(previous, {
+      trackKey: pedalTrack, timeSeconds: at, value,
+    }));
+    setStatus((value === 127 ? 'Đạp' : 'Nhả') + ' pedal CC64 ở ' + fmt(at) + ' · Chỉ ghi vào MIDI khi xuất.');
+  };
   const exportFile = (kind: 'multitrack' | 'bundle' = 'multitrack', scope: 'all' | 'audible' = 'all') => {
     const source = scope === 'all' ? notes : visibleNotes;
     if (!source.length) {
@@ -643,10 +664,10 @@ function App() {
     const basename = (selection?.name.replace(/\.[^.]+$/, '') || 'NOTIQ')
       .replace(/[\\/:*?"<>|]/g, '_').slice(0, 90);
     if (kind === 'bundle') {
-      downloadResult(createDawBundle(tracks, bpm), basename + '_DAW_KONTAKT.zip', 'application/zip');
+      downloadResult(createDawBundle(tracks, bpm, pedalEvents), basename + '_DAW_KONTAKT.zip', 'application/zip');
       setStatus('Đã xuất ' + tracks.length + ' track MIDI riêng + hướng dẫn Kontakt');
     } else {
-      downloadResult(createDawMidi(tracks, bpm), basename + '_MULTITRACK.mid', 'audio/midi');
+      downloadResult(createDawMidi(tracks, bpm, pedalEvents), basename + '_MULTITRACK.mid', 'audio/midi');
       setStatus('Đã xuất MIDI Type 1: ' + tracks.length + ' track');
     }
     if (midiChannelLimitExceeded(tracks))
@@ -658,6 +679,8 @@ function App() {
     setInfo(null);
     clearHistory();
     setTime(0);
+    setPedalEvents([]);
+    setPedalTrack('*');
     setPhase('empty');
     setError('');
     setProgress(0);
@@ -689,7 +712,7 @@ function App() {
         { label: 'Hoàn tác (Undo)', run: undoEdit, disabled: !canUndo || phase === 'analyzing', shortcut: 'Ctrl+Z' },
         { label: 'Làm lại (Redo)', run: redoEdit, disabled: !canRedo || phase === 'analyzing', shortcut: 'Ctrl+Y' },
         { label: 'Xóa nốt đã chọn', run: deleteSelected, disabled: selectedNote === null || phase === 'analyzing', shortcut: 'Del' },
-        { label: 'Xóa kết quả nhận diện', run: () => { commitNotes([]); setSelectedNote(null); setPhase(selection ? 'ready' : 'empty'); setStatus('Đã xóa kết quả MIDI'); }, disabled: notes.length === 0 || phase === 'analyzing' },
+        { label: 'Xóa kết quả nhận diện', run: () => { commitNotes([]); setPedalEvents([]); setSelectedNote(null); setPhase(selection ? 'ready' : 'empty'); setStatus('Đã xóa kết quả MIDI'); }, disabled: notes.length === 0 || phase === 'analyzing' },
         { label: 'Về đầu bản nhạc', run: () => seekTo(0), disabled: !info && !notes.length },
       ],
     },
@@ -991,9 +1014,37 @@ function App() {
                   ))}
                   {!notes.length && <div className="empty-roll">{phase === 'analyzing' ? <><LoaderCircle className="spin" size={26}/><strong>AI đang nhận diện nốt...</strong></> : <><Music size={27}/><strong>Piano Roll đang trống</strong><small>Nhấn vào lưới để thêm nốt, hoặc tải âm thanh để nhận diện bằng AI</small></>}</div>}
                 </div>
+                <div className="pedal-lane" role="group" aria-label="Các điểm pedal CC64 đã đặt">
+                  <span className="pedal-lane-caption">CC64</span>
+                  {pedalEvents.map((event, index) => (
+                    (pedalTrack === '*' ? event.trackKey === '*' : (event.trackKey === '*' || event.trackKey === pedalTrack)) &&
+                    <button key={event.trackKey + '-' + event.timeSeconds + '-' + index} type="button"
+                      className={'pedal-marker ' + (event.value === 127 ? 'pedal-on' : 'pedal-off')}
+                      style={{left:(event.timeSeconds / totalSeconds * 100) + '%'}}
+                      title={(event.value === 127 ? 'Đạp' : 'Nhả') + ' pedal · ' + fmt(event.timeSeconds) + ' · ' + (event.trackKey === '*' ? 'Mọi track giai điệu' : event.trackKey) + ' · Nhấn để xóa điểm'}
+                      aria-label={(event.value === 127 ? 'Xóa điểm đạp' : 'Xóa điểm nhả') + ' pedal lúc ' + fmt(event.timeSeconds)}
+                      onClick={() => setPedalEvents(previous => previous.filter(point => point !== event))}
+                    >{event.value === 127 ? '▼' : '▲'}</button>
+                  ))}
+                </div>
                 {info && <div className="playhead" style={{left:cursorX,height:28+gridHeight}}/>}
               </div>
             </div>
+          </div>
+          <div className="pedal-toolbar" role="group" aria-label="Biên tập pedal MIDI CC64">
+            <strong>Pedal · CC64</strong>
+            <select aria-label="Track nhận pedal" value={pedalTrack}
+              onChange={event => setPedalTrack(event.target.value)}>
+              <option value="*">Mọi track giai điệu</option>
+              {pedalTracks.map(track => <option value={track.key} key={track.key}>{track.name}</option>)}
+            </select>
+            <button type="button" disabled={!notes.length || phase === 'analyzing'}
+              onClick={() => writePedalPoint(127)}>Đạp tại {fmt(time)}</button>
+            <button type="button" disabled={!notes.length || phase === 'analyzing'}
+              onClick={() => writePedalPoint(0)}>Nhả tại {fmt(time)}</button>
+            <button type="button" disabled={!pedalEvents.length || phase === 'analyzing'}
+              onClick={() => setPedalEvents([])}>Xóa pedal</button>
+            <small>{pedalEvents.length} điểm · Đặt vị trí bằng thước thời gian. CC64 chỉ có trong MIDI xuất, chưa mô phỏng bằng SoundFont.</small>
           </div>
           <div className="editor-status">
             <span>{status}</span>

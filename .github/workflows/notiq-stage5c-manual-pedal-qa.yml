@@ -1,0 +1,34 @@
+name: NOTIQ Stage 5C Manual Pedal MIDI QA
+on:
+  push:
+    branches:
+      - feature/notiq-stage5c-manual-pedal-cc64
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  pedal-midi-qa:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install free reproducible web dependencies
+        working-directory: web
+        run: npm install --no-audit --no-fund
+      - name: MIDI export including CC64 roundtrip tests
+        working-directory: web
+        run: npm run test:daw
+      - name: Piano editing, SoundFont and native protocol regressions
+        working-directory: web
+        run: |
+          npm run test:piano
+          npm run test:soundfont
+          node --experimental-strip-types --test tests/muscriptor-protocol.test.mts
+      - name: TypeScript strict check and Vite build
+        working-directory: web
+        run: npm run build
