@@ -59,7 +59,7 @@ function App() {
   const [nativeSolo, setNativeSolo] = useState<number | null>(null);
   const [nativeSelectedProgram, setNativeSelectedProgram] = useState<number | null>(null);
   const [nativeGain, setNativeGain] = useState<Record<number, number>>({});
-  const [progress, setProgress] = useState(0);
+  const [, setProgress] = useState(0);
   const [recognitionStage, setRecognitionStage] = useState<'preparing' | 'processing'>('preparing');
   const [recognitionElapsed, setRecognitionElapsed] = useState(0);
   const [status, setStatus] = useState('Chưa tải tệp âm thanh');
