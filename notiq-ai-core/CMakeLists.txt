@@ -19,6 +19,14 @@ set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
 set(GGML_WASM_SINGLE_FILE OFF CACHE BOOL "" FORCE)
 set(GGML_CPU_ALL_VARIANTS OFF CACHE BOOL "" FORCE)
 
+# Stage 5 experimental WASM pthreads. Completely opt-in: never modify the
+# previously verified single-thread WebAssembly binary or production UI.
+option(NOTIQ_WASM_PTHREADS "Experimental GGML pthread worker pool (requires COOP/COEP)" OFF)
+if(NOTIQ_WASM_PTHREADS)
+  # Required at compilation for all ggml/MuScriptor targets as well as link.
+  add_compile_options(-pthread)
+endif()
+
 if(NOT EXISTS "${CMAKE_CURRENT_LIST_DIR}/vendor/muscriptor/cpp/CMakeLists.txt")
   message(FATAL_ERROR "NOTIQ source snapshot missing. Run scripts/snapshot_source.py first.")
 endif()
@@ -54,5 +62,10 @@ option(NOTIQ_WASM_SPEED_EXPERIMENT "Experimental -O3 linker build for A/B QA" OF
 if(NOTIQ_WASM_SPEED_EXPERIMENT)
   target_compile_options(notiq_ai_core PRIVATE -O3)
   target_link_options(notiq_ai_core PRIVATE -O3 "SHELL:-sASSERTIONS=0")
+endif()
+if(NOTIQ_WASM_PTHREADS)
+  target_link_options(notiq_ai_core PRIVATE -pthread
+    "SHELL:-sPTHREAD_POOL_SIZE=4"
+    "SHELL:-sPROXY_TO_PTHREAD=0")
 endif()
 set_target_properties(notiq_ai_core PROPERTIES OUTPUT_NAME "notiq-ai-core" SUFFIX ".js")
