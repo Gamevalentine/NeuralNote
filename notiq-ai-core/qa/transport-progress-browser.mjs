@@ -9,7 +9,7 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.was
 const server=createServer(async(req,res)=>{
  try{
   const p=new URL(req.url,'http://localhost').pathname;
-  const filename=p==='/'?'index.html':decodeURIComponent(p).replace(/^\\/+/, '');
+  const filename=p==='/'?'index.html':decodeURIComponent(p).slice(1);
   const file=resolve(join(root,filename));
   if(!file.startsWith(root+'/'))throw Error('Invalid static path');
   const body=await readFile(file);
