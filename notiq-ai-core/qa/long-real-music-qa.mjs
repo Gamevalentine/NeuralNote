@@ -17,7 +17,7 @@ function readMidi(data) {
     if(as(i,4)!=='MTrk')throw Error('Missing MTrk '+t);
     const end=i+8+u32(i+4);i+=8;let tick=0,running=0,endMarker=false;
     while(i<end){
-      let q;do{if(i>=end)throw Error('Bad MIDI delta VLQ');q=b[i++];tick=(tick<<7)|(q&127)}while(q&128);
+      let q,delta=0;do{if(i>=end)throw Error('Bad MIDI delta VLQ');q=b[i++];delta=(delta<<7)|(q&127)}while(q&128);tick+=delta;
       largestTick=Math.max(tick,largestTick);
       let status=b[i++];
       if(status<128){if(!running)throw Error('Missing running status');i--;status=running}
