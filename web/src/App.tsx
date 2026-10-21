@@ -1038,9 +1038,10 @@ function App() {
           disabled:!nativeReady||!selection||!nativeModelInstalled||!pianoInstalled||phase==='analyzing' },
         { label:'5H · Xem đối chiếu',run:()=>setCompareOpen(true),disabled:!comparison },
         { label:'5J · Chấm MIDI trên Web',run:()=>setShowBenchmark(true),disabled:!selection||!browserAi },
-        { label: nativeReady ? 'AI: MuScriptor (NeuralNote gốc) — đang sử dụng'
-            : 'MuScriptor gốc NeuralNote — yêu cầu NOTIQ Windows',
-          run: () => {}, disabled: true, checked: nativeReady },
+        { label: nativeReady ? 'AI: MuScriptor (NeuralNote gốc) — Windows'
+            : browserAi ? 'AI: MuScriptor Small · WebAssembly (tại trình duyệt)'
+            : 'AI Web chưa bật · bản Windows có MuScriptor',
+          run: () => {}, disabled: true, checked: nativeReady || browserAi },
         ...(nativeReady ? [{
           label: nativeModelInstalled ? 'MuScriptor ' + selectedModelLabel + ' — đã tải' :
             nativeDownloading ? 'Đang tải mô hình MuScriptor…' : 'Tải mô hình MuScriptor ' + selectedModelLabel,
