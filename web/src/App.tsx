@@ -347,7 +347,9 @@ function App() {
       setNativeSelectedProgram(detected.find(n => n.program !== undefined)?.program ?? null);
       setProgress(100);
       setPhase('complete');
-      setStatus('MuScriptor AI Core: ' + detected.length + ' nốt · ' + nativeInstrumentPrograms(detected).length + ' nhạc cụ');
+      setStatus('MuScriptor AI Core: ' + detected.length + ' nốt · ' + nativeInstrumentPrograms(detected).length + ' nhạc cụ'
+        + ((!nativeReady && import.meta.env.VITE_NOTIQ_EXPRESSIVE_VELOCITY === '1')
+          ? ' · Velocity ước lượng từ audio (không phải AI dự đoán pedal)' : ''));
       firedNotes.current.clear();
     } catch (cause) {
       setPhase('error');
@@ -534,7 +536,12 @@ function App() {
         if (n.startTimeSeconds >= now - 0.10 && n.startTimeSeconds <= now + 0.055) {
           firedNotes.current.add(i);
           const level = n.program === undefined ? gain[group] : (nativeGain[n.program] ?? 0.7);
-          void previewNote(n.pitchMidi, Math.min(0.85, n.durationSeconds), level * masterVolume, n.program);
+          // Preserve baseline loudness at MuScriptor's default 100/127;
+          // use estimated expressive velocity only where opt-in analysis supplied it.
+          const velocityGain = Math.max(0.3, Math.min(1.15,
+            (Number.isFinite(n.amplitude) ? n.amplitude : 0.7874015748) / 0.7874015748));
+          void previewNote(n.pitchMidi, Math.min(0.85, n.durationSeconds),
+            Math.min(1, level * masterVolume * velocityGain), n.program);
         }
       }
     }, 45);
