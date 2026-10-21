@@ -19,6 +19,10 @@ await new Promise(ok=>server.listen(4186,'127.0.0.1',ok));
 const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
 const page=await browser.newPage({viewport:{width:1600,height:900}});
 const errors=[];
+const audioNodes=[];
+const cdp=await page.context().newCDPSession(page);
+await cdp.send('WebAudio.enable');
+cdp.on('WebAudio.audioNodeCreated',event=>audioNodes.push(event.node?.nodeType));
 page.on('pageerror',e=>errors.push(e.message));
 try {
  await page.addInitScript(()=>{
@@ -46,7 +50,9 @@ try {
  await transport.getByRole('button',{name:'Tạm dừng',exact:true}).waitFor({timeout:60000});
  await page.waitForFunction(()=>Number(document.querySelector('.notiq-transport-clock')?.textContent?.match(/:(\d+)\./)?.[1]||0)>=2,null,{timeout:60000});
  if(!(await page.locator('audio').evaluate(a=>a.paused)))throw Error('MIDI mode triggered source audio playback');
- console.log('NOTIQ_STAGE5E_4MIN_CLOCK_PASS',await transport.locator('.notiq-transport-clock').innerText());
+ if(!audioNodes.includes('AudioBufferSourceNode'))
+   throw Error('MIDI clock moved but no real AudioBufferSourceNode created. Audio may still be silent: '+JSON.stringify(audioNodes.slice(-20)));
+ console.log('NOTIQ_STAGE5E_4MIN_CLOCK_PASS',await transport.locator('.notiq-transport-clock').innerText(), 'source nodes='+audioNodes.filter(n=>n==='AudioBufferSourceNode').length);
  await transport.getByRole('button',{name:'Tạm dừng',exact:true}).click();
  const paused=await transport.locator('.notiq-transport-clock').innerText();
  await page.waitForTimeout(250);
