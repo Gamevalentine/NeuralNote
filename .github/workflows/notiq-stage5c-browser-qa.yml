@@ -41,5 +41,7 @@ jobs:
           path: |
             /tmp/notiq-5c-pedal-results.json
             /tmp/notiq-5c-pedal-qa.png
+            /tmp/notiq-5c-cc64-demo.mid
+            /tmp/notiq-5c-kontakt-stems.zip
             /tmp/notiq-5c-failure.png
           if-no-files-found: warn

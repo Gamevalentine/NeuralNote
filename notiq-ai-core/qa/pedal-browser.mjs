@@ -70,7 +70,9 @@ try{
   await page.getByRole('button',{name:/^Nhả tại/}).click();
   ensure(await page.locator('.pedal-marker').count()===2,'Pedal markers missing from UI');
   await page.screenshot({path:'/tmp/notiq-5c-pedal-qa.png',fullPage:true});
-  const after=summary(await exportVia('MIDI đa track','.mid'));
+  const demoMidi=await exportVia('MIDI đa track','.mid');
+  await writeFile('/tmp/notiq-5c-cc64-demo.mid',demoMidi);
+  const after=summary(demoMidi);
   ensure(JSON.stringify(after.map(t=>({name:t.name,notes:t.notes})))===originalNotes,'Pedal unexpectedly changed notes');
   const onTrack=after.find(t=>t.name.includes('Mid'));
   const offTrack=after.find(t=>t.name.includes('High'));
@@ -78,7 +80,9 @@ try{
   ensure(offTrack.pedal.length===0,'Pedal leaked to untargeted high track');
   ensure(onTrack.pedal[0].value===127 && onTrack.pedal[1].value===0,'Wrong CC64 values');
   ensure(Math.abs(onTrack.pedal[0].time-1)<0.003 && Math.abs(onTrack.pedal[1].time-2)<0.003,'CC64 timeline positions shifted');
-  const zip=unzipSync(await exportVia('Gói MIDI từng track','.zip'));
+  const demoZip=await exportVia('Gói MIDI từng track','.zip');
+  await writeFile('/tmp/notiq-5c-kontakt-stems.zip',demoZip);
+  const zip=unzipSync(demoZip);
   const all=summary(zip['NOTIQ_ALL_TRACKS.mid']);
   ensure(all.find(t=>t.name.includes('Mid')).pedal.length===2,'ZIP all-tracks lost pedal');
   const stems=Object.keys(zip).filter(name=>name.startsWith('MIDI_TRACKS/') && name.endsWith('.mid'));
