@@ -1,0 +1,45 @@
+name: NOTIQ Stage 5D Transport and AI Progress QA
+on:
+  push:
+    branches: [feature/notiq-stage5d-transport-ai-progress]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  transport-and-progress:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install NOTIQ Web packages
+        working-directory: web
+        run: npm install --no-audit --no-fund
+      - name: Existing MIDI, SoundFont, and piano tests
+        working-directory: web
+        run: |
+          npm run test:daw
+          npm run test:piano
+          npm run test:soundfont
+      - name: TypeScript and Vite build
+        working-directory: web
+        run: npm run build
+      - name: Install Chromium browser driver
+        run: npm install --prefix /tmp/notiq-5d-playwright --no-fund --no-audit playwright-core@1.56.1
+      - name: Real Chrome UI controls and centered AI progress test (native bridge MOCK)
+        run: node notiq-ai-core/qa/transport-progress-browser.mjs
+      - name: QA screenshots and report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: notiq-5d-transport-progress-ui
+          path: |
+            /tmp/notiq-5d-progress-overlay.png
+            /tmp/notiq-5d-transport.png
+            /tmp/notiq-5d-report.json
+            /tmp/notiq-5d-error.png
+          if-no-files-found: warn

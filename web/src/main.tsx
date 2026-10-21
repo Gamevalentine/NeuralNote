@@ -8,5 +8,6 @@ import './soundfont.css';
 import './muscriptor.css';
 import './daw-export.css';
 import './long-audio.css';
+import './notiq-transport.css';
 
 createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>);
