@@ -46,4 +46,13 @@ target_link_options(notiq_ai_core PRIVATE
   "SHELL:-sEXPORTED_FUNCTIONS=['_malloc','_free','_notiq_core_load_model','_notiq_core_transcribe','_notiq_core_progress','_notiq_core_error','_notiq_core_result_json','_notiq_core_unload']"
   "SHELL:-sEXPORTED_RUNTIME_METHODS=['FS','UTF8ToString','stringToUTF8','lengthBytesUTF8','HEAPU8','HEAPF32']"
 )
+# Stage 5 performance candidate (opt-in only). A/B benchmark against the
+# previously proven .wasm before putting a new binary in web/public/notiq-core.
+# -O3 optimizes MuScriptor's adapter and link stage; upstream ggml is built
+# Release already. Avoid unsafe math reordering or altering pitch extraction.
+option(NOTIQ_WASM_SPEED_EXPERIMENT "Experimental -O3 linker build for A/B QA" OFF)
+if(NOTIQ_WASM_SPEED_EXPERIMENT)
+  target_compile_options(notiq_ai_core PRIVATE -O3)
+  target_link_options(notiq_ai_core PRIVATE -O3 "SHELL:-sASSERTIONS=0")
+endif()
 set_target_properties(notiq_ai_core PROPERTIES OUTPUT_NAME "notiq-ai-core" SUFFIX ".js")
