@@ -6,8 +6,8 @@ import { AudioWaveform, CircleHelp, Gauge, Headphones, Info, LoaderCircle,
 import { fmt, generateDemo, groupFor, GROUPS, noteName, readAudio } from './audio';
 import { assertSupportedSong, MAX_SONG_BYTES, MAX_SONG_SECONDS } from './longAudio';
 import { createDawMidi, createDawBundle, extractDawTracks, midiChannelLimitExceeded } from './dawMidi';
-import { addPedalPoint } from './pedal';
-import type { PedalEvent } from './pedal';
+import { addPedalPoint } from './pedal.ts';
+import type { PedalEvent } from './pedal.ts';
 import { addNote, copyNotes, removeNote, sameNotes, SNAP_SECONDS, snapSeconds, updateNote, clamp } from './pianoEdit';
 import type { Note, AudioInfo, PitchGroup } from './audio';
 import { DEFAULT_INSTRUMENTS, INSTRUMENTS, instrumentProgram, playSoundfontNote, prepareInstrument } from './soundfont';

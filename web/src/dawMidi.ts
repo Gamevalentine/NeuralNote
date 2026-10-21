@@ -3,8 +3,8 @@ import type { Midi as MidiType } from '@tonejs/midi';
 const { Midi } = toneMidi;
 import { zipSync, strToU8 } from 'fflate';
 import type { Note, PitchGroup } from './audio';
-import { eventsForPedalTrack } from './pedal';
-import type { PedalEvent } from './pedal';
+import { eventsForPedalTrack } from './pedal.ts';
+import type { PedalEvent } from './pedal.ts';
 // Match NOTIQ's existing pitch boundaries without pulling the AI runtime into MIDI tests.
 const groupFor = (pitch: number): PitchGroup => pitch < 60 ? 'low' : pitch < 72 ? 'mid' : 'high';
 
