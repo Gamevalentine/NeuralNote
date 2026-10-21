@@ -8,3 +8,9 @@
 .track-card.native-track-card .track-title-row { gap:6px; }
 .notiq-ai-mode { color:#b8beff; white-space:nowrap; font-size:10px; }
 @media(max-width:650px){ .native-track-card .track-icon{display:none}; .native-track-select strong{font-size:10px}; .native-track-select small{font-size:9px}; .notiq-ai-mode{font-size:9px} }
+
+/* Optional native Large model selection. Not offered in WebAssembly where >4GB memory is needed. */
+.notiq-model-choice{display:flex;align-items:center;gap:5px;flex-shrink:0;color:#c3cede;font-size:10px;font-weight:600;white-space:nowrap}
+.notiq-model-choice select{max-width:145px;padding:5px;border:1px solid #53627b;border-radius:5px;background:#202c40;color:#eff4ff}
+.notiq-model-choice select:disabled{opacity:.5}
+@media(max-width:1100px){.notiq-model-choice span{display:none}.notiq-model-choice select{max-width:120px}}

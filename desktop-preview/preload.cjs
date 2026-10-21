@@ -6,6 +6,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 const native = Object.freeze({
   status: () => ipcRenderer.invoke('notiq:status'),
   downloadModel: () => ipcRenderer.invoke('notiq:download-model'),
+  selectModel: (id) => ipcRenderer.invoke('notiq:select-model', id),
   transcribe: (waveBytes) => ipcRenderer.invoke('notiq:transcribe', waveBytes),
   onProgress: (handler) => {
     if (typeof handler !== 'function') return () => {};

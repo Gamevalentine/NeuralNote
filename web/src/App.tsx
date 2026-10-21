@@ -54,6 +54,9 @@ function App() {
   const browserAi = webAiEnabled();
   const aiAvailable = nativeReady || browserAi;
   const [nativeModelInstalled, setNativeModelInstalled] = useState(false);
+  const [nativeModelSize, setNativeModelSize] = useState<'small' | 'large'>('small');
+  const [modelSwitching, setModelSwitching] = useState(false);
+  const selectedModelLabel = nativeModelSize === 'large' ? 'Large 2,74 GB' : 'Small 209 MB';
   const [nativeDownloading, setNativeDownloading] = useState(false);
   const [nativeMuted, setNativeMuted] = useState<Set<number>>(new Set());
   const [nativeSolo, setNativeSolo] = useState<number | null>(null);
@@ -131,6 +134,7 @@ function App() {
       if (!mounted || !native.available) return;
       setNativeReady(true);
       setNativeModelInstalled(native.modelInstalled);
+      setNativeModelSize(native.modelSize === 'large' ? 'large' : 'small');
       setEngineMode('muscriptor');
     }).catch(() => {});
     return () => { mounted = false; };
@@ -285,7 +289,12 @@ function App() {
         setError('Bản Web này đang ở chế độ xem giao diện. Chưa có engine MuScriptor để nhận diện.');
       } else if (!nativeModelInstalled) {
         setStatus('Đã tải bài hát · Chờ mô hình MuScriptor từ NeuralNote');
-        setError('Cần nạp mô hình MuScriptor Small 209 MB (CC BY-NC 4.0, phi thương mại). Nhấn “Tải mô hình AI” để nạp từ nguồn chính thức.');
+        setError('Chưa có mô hình MuScriptor ' + (nativeReady ? selectedModelLabel : 'Small 209 MB') +
+          ' (CC BY-NC 4.0). Hãy bấm Tải mô hình AI.');
+      } else if (nativeReady && nativeModelSize === 'large') {
+        // Large is CPU-only in this portable build and can be very slow.
+        // Never start multi-hour inference just because the user opened a file.
+        setStatus('Đã mở bài hát · Large 2,74 GB sẵn sàng. Nhấn Nhận diện nốt để chạy.');
       } else {
         setStatus('Đã tải bài hát · Đang chạy MuScriptor nguyên gốc từ NeuralNote…');
         void runRecognition(next);
@@ -330,8 +339,11 @@ function App() {
     try {
       const result = await bridge.downloadModel();
       setNativeModelInstalled(result.modelInstalled);
-      setStatus(result.modelInstalled ? 'MuScriptor Small đã sẵn sàng' : 'Model MuScriptor chưa hoàn tất');
-      if (result.modelInstalled && selectionRef.current && engineMode === 'muscriptor')
+      if (result.modelSize === 'large' || result.modelSize === 'small') setNativeModelSize(result.modelSize);
+      setStatus(result.modelInstalled ? 'MuScriptor ' + selectedModelLabel + ' đã tải xong và được kiểm SHA-256. Nhấn Nhận diện nốt.'
+        : 'Model MuScriptor chưa hoàn tất');
+      // Large never automatically transcribes after a multi-GB download.
+      if (result.modelInstalled && nativeModelSize === 'small' && selectionRef.current && engineMode === 'muscriptor')
         void runRecognition(selectionRef.current, 'muscriptor', true);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Không tải được mô hình MuScriptor');
@@ -339,6 +351,27 @@ function App() {
       detach();
       setNativeDownloading(false);
     }
+  };
+
+  const chooseNativeModel = async (size: 'small' | 'large') => {
+    if (!nativeReady || !window.notiqNative?.selectModel || phase === 'analyzing' ||
+        nativeDownloading || modelSwitching || busyLoading) return;
+    if (size === nativeModelSize) return;
+    setModelSwitching(true);
+    setError('');
+    try {
+      const selected = await window.notiqNative.selectModel(size);
+      setNativeModelSize(selected.modelSize === 'large' ? 'large' : 'small');
+      setNativeModelInstalled(selected.modelInstalled);
+      const name = size === 'large' ? 'Large 2,74 GB' : 'Small 209 MB';
+      setStatus('Đã chọn MuScriptor ' + name +
+        (selected.modelInstalled ? '. Nhấn Nhận diện nốt để chạy lại bằng model mới.'
+          : '. Nhấn Tải mô hình để tải checkpoint chính thức.'));
+      // Previously recognized MIDI remains untouched for A/B comparison.
+      // Explicit re-run is required after changing checkpoint.
+    } catch(cause) {
+      setError(cause instanceof Error ? cause.message : 'Không đổi được mô hình AI.');
+    } finally { setModelSwitching(false); }
   };
 
   const runRecognition = async (
@@ -353,7 +386,7 @@ function App() {
     if (!nativeModelInstalled && !modelJustInstalled) {
       setPhase('ready');
       setStatus('Chưa có mô hình MuScriptor · Cần tải AI để nhận diện');
-      setError('Hãy tải/nạp mô hình MuScriptor Small trước khi nhận diện.');
+      setError('Hãy tải/nạp mô hình MuScriptor ' + (nativeReady ? selectedModelLabel : 'Small 209 MB') + ' trước khi nhận diện.');
       return;
     }
     recognitionInFlight.current = true;
@@ -367,7 +400,7 @@ function App() {
     setPhase('analyzing');
     setError('');
     setProgress(0);
-    setStatus('MuScriptor C++ (NeuralNote) đang nhận diện bài hát…');
+    setStatus('MuScriptor C++ (' + (nativeReady ? selectedModelLabel : 'Small Web') + ') đang nhận diện bài hát…');
     try {
       const update = ({kind, percent, message}: {kind: 'download' | 'transcribe'; percent: number; message: string}) => {
         if (kind === 'transcribe') {
@@ -391,7 +424,7 @@ function App() {
       setNativeSelectedProgram(detected.find(n => n.program !== undefined)?.program ?? null);
       setProgress(100);
       setPhase('complete');
-      setStatus('MuScriptor AI Core: ' + detected.length + ' nốt · ' + nativeInstrumentPrograms(detected).length + ' nhạc cụ'
+      setStatus('MuScriptor ' + (nativeReady ? selectedModelLabel : 'Small Web') + ': ' + detected.length + ' nốt · ' + nativeInstrumentPrograms(detected).length + ' nhạc cụ'
         + ((!nativeReady && import.meta.env.VITE_NOTIQ_EXPRESSIVE_VELOCITY === '1')
           ? ' · Velocity ước lượng từ audio (không phải AI dự đoán pedal)' : ''));
       firedNotes.current.clear();
@@ -820,9 +853,9 @@ function App() {
             : 'MuScriptor gốc NeuralNote — yêu cầu NOTIQ Windows',
           run: () => {}, disabled: true, checked: nativeReady },
         ...(nativeReady ? [{
-          label: nativeModelInstalled ? 'MuScriptor Small — đã tải (209 MB)' :
-            nativeDownloading ? 'Đang tải mô hình MuScriptor…' : 'Tải mô hình MuScriptor Small (209 MB)',
-          run: () => void downloadNativeModel(), disabled: nativeDownloading || nativeModelInstalled,
+          label: nativeModelInstalled ? 'MuScriptor ' + selectedModelLabel + ' — đã tải' :
+            nativeDownloading ? 'Đang tải mô hình MuScriptor…' : 'Tải mô hình MuScriptor ' + selectedModelLabel,
+          run: () => void downloadNativeModel(), disabled: nativeDownloading || modelSwitching || nativeModelInstalled,
         }] : []),
         { label: 'Cài đặt NOTIQ', run: () => setShowSettings(true) },
       ],
@@ -937,9 +970,18 @@ function App() {
             className="ai-retry-button" disabled={busyLoading || nativeDownloading}
             title="Chạy AI nhận diện âm thanh thành các nốt MIDI"
             onClick={startInference}>Nhận diện nốt</button>}
+          {nativeReady && <label className="notiq-model-choice">
+            <span>Model AI</span>
+            <select aria-label="Chọn mô hình AI" value={nativeModelSize}
+              disabled={modelSwitching || nativeDownloading || phase === 'analyzing' || busyLoading}
+              onChange={event => void chooseNativeModel(event.target.value as 'small' | 'large')}>
+              <option value="small">Small · 209 MB</option>
+              <option value="large">Large · 2,74 GB</option>
+            </select>
+          </label>}
           {aiAvailable && engineMode === 'muscriptor' && !nativeModelInstalled &&
-            <button type="button" className="ai-retry-button" disabled={nativeDownloading}
-              title="Tải mô hình MuScriptor Small (~209 MB) để nhận diện nhạc cụ"
+            <button type="button" className="ai-retry-button" disabled={nativeDownloading || modelSwitching}
+              title={'Tải mô hình MuScriptor ' + (nativeReady ? selectedModelLabel : 'Small 209 MB') + ' chính thức'}
               onClick={() => void downloadNativeModel()}>
               {nativeDownloading ? 'Đang tải mô hình…' : 'Tải mô hình AI'}
             </button>}
@@ -1011,10 +1053,21 @@ function App() {
         <label>Tempo xuất MIDI (BPM)<input type="number" min={40} max={240} value={bpm} onChange={e => setBpm(Math.min(240, Math.max(40, Number(e.target.value) || 120)))} /></label>
         <p>Hỗ trợ tải cả bài hát: tối đa {MAX_SONG_SECONDS / 60} phút · 200 MB. AI xử lý theo từng đoạn và ghép nốt.</p>
         <p>Âm thanh xử lý tại thiết bị của bạn. Mô hình AI tải qua Internet khi cần.</p>
-        <p>{nativeReady ? 'Bản Windows: MuScriptor C++ CPU.' : browserAi ? 'Web Preview: MuScriptor C++ WebAssembly xử lý tại trình duyệt, không tải nhạc lên máy chủ.' : 'Bản Web chưa kết nối AI MuScriptor.'} Mô hình Small 209 MB, CC BY-NC 4.0 (phi thương mại).</p>
-        {aiAvailable && <p><strong>{nativeModelInstalled ? 'MuScriptor Small đã sẵn sàng' : 'MuScriptor Small chưa tải'}</strong>
-          {!nativeModelInstalled && <button type="button" disabled={nativeDownloading}
-            onClick={() => void downloadNativeModel()}>{nativeDownloading ? 'Đang tải model…' : 'Tải mô hình Small · 209 MB'}</button>}</p>}
+        <p>{nativeReady ? 'Bản Windows: MuScriptor C++ CPU; Large cần RAM và thời gian xử lý đáng kể.' :
+          browserAi ? 'Web Preview chỉ hỗ trợ MuScriptor Small 209 MB trong WASM; Large 2,74 GB không khả thi với bộ WASM hiện tại.'
+          : 'Bản Web chưa kết nối AI MuScriptor.'} Model chính thức, CC BY-NC 4.0 (phi thương mại). Không có checkpoint MuScriptor 4 GB được xác minh.</p>
+        {nativeReady && <label>Chọn model nhận diện
+          <select aria-label="Model nhận diện chất lượng" value={nativeModelSize}
+            disabled={modelSwitching || nativeDownloading || phase === 'analyzing' || busyLoading}
+            onChange={event => void chooseNativeModel(event.target.value as 'small' | 'large')}>
+            <option value="small">Small · 209 MB (nhanh hơn)</option>
+            <option value="large">Large · 2,74 GB (thử nghiệm chất lượng cao, CPU rất chậm)</option>
+          </select>
+        </label>}
+        {aiAvailable && <p><strong>MuScriptor {nativeReady ? selectedModelLabel : 'Small 209 MB'}: {nativeModelInstalled ? 'đã sẵn sàng' : 'chưa tải'}</strong>
+          {!nativeModelInstalled && <button type="button" disabled={nativeDownloading || modelSwitching}
+            onClick={() => void downloadNativeModel()}>{nativeDownloading ? 'Đang tải model…' :
+              'Tải mô hình ' + (nativeReady ? selectedModelLabel : 'Small · 209 MB')}</button>}</p>}
       </div>}
       <div className="studio">
         <aside className={"sidebar" + (reviewArea === "tracks" ? " ui-review-highlight" : "")}>

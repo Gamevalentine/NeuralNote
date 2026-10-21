@@ -5,6 +5,9 @@ import { assertSupportedSong, MAX_SONG_BYTES } from './longAudio';
 export type NativeStatus = {
   available: boolean;
   modelInstalled: boolean;
+  modelSize?: 'small' | 'large';
+  modelLabel?: string;
+  availableModels?: string[];
   modelBytes: number;
   modelLocation: string;
   license: string;
@@ -22,6 +25,7 @@ declare global {
     notiqNative?: {
       status: () => Promise<NativeStatus>;
       downloadModel: () => Promise<NativeStatus>;
+      selectModel?: (size: 'small' | 'large') => Promise<NativeStatus>;
       transcribe: (wave: Uint8Array) => Promise<MuScriptorResult>;
       onProgress: (handler: (progress: NativeProgress) => void) => () => void;
     };
