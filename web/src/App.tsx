@@ -540,7 +540,9 @@ function App() {
           // use estimated expressive velocity only where opt-in analysis supplied it.
           const velocityGain = Math.max(0.3, Math.min(1.15,
             (Number.isFinite(n.amplitude) ? n.amplitude : 0.7874015748) / 0.7874015748));
-          void previewNote(n.pitchMidi, Math.min(0.85, n.durationSeconds),
+          // The previous 0.85s cap cut off long held notes during MIDI preview.
+          // SoundFont player's existing safe maximum is 8 seconds.
+          void previewNote(n.pitchMidi, Math.min(8, n.durationSeconds),
             Math.min(1, level * masterVolume * velocityGain), n.program);
         }
       }
