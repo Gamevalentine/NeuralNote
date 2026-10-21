@@ -14,6 +14,7 @@ import { DEFAULT_INSTRUMENTS, INSTRUMENTS, instrumentProgram, playSoundfontNote,
 import type { InstrumentId, InstrumentSelection } from './soundfont';
 import { nativeInstrumentPrograms, nativeProgramName } from './muscriptorProtocol';
 import { nativeBridgeAvailable, runMuScriptor } from './muscriptorNative';
+import { runPianoV2 } from './transkunNative';
 import { webAiEnabled, installWebModel, recognizeWeb, closeWebModel } from './muscriptorWebLocal';
 
 type Selection = { file: Blob; name: string; url: string };
@@ -51,6 +52,9 @@ function App() {
   // Stage 3 opt-in browser preview uses the actual pinned MuScriptor C++ WASM worker.
   const [engineMode, setEngineMode] = useState<'preview' | 'muscriptor'>('preview');
   const [nativeReady, setNativeReady] = useState(false);
+  const [analysisEngine, setAnalysisEngine] = useState<'muscriptor'|'transkun-v2'>('muscriptor');
+  const [pianoInstalled, setPianoInstalled] = useState(false);
+  const [pianoInstalling, setPianoInstalling] = useState(false);
   const browserAi = webAiEnabled();
   const aiAvailable = nativeReady || browserAi;
   const [nativeModelInstalled, setNativeModelInstalled] = useState(false);
@@ -136,6 +140,10 @@ function App() {
       setNativeModelInstalled(native.modelInstalled);
       setNativeModelSize(native.modelSize === 'large' ? 'large' : 'small');
       setEngineMode('muscriptor');
+      if(window.notiqNative?.pianoStatus)
+        void window.notiqNative.pianoStatus().then(p=>{
+          if(mounted)setPianoInstalled(p.installed);
+        }).catch(()=>{});
     }).catch(() => {});
     return () => { mounted = false; };
   }, []);
@@ -287,6 +295,11 @@ function App() {
       if (!aiAvailable) {
         setStatus('Đã tải bài hát · Bản Web chưa bật NOTIQ AI Core');
         setError('Bản Web này đang ở chế độ xem giao diện. Chưa có engine MuScriptor để nhận diện.');
+      } else if (nativeReady && analysisEngine === 'transkun-v2') {
+        setStatus(pianoInstalled
+          ? 'Bài Piano đã mở · Nhấn Nhận diện nốt để chạy Transkun V2 CPU'
+          : 'Bài Piano đã mở · Hãy bấm Cài AI Piano Transkun V2 trước.');
+        if (!pianoInstalled) setError('Transkun V2 chưa được cài. Dùng nút Cài AI Piano trên NOTIQ Windows.');
       } else if (!nativeModelInstalled) {
         setStatus('Đã tải bài hát · Chờ mô hình MuScriptor từ NeuralNote');
         setError('Chưa có mô hình MuScriptor ' + (nativeReady ? selectedModelLabel : 'Small 209 MB') +
@@ -374,6 +387,30 @@ function App() {
     } finally { setModelSwitching(false); }
   };
 
+  const installPianoV2 = async () => {
+    if (!nativeReady || !window.notiqNative?.installPiano || pianoInstalling ||
+        nativeDownloading || phase === 'analyzing') return;
+    setPianoInstalling(true);
+    setError('');
+    const detach = window.notiqNative.onProgress(({kind,message}) => {
+      if (kind === 'setup') setStatus(message);
+    });
+    try {
+      setStatus('Cài Transkun V2 Python/PyTorch trên ổ chứa NOTIQ…');
+      const result=await window.notiqNative.installPiano();
+      const ready=Boolean(result?.ready);
+      setPianoInstalled(ready);
+      setStatus(ready ? 'Đã cài Transkun V2. Chọn engine Piano và nhấn Nhận diện nốt.'
+        : 'Chưa cài Transkun V2 thành công.');
+    } catch(cause) {
+      setError('Cài AI Piano thất bại: ' +
+        (cause instanceof Error ? cause.message : 'Không xác định. Kiểm tra kết nối và dung lượng ổ ứng dụng.'));
+    } finally {
+      detach();
+      setPianoInstalling(false);
+    }
+  };
+
   const runRecognition = async (
     target: Selection, _mode: 'muscriptor' = 'muscriptor', modelJustInstalled = false,
   ) => {
@@ -383,7 +420,12 @@ function App() {
       setError('Bản Web hiện tại không được cấp engine nhận diện.');
       return;
     }
-    if (!nativeModelInstalled && !modelJustInstalled) {
+    if (analysisEngine === 'transkun-v2' && (!nativeReady || !pianoInstalled)) {
+      setPhase('ready');
+      setError('Transkun V2 Piano chưa được cài trong NOTIQ Windows. Nhấn Cài AI Piano.');
+      return;
+    }
+    if (analysisEngine === 'muscriptor' && !nativeModelInstalled && !modelJustInstalled) {
       setPhase('ready');
       setStatus('Chưa có mô hình MuScriptor · Cần tải AI để nhận diện');
       setError('Hãy tải/nạp mô hình MuScriptor ' + (nativeReady ? selectedModelLabel : 'Small 209 MB') + ' trước khi nhận diện.');
@@ -400,9 +442,11 @@ function App() {
     setPhase('analyzing');
     setError('');
     setProgress(0);
-    setStatus('MuScriptor C++ (' + (nativeReady ? selectedModelLabel : 'Small Web') + ') đang nhận diện bài hát…');
+    setStatus(analysisEngine === 'transkun-v2'
+      ? 'Transkun V2 đang nhận diện Piano bằng CPU…'
+      : 'MuScriptor C++ (' + (nativeReady ? selectedModelLabel : 'Small Web') + ') đang nhận diện bài hát…');
     try {
-      const update = ({kind, percent, message}: {kind: 'download' | 'transcribe'; percent: number; message: string}) => {
+      const update = ({kind, percent, message}: {kind: 'download' | 'transcribe' | 'setup'; percent: number; message: string}) => {
         if (kind === 'transcribe') {
           setStatus(message);
           setProgress(percent);
@@ -413,24 +457,34 @@ function App() {
               percent >= 15) setRecognitionStage('processing');
         }
       };
-      const detected = nativeReady
+      const piano = analysisEngine === 'transkun-v2'
+        ? await runPianoV2(target.file, update) : null;
+      const detected = piano ? piano.notes : nativeReady
         ? await runMuScriptor(target.file, update)
         : await recognizeWeb(target.file, update);
+      // All replacement occurs only after the selected engine returns validated
+      // output. Failed V2 never deletes the existing MuScriptor MIDI.
       clearHistory(detected);
-      setPedalEvents([]);
-      setPedalTrack('*');
+      setPedalEvents(piano?.pedalEvents || []);
+      // Display Piano CC64 points on its GM Piano track immediately; the
+      // existing '*' filter only shows user-created global pedal points.
+      setPedalTrack(piano ? 'gm-0' : '*');
       setNativeMuted(new Set());
       setNativeSolo(null);
       setNativeSelectedProgram(detected.find(n => n.program !== undefined)?.program ?? null);
       setProgress(100);
       setPhase('complete');
-      setStatus('MuScriptor ' + (nativeReady ? selectedModelLabel : 'Small Web') + ': ' + detected.length + ' nốt · ' + nativeInstrumentPrograms(detected).length + ' nhạc cụ'
-        + ((!nativeReady && import.meta.env.VITE_NOTIQ_EXPRESSIVE_VELOCITY === '1')
-          ? ' · Velocity ước lượng từ audio (không phải AI dự đoán pedal)' : ''));
+      setStatus(piano
+        ? 'Transkun V2 Piano: ' + detected.length + ' nốt · ' +
+          piano.pedalEvents.length + ' sự kiện CC64 (nếu có trong kết quả)'
+        : 'MuScriptor ' + (nativeReady ? selectedModelLabel : 'Small Web') + ': ' +
+          detected.length + ' nốt · ' + nativeInstrumentPrograms(detected).length + ' nhạc cụ' +
+          ((!nativeReady && import.meta.env.VITE_NOTIQ_EXPRESSIVE_VELOCITY === '1')
+           ? ' · Velocity ước lượng từ audio' : ''));
       firedNotes.current.clear();
     } catch (cause) {
       setPhase('error');
-      setError(cause instanceof Error ? cause.message : 'MuScriptor nhận diện thất bại');
+      setError(cause instanceof Error ? cause.message : 'Engine nhận diện thất bại');
       setStatus('Không thể nhận diện bài hát · có thể thử lại bằng nút Nhận diện');
     } finally {
       recognitionInFlight.current = false;
@@ -971,6 +1025,28 @@ function App() {
             title="Chạy AI nhận diện âm thanh thành các nốt MIDI"
             onClick={startInference}>Nhận diện nốt</button>}
           {nativeReady && <label className="notiq-model-choice">
+            <span>Engine</span>
+            <select aria-label="Engine nhận diện" value={analysisEngine}
+              disabled={phase === 'analyzing' || pianoInstalling || nativeDownloading}
+              onChange={event => {
+                const next=event.target.value as 'muscriptor'|'transkun-v2';
+                setAnalysisEngine(next);
+                setStatus(next==='transkun-v2'
+                  ? 'Đã chọn Transkun V2 (Piano). Nốt hiện tại được giữ cho đến khi nhận diện lại.'
+                  : 'Đã chọn MuScriptor (đa nhạc cụ). Nốt hiện tại được giữ nguyên.');
+                setError('');
+              }}>
+              <option value="muscriptor">MuScriptor · Đa nhạc cụ</option>
+              <option value="transkun-v2">Transkun V2 · Piano</option>
+            </select>
+          </label>}
+          {nativeReady && analysisEngine==='transkun-v2' && !pianoInstalled &&
+            <button type="button" className="ai-retry-button"
+              disabled={pianoInstalling || nativeDownloading || phase === 'analyzing'}
+              onClick={()=>void installPianoV2()}>
+              {pianoInstalling ? 'Đang cài Piano…' : 'Cài AI Piano'}
+            </button>}
+          {nativeReady && analysisEngine==='muscriptor' && <label className="notiq-model-choice">
             <span>Model AI</span>
             <select aria-label="Chọn mô hình AI" value={nativeModelSize}
               disabled={modelSwitching || nativeDownloading || phase === 'analyzing' || busyLoading}
@@ -979,7 +1055,7 @@ function App() {
               <option value="large">Large · 2,74 GB</option>
             </select>
           </label>}
-          {aiAvailable && engineMode === 'muscriptor' && !nativeModelInstalled &&
+          {aiAvailable && analysisEngine === 'muscriptor' && engineMode === 'muscriptor' && !nativeModelInstalled &&
             <button type="button" className="ai-retry-button" disabled={nativeDownloading || modelSwitching}
               title={'Tải mô hình MuScriptor ' + (nativeReady ? selectedModelLabel : 'Small 209 MB') + ' chính thức'}
               onClick={() => void downloadNativeModel()}>
@@ -1053,7 +1129,7 @@ function App() {
         <label>Tempo xuất MIDI (BPM)<input type="number" min={40} max={240} value={bpm} onChange={e => setBpm(Math.min(240, Math.max(40, Number(e.target.value) || 120)))} /></label>
         <p>Hỗ trợ tải cả bài hát: tối đa {MAX_SONG_SECONDS / 60} phút · 200 MB. AI xử lý theo từng đoạn và ghép nốt.</p>
         <p>Âm thanh xử lý tại thiết bị của bạn. Mô hình AI tải qua Internet khi cần.</p>
-        <p>{nativeReady ? 'Bản Windows: MuScriptor C++ CPU; Large cần RAM và thời gian xử lý đáng kể.' :
+        <p>{nativeReady ? 'Bản Windows: MuScriptor đa nhạc cụ hoặc Transkun V2 Piano CPU; Large cần RAM và thời gian xử lý đáng kể.' :
           browserAi ? 'Web Preview chỉ hỗ trợ MuScriptor Small 209 MB trong WASM; Large 2,74 GB không khả thi với bộ WASM hiện tại.'
           : 'Bản Web chưa kết nối AI MuScriptor.'} Model chính thức, CC BY-NC 4.0 (phi thương mại). Không có checkpoint MuScriptor 4 GB được xác minh.</p>
         {nativeReady && <label>Chọn model nhận diện
@@ -1064,7 +1140,14 @@ function App() {
             <option value="large">Large · 2,74 GB (thử nghiệm chất lượng cao, CPU rất chậm)</option>
           </select>
         </label>}
-        {aiAvailable && <p><strong>MuScriptor {nativeReady ? selectedModelLabel : 'Small 209 MB'}: {nativeModelInstalled ? 'đã sẵn sàng' : 'chưa tải'}</strong>
+        {nativeReady && <p>Engine thử nghiệm: <strong>{analysisEngine==='transkun-v2'?'Transkun V2 · Piano':'MuScriptor · đa nhạc cụ'}</strong>.
+          {analysisEngine==='transkun-v2' && (pianoInstalled ? ' AI Piano đã sẵn sàng.'
+            : ' Cài đặt PyTorch/Transkun sẽ tải từ nguồn chính thức và lưu cạnh NOTIQ trên ổ đã chọn.')}
+          {analysisEngine==='transkun-v2' && !pianoInstalled &&
+            <button type="button" disabled={pianoInstalling} onClick={()=>void installPianoV2()}>
+              {pianoInstalling?'Đang cài AI Piano…':'Cài Transkun V2 tự động'}
+            </button>}</p>}
+        {aiAvailable && analysisEngine==='muscriptor' && <p><strong>MuScriptor {nativeReady ? selectedModelLabel : 'Small 209 MB'}: {nativeModelInstalled ? 'đã sẵn sàng' : 'chưa tải'}</strong>
           {!nativeModelInstalled && <button type="button" disabled={nativeDownloading || modelSwitching}
             onClick={() => void downloadNativeModel()}>{nativeDownloading ? 'Đang tải model…' :
               'Tải mô hình ' + (nativeReady ? selectedModelLabel : 'Small · 209 MB')}</button>}</p>}
