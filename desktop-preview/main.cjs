@@ -14,6 +14,8 @@ const { spawn } = require('node:child_process');
 
 const { MODELS, getModel } = require('./models.cjs');
 const { hasVerifiedModel, downloadVerifiedModel } = require('./model-download.cjs');
+const pianoRuntime = require('./transkun-runtime.cjs');
+const pianoRunnerSource = fs.readFileSync(path.join(__dirname,'transkun-runner.py'),'utf8');
 const portableDir = path.dirname(process.execPath);
 const dataDir = path.join(portableDir, 'NOTIQ-Data');
 const modelsDir = path.join(portableDir, 'models');
@@ -36,6 +38,8 @@ try {
 let window = null;
 let downloadJob = null;
 let transcriptionJob = null;
+let pianoJob = null;
+let pianoSetupJob = null;
 function report(kind, percent, message) {
   if (window && !window.isDestroyed()) {
     window.webContents.send('notiq:progress', {
@@ -62,7 +66,7 @@ function bridgeStatus() {
   };
 }
 function selectModel(id) {
-  if (downloadJob || transcriptionJob) throw Error('Hãy kết thúc tải mô hình/nhận diện trước khi đổi model.');
+  if (downloadJob || transcriptionJob || pianoJob || pianoSetupJob) throw Error('Hãy kết thúc tải mô hình/nhận diện trước khi đổi model.');
   // Check against the whitelist before persisting; never accept a file path.
   const selected=getModel(id);
   selectedModel=selected.id;
@@ -90,7 +94,7 @@ async function downloadModel() {
 }
 
 async function transcribeViaNative(input) {
-  if (transcriptionJob) throw new Error('MuScriptor đang xử lý một bản nhạc khác.');
+  if (transcriptionJob || pianoJob) throw new Error('Engine nhận diện khác đang xử lý một bản nhạc.');
   if (!bridgeStatus().available) throw new Error('Không tìm thấy MuScriptor native CLI trong bản Windows này.');
   const model=getModel(selectedModel);
   const modelPath=path.join(modelsDir,model.filename);
@@ -142,6 +146,36 @@ async function transcribeViaNative(input) {
   try { return await transcriptionJob; } finally { transcriptionJob = null; }
 }
 
+async function pianoStatus(){
+  return {available:process.platform==='win32',installed:await pianoRuntime.installed(dataDir),
+    description:'Transkun V2 Piano CPU · MIT; checkpoint chính thức đi kèm gói PyPI'};
+}
+async function installPiano() {
+  if(pianoSetupJob)return pianoSetupJob;
+  if(transcriptionJob || pianoJob || downloadJob)throw Error('Hãy hoàn tất tác vụ đang chạy.');
+  pianoSetupJob=(async()=>{
+    const result=await pianoRuntime.setup(dataDir,pianoRunnerSource,message=>
+      report('setup',0,'Transkun V2: '+message));
+    report('setup',100,'Transkun V2 đã cài đặt và xác minh mô hình Piano');
+    return result;
+  })();
+  try{return await pianoSetupJob}finally{pianoSetupJob=null}
+}
+async function transcribePiano(input) {
+  if(pianoJob || transcriptionJob || downloadJob || pianoSetupJob)
+    throw Error('Một tác vụ AI khác đang chạy. Hãy hoàn tất trước.');
+  const raw=input instanceof Uint8Array?input:new Uint8Array(input);
+  if(raw.byteLength<44||raw.byteLength>15*60*16000*4+44 ||
+      String.fromCharCode(...raw.subarray(0,4))!=='RIFF')
+    throw Error('Dữ liệu phải là WAV mono 16 kHz (tối đa 15 phút).');
+  pianoJob=pianoRuntime.transcribe(dataDir,raw,pianoRunnerSource,message=>
+    report('transcribe',0,'Transkun V2: '+message));
+  try {
+    const result=await pianoJob;
+    report('transcribe',100,'Transkun V2 nhận diện '+result.notes.length+' nốt Piano');
+    return result;
+  } finally {pianoJob=null}
+}
 function createWindow() {
   window = new BrowserWindow({
     title: 'NOTIQ — NeuralNote MuScriptor Core (Windows)', width: 1440, height: 900,
@@ -172,6 +206,9 @@ app.whenReady().then(() => {
   ipcMain.handle('notiq:download-model', () => downloadModel());
   ipcMain.handle('notiq:select-model', (_event, id) => selectModel(id));
   ipcMain.handle('notiq:transcribe', (_event, bytes) => transcribeViaNative(bytes));
+  ipcMain.handle('notiq:piano-status', () => pianoStatus());
+  ipcMain.handle('notiq:piano-install', () => installPiano());
+  ipcMain.handle('notiq:piano-transcribe', (_event, bytes) => transcribePiano(bytes));
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
