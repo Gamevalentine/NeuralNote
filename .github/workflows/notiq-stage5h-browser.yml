@@ -1,0 +1,39 @@
+name: NOTIQ Stage 5H Browser Real MIDI Comparison UX
+on:
+  push:
+    branches: [feature/notiq-stage5h-dual-engine-comparison]
+    paths:
+      - .github/workflows/notiq-stage5h-browser.yml
+      - notiq-ai-core/qa/dual-compare-browser.mjs
+      - web/src/ComparisonPanel.tsx
+      - web/src/ComparisonOverlay.tsx
+      - web/src/App.tsx
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  comparison-chromium:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build NOTIQ 5H
+        working-directory: web
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+      - name: Verify both engines get one identical WAV and MIDI is recoverable
+        run: |
+          npm install --prefix /tmp/notiq-stage5g-playwright --no-audit --no-fund playwright-core@1.56.1
+          node notiq-ai-core/qa/dual-compare-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: notiq-stage5h-comparison-browser-evidence
+          path: /tmp/notiq-stage5h-comparison.png
+          if-no-files-found: warn
