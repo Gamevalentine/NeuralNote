@@ -92,6 +92,8 @@ function App() {
   const [, setProgress] = useState(0);
   const [recognitionStage, setRecognitionStage] = useState<'preparing' | 'processing'>('preparing');
   const [recognitionElapsed, setRecognitionElapsed] = useState(0);
+  const [nativeReportedPercent, setNativeReportedPercent] = useState<number | null>(null);
+  const [cancelPending, setCancelPending] = useState(false);
   const [status, setStatus] = useState('Chưa tải tệp âm thanh');
   const [error, setError] = useState('');
   const [busyLoading, setBusyLoading] = useState(false);
@@ -484,6 +486,8 @@ function App() {
     if (audioCtx.current) stopSoundfontNotes(audioCtx.current);
     midiOnlyStart.current = null;
     recognitionStartedAt.current = Date.now();
+    setNativeReportedPercent(null);
+    setCancelPending(false);
     setRecognitionStage('preparing');
     if (audioEl.current) audioEl.current.pause();
     setPlaying(false);
@@ -498,6 +502,10 @@ function App() {
         if (kind === 'transcribe') {
           setStatus(message);
           setProgress(percent);
+          if (nativeReady && analysisEngine === 'muscriptor' &&
+              message.includes('từ engine') && Number.isFinite(percent)) {
+            setNativeReportedPercent(percent);
+          }
           // Neither the pinned MuScriptor WASM worker nor the native bridge
           // guarantees per-note % updates during blocking inference. Do not
           // present the preparation percentage as total AI progress.
@@ -532,11 +540,27 @@ function App() {
            ? ' · Velocity ước lượng từ audio' : ''));
       firedNotes.current.clear();
     } catch (cause) {
-      setPhase('error');
+      setPhase(notesRef.current.length ? 'complete' : 'error');
       setError(cause instanceof Error ? cause.message : 'Engine nhận diện thất bại');
       setStatus('Không thể nhận diện bài hát · có thể thử lại bằng nút Nhận diện');
     } finally {
       recognitionInFlight.current = false;
+    }
+  };
+
+  const cancelNativeRecognition = async () => {
+    if (!nativeReady || !window.notiqNative?.cancelTranscription || cancelPending) return;
+    try {
+      const response = await window.notiqNative.cancelTranscription();
+      if (response.requested) {
+        setCancelPending(true);
+        setStatus('Đang dừng tiến trình MuScriptor, giữ nguyên MIDI đã chỉnh…');
+      } else {
+        setStatus(response.reason || 'MuScriptor đang chuẩn bị âm thanh, chưa khởi chạy AI.');
+      }
+    } catch (cause) {
+      setError('Không thể dừng MuScriptor: ' +
+        (cause instanceof Error ? cause.message : 'Lỗi không xác định'));
     }
   };
 
@@ -1477,7 +1501,20 @@ function App() {
                 aria-label="AI đang xử lý, chưa có phần trăm suy luận chính xác"><div/></div>
               <p className="notiq-ai-stage-message">{status}</p>
               <div className="notiq-ai-card-footer"><span>Đã chạy: {fmt(recognitionElapsed)}</span><span>{recognitionStage === 'preparing' ? 'Giai đoạn 1/2' : 'Giai đoạn 2/2'}</span></div>
-              <small>AI gốc chưa cung cấp % nhận diện chính xác; thanh chuyển động chỉ báo đang xử lý, không phải thời gian còn lại.</small>
+              {nativeReady && analysisEngine === 'muscriptor' && <>
+                {nativeReportedPercent !== null && <small aria-label="Tiến độ báo từ MuScriptor">
+                  MuScriptor báo tiến độ {nativeReportedPercent}%; engine có thể rất lâu mới cập nhật.
+                </small>}
+                {recognitionElapsed >= 90 && <small>
+                  Nếu không có cập nhật lâu, mở Task Manager xem CPU của notiq-muscriptor-cli.exe.
+                  Large chạy CPU có thể rất chậm; không tự kết luận đã treo.
+                </small>}
+                <button type="button" className="notiq-cancel-inference" disabled={cancelPending}
+                  onClick={() => void cancelNativeRecognition()}>
+                  {cancelPending ? 'Đang yêu cầu dừng…' : 'Dừng nhận diện MuScriptor'}
+                </button>
+              </>}
+              <small>Thanh động không phải % hoàn thành. Dừng AI không xóa MIDI đã có.</small>
             </section>
           </div>}
           <div className="workarea">
