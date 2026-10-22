@@ -13,5 +13,6 @@ import './compare-5h.css';
 import './benchmark-5i.css';
 import './web-benchmark-5j.css';
 import './note-quality.css';
+import './benchmark-5m.css';
 
 createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>);
