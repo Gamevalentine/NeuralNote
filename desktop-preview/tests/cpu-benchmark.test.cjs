@@ -27,7 +27,7 @@ test('20, 30 and 60 second benchmark WAV clips preserve exact IEEE Float32 frami
 });
 test('reject invalid clip duration, missing PCM frames and clip beyond end',()=>{
  const full=wav(100);
- assert.throws(()=>makeClip(full,15,0),/20|30|60/);
+ assert.throws(()=>makeClip(full,15,0),/Benchmark chỉ hỗ trợ/);
  assert.throws(()=>makeClip(full,60,50),/vượt/);
  assert.throws(()=>makeClip(full.subarray(0,full.byteLength-4),20,0),/kích thước/);
  const corrupt=full.slice();new DataView(corrupt.buffer).setUint16(20,1,true);
