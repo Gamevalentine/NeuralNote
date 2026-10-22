@@ -1,6 +1,7 @@
 import type {Note} from './audio';
 import type {PedalEvent} from './pedal';
-import {groupFor} from './audio.ts';
+// Same fixed pitch groups as NOTIQ audio.ts, without importing browser-only AI modules.
+const groupFor=(pitch:number)=>pitch<60?'low':pitch<72?'mid':'high';
 /** Derive SoundFont sample release from explicit CC64, without modifying exported
  * note-off timestamps. This approximates sustain by extending the sample voice:
  * it is NOT physical damper resonance or automatic pedal detection.
