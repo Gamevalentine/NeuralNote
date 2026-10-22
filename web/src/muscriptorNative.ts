@@ -15,7 +15,7 @@ export type NativeStatus = {
   downloading: boolean;
 };
 export type NativeProgress = {
-  kind: 'download' | 'transcribe' | 'setup';
+  kind: 'download' | 'transcribe' | 'setup' | 'benchmark';
   percent: number;
   message: string;
 };
@@ -28,6 +28,7 @@ declare global {
       selectModel?: (size: 'small' | 'large') => Promise<NativeStatus>;
       transcribe: (wave: Uint8Array) => Promise<MuScriptorResult>;
       cancelTranscription?: () => Promise<{requested:boolean;reason?:string}>;
+      benchmark?: (data:{wav:Uint8Array;seconds:20|30|60;startSeconds:number;audioPrepareMs:number}) => Promise<import('./nativeBenchmark').BenchmarkResult>;
       pianoStatus?: () => Promise<{available:boolean;installed:boolean;description:string}>;
       installPiano?: () => Promise<{ready:boolean;installedAlready:boolean}>;
       transcribePiano?: (wave:Uint8Array) => Promise<unknown>;
