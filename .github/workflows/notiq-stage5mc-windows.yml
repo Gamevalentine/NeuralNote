@@ -1,0 +1,14 @@
+name: NOTIQ 5MC Windows QA
+on:
+  push:
+    branches: [feature/notiq-stage5mc-resume]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: node --check desktop-preview/main.cjs
