@@ -1,7 +1,7 @@
 name: NOTIQ Stage 5K MIDI Quality Windows Portable
 on:
   push:
-    branches: [feature/notiq-stage5k-reference-benchmark]
+    branches: [feature/notiq-stage5k-note-cleanup-pedal-playback]
     paths:
       - .github/workflows/notiq-stage5k-windows.yml
       - web/src/App.tsx
