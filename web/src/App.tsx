@@ -13,7 +13,9 @@ import type { Note, AudioInfo, PitchGroup } from './audio';
 import { DEFAULT_INSTRUMENTS, INSTRUMENTS, instrumentProgram, playSoundfontNote, prepareInstrument, stopSoundfontNotes } from './soundfont';
 import type { InstrumentId, InstrumentSelection } from './soundfont';
 import { nativeInstrumentPrograms, nativeProgramName } from './muscriptorProtocol';
-import { nativeBridgeAvailable, runMuScriptor } from './muscriptorNative';
+import { nativeBridgeAvailable, runMuScriptor, convertAudioToNativeWav } from './muscriptorNative';
+import {NativeBenchmarkPanel} from './NativeBenchmarkPanel';
+import type {BenchmarkResult} from './nativeBenchmark';
 import {type Comparison} from './compareEngines';
 import {compareOriginalAudio} from './dualEngineNative';
 import {ComparisonPanel} from './ComparisonPanel';
@@ -94,6 +96,13 @@ function App() {
   const [recognitionElapsed, setRecognitionElapsed] = useState(0);
   const [nativeReportedPercent, setNativeReportedPercent] = useState<number | null>(null);
   const [cancelPending, setCancelPending] = useState(false);
+  const [benchOpen,setBenchOpen]=useState(false);
+  const [benchRunning,setBenchRunning]=useState(false);
+  const [benchSeconds,setBenchSeconds]=useState<20|30|60>(20);
+  const [benchOffset,setBenchOffset]=useState(0);
+  const [benchStatus,setBenchStatus]=useState('Chưa đo');
+  const [benchPercent,setBenchPercent]=useState<number|null>(null);
+  const [benchResult,setBenchResult]=useState<BenchmarkResult|null>(null);
   const [status, setStatus] = useState('Chưa tải tệp âm thanh');
   const [error, setError] = useState('');
   const [busyLoading, setBusyLoading] = useState(false);
@@ -298,7 +307,7 @@ function App() {
   };
 
   const setAudio = async (file: Blob, name: string) => {
-    if (phase === 'analyzing' || recognitionInFlight.current || busyLoading) return;
+    if (phase === 'analyzing' || recognitionInFlight.current || benchRunning || busyLoading) return;
     if (!/\.(wav|mp3|flac|ogg|m4a|aac|aiff)$/i.test(name)) {
       setError('Định dạng chưa hỗ trợ. Hãy chọn WAV, MP3, FLAC, OGG hoặc M4A phù hợp với trình duyệt.');
       setPhase('error');
@@ -323,6 +332,10 @@ function App() {
     setTime(0);
     setPedalEvents([]);
     setRawRecognitionNotes(null);
+    setBenchResult(null);
+    setBenchPercent(null);
+    setBenchOffset(0);
+    setBenchStatus('Chưa đo');
     setPedalTrack('*');
     setComparison(null);
     setCompareOpen(false);
@@ -417,7 +430,7 @@ function App() {
   };
 
   const chooseNativeModel = async (size: 'small' | 'large') => {
-    if (!nativeReady || !window.notiqNative?.selectModel || phase === 'analyzing' ||
+    if (!nativeReady || !window.notiqNative?.selectModel || phase === 'analyzing' || benchRunning ||
         nativeDownloading || modelSwitching || busyLoading) return;
     if (size === nativeModelSize) return;
     setModelSwitching(true);
@@ -438,7 +451,7 @@ function App() {
   };
 
   const installPianoV2 = async () => {
-    if (!nativeReady || !window.notiqNative?.installPiano || pianoInstalling ||
+    if (!nativeReady || !window.notiqNative?.installPiano || benchRunning || pianoInstalling ||
         nativeDownloading || phase === 'analyzing') return;
     setPianoInstalling(true);
     setError('');
@@ -545,6 +558,59 @@ function App() {
       setStatus('Không thể nhận diện bài hát · có thể thử lại bằng nút Nhận diện');
     } finally {
       recognitionInFlight.current = false;
+    }
+  };
+
+  const startNativeBenchmark=async()=>{
+    const current=selectionRef.current;
+    const bridge=window.notiqNative;
+    if(!nativeReady||!bridge?.benchmark||!current||!nativeModelInstalled||
+       benchRunning||recognitionInFlight.current||phase==='analyzing'||busyLoading)return;
+    if((info?.duration??0)<benchSeconds ||
+       benchOffset+benchSeconds>(info?.duration??0)){
+      setError('Bài nhạc không đủ dài cho đoạn benchmark. Hãy chọn 20 giây hoặc giảm vị trí bắt đầu.');
+      return;
+    }
+    recognitionInFlight.current=true;
+    setBenchRunning(true);
+    setBenchResult(null);
+    setBenchPercent(null);
+    setError('');
+    const detach=bridge.onProgress(({kind,percent,message})=>{
+      if(kind!=='benchmark')return;
+      setBenchStatus(message);
+      if(message.includes('từ CLI')&&Number.isFinite(percent))setBenchPercent(percent);
+    });
+    try{
+      setBenchStatus('Đang chuẩn hóa bài hát thành WAV Float32 mono 16 kHz…');
+      const start=performance.now();
+      const wav=await convertAudioToNativeWav(current.file,percent=>
+        setBenchStatus('Đang chuẩn bị PCM: '+percent+'%'));
+      const audioPrepareMs=Math.round(performance.now()-start);
+      setBenchStatus('Đang chạy benchmark '+benchSeconds+' giây bằng MuScriptor '+selectedModelLabel+'…');
+      const result=await bridge.benchmark({
+        wav,seconds:benchSeconds,startSeconds:benchOffset,audioPrepareMs
+      });
+      setBenchResult(result);
+      setBenchStatus('Đo hoàn tất và đã lưu số liệu ở '+result.savedRelativePath);
+      setStatus('5M-A hoàn tất benchmark '+benchSeconds+' giây — nốt MIDI đang chỉnh không thay đổi.');
+    }catch(cause){
+      const message=cause instanceof Error?cause.message:'Không thể đo hiệu năng.';
+      setBenchStatus('Benchmark không hoàn tất: '+message);
+      setError(message);
+    }finally{
+      detach();
+      recognitionInFlight.current=false;
+      setBenchRunning(false);
+    }
+  };
+  const cancelNativeBenchmark=async()=>{
+    try{
+      const result=await window.notiqNative?.cancelTranscription?.();
+      setBenchStatus(result?.requested?'Đã gửi yêu cầu dừng MuScriptor; đang dọn file tạm…':
+        'Chưa thể hủy ở bước chuẩn bị âm thanh; không có tiến trình AI đang chạy.');
+    }catch(cause){
+      setError(cause instanceof Error?cause.message:'Không dừng được benchmark.');
     }
   };
 
@@ -1026,6 +1092,10 @@ function App() {
     setTime(0);
     setPedalEvents([]);
     setRawRecognitionNotes(null);
+    setBenchResult(null);
+    setBenchPercent(null);
+    setBenchOffset(0);
+    setBenchStatus('Chưa đo');
     setPedalTrack('*');
     setPhase('empty');
     setError('');
@@ -1205,7 +1275,7 @@ function App() {
         </nav>
         <div className="os-actions">
           <button type="button" className="song-upload-btn"
-            disabled={busyLoading || phase === 'analyzing'}
+            disabled={busyLoading || benchRunning || phase === 'analyzing'}
             onClick={() => fileInput.current?.click()}
             title="Mở bài hát đầy đủ (WAV, MP3, FLAC, M4A… · tối đa 15 phút / 200 MB)">
             <Music size={14}/> Tải bài hát
@@ -1244,7 +1314,7 @@ function App() {
           {nativeReady && analysisEngine==='muscriptor' && <label className="notiq-model-choice">
             <span>Model AI</span>
             <select aria-label="Chọn mô hình AI" value={nativeModelSize}
-              disabled={modelSwitching || nativeDownloading || phase === 'analyzing' || busyLoading}
+              disabled={modelSwitching || nativeDownloading || benchRunning || phase === 'analyzing' || busyLoading}
               onChange={event => void chooseNativeModel(event.target.value as 'small' | 'large')}>
               <option value="small">Small · 209 MB</option>
               <option value="large">Large · 2,74 GB</option>
@@ -1291,9 +1361,26 @@ function App() {
           {fmt(time)} <span>/</span> {fmt(info?.duration || (notes.length ? totalSeconds : 0))}
         </div>
         {selection && <button type="button" className="notiq-transport-close" aria-label="Đóng bài hát"
-          disabled={phase === 'analyzing' || busyLoading} onClick={reset}>
+          disabled={phase === 'analyzing' || benchRunning || busyLoading} onClick={reset}>
           <X size={14}/><span>Đóng bài</span></button>}
       </div>
+      {nativeReady&&selection&&<section className="notiq-5m-switch" aria-label="Bộ đo hiệu năng MuScriptor">
+        <strong>AI 5M-A</strong>
+        <button type="button" aria-label="Mở benchmark CPU" aria-expanded={benchOpen}
+          onClick={()=>setBenchOpen(v=>!v)}>{benchOpen?'Ẩn benchmark':'Đo tốc độ CPU · 20/30/60 giây'}</button>
+        <small>Thử model {selectedModelLabel}, giữ nguyên tất cả nốt đã chỉnh</small>
+      </section>}
+      {nativeReady&&selection&&benchOpen&&<NativeBenchmarkPanel
+        running={benchRunning} status={benchStatus} percent={benchPercent}
+        seconds={benchSeconds} setSeconds={v=>{setBenchSeconds(v);setBenchOffset(0)}}
+        offset={benchOffset} setOffset={setBenchOffset}
+        duration={info?.duration??0} model={selectedModelLabel}
+        result={benchResult}
+        canRun={nativeModelInstalled&&!busyLoading&&!pianoInstalling&&!modelSwitching&&
+          !nativeDownloading&&phase!=='analyzing'}
+        onRun={()=>void startNativeBenchmark()}
+        onCancel={()=>void cancelNativeBenchmark()}
+      />}
       {nativeReady && selection && <section className="notiq-5h-controls" aria-label="So sánh AI Piano">
         <strong>AI 5H</strong>
         <button type="button" aria-label="So sánh hai AI" onClick={()=>void runComparison()}
@@ -1404,7 +1491,7 @@ function App() {
           : 'Bản Web chưa kết nối AI MuScriptor.'} Model chính thức, CC BY-NC 4.0 (phi thương mại). Không có checkpoint MuScriptor 4 GB được xác minh.</p>
         {nativeReady && <label>Chọn model nhận diện
           <select aria-label="Model nhận diện chất lượng" value={nativeModelSize}
-            disabled={modelSwitching || nativeDownloading || phase === 'analyzing' || busyLoading}
+            disabled={modelSwitching || nativeDownloading || benchRunning || phase === 'analyzing' || busyLoading}
             onChange={event => void chooseNativeModel(event.target.value as 'small' | 'large')}>
             <option value="small">Small · 209 MB (nhanh hơn)</option>
             <option value="large">Large · 2,74 GB (thử nghiệm chất lượng cao, CPU rất chậm)</option>
