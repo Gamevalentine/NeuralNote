@@ -1,6 +1,6 @@
 import type {Note} from './audio';
 import type {PedalEvent} from './pedal';
-import {groupFor} from './audio';
+import {groupFor} from './audio.ts';
 /** Derive SoundFont sample release from explicit CC64, without modifying exported
  * note-off timestamps. This approximates sustain by extending the sample voice:
  * it is NOT physical damper resonance or automatic pedal detection.
