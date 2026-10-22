@@ -39,7 +39,7 @@ try{
  const valid=Buffer.from(reference.toArray());
  await section.locator('input[aria-label="Nạp MIDI chuẩn Web"]').setInputFiles({name:'my-piano.mid',mimeType:'audio/midi',buffer:valid});
  await section.getByText('my-piano.mid').waitFor();
- assert((await section.innerText()).includes('chưa nhận diện'),'Must not fabricate MIDI scores when no AI output exists');
+ assert((await section.innerText()).includes('Đã nhận MIDI chuẩn'),'UI must explain that a recognized note stream is still required');
  await section.getByRole('combobox',{name:'Chế độ đánh giá Web'}).selectOption('piano');
  const second=Buffer.from(reference.toArray());
  await section.locator('input[aria-label="Nạp MIDI ứng viên Web"]').setInputFiles({name:'other-export.mid',mimeType:'audio/midi',buffer:second});
