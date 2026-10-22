@@ -12,6 +12,7 @@ const native = Object.freeze({
   selectModel: (id) => ipcRenderer.invoke('notiq:select-model', id),
   transcribe: (waveBytes) => ipcRenderer.invoke('notiq:transcribe', waveBytes),
   cancelTranscription: () => ipcRenderer.invoke('notiq:cancel-transcription'),
+  benchmark: (payload) => ipcRenderer.invoke('notiq:benchmark', payload),
   onProgress: (handler) => {
     if (typeof handler !== 'function') return () => {};
     const listener = (_event, message) => {

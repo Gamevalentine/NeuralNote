@@ -1,0 +1,86 @@
+name: NOTIQ 5M-A Windows CPU Benchmark
+on:
+  push:
+    branches: [feature/notiq-stage5m-a-cpu-benchmark]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  windows-benchmark:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify WAV clipping, metrics parsing, JS syntax and original tests
+        shell: pwsh
+        run: |
+          node --test desktop-preview/tests/cpu-benchmark.test.cjs desktop-preview/tests/native-progress.test.cjs desktop-preview/tests/models.test.cjs
+          if ($LASTEXITCODE -ne 0) { throw 'Benchmark/parser/model tests failed' }
+          node --check desktop-preview/main.cjs
+          node --check desktop-preview/benchmark-native.cjs
+          node --check desktop-preview/process-metrics.cjs
+          node --check desktop-preview/wav-benchmark.cjs
+          node --check desktop-preview/repack-5m-a.cjs
+          if ($LASTEXITCODE -ne 0) { throw 'Native benchmark JS syntax failed' }
+      - name: Validate actual Windows process RAM and CPU sampling
+        shell: pwsh
+        run: |
+          node -e "require('./desktop-preview/process-metrics.cjs').windowsProcessSample(process.pid).then(x=>{if(!x || !(x.workingSetBytes>0)) process.exit(1); console.log('WINDOWS_PROCESS_SAMPLE_OK',JSON.stringify(x))})"
+          if ($LASTEXITCODE -ne 0) { throw 'Windows Get-Process sampler unavailable' }
+      - name: Compile 5M-A TypeScript and preserve 5L MIDI tests
+        working-directory: web
+        shell: pwsh
+        run: |
+          npm install --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw 'Web dependencies failed' }
+          npm run build
+          if ($LASTEXITCODE -ne 0) { throw '5M-A renderer failed TypeScript' }
+          node --experimental-strip-types --test tests/reference-benchmark.test.mts tests/note-quality.test.mts
+          if ($LASTEXITCODE -ne 0) { throw 'MIDI benchmark regression failed' }
+      - uses: actions/download-artifact@v4
+        with:
+          name: NOTIQ-Stage5L-Large-Recovery-Windows-Preview
+          repository: Gamevalentine/NeuralNote
+          run-id: 39760745208
+          github-token: ${{ github.token }}
+          path: notiq-stage5ma-base
+      - name: Repack verified original native MuScriptor and independent benchmark GUI
+        shell: pwsh
+        run: |
+          npm install --prefix package-tools --no-audit --no-fund @electron/asar@3
+          if ($LASTEXITCODE -ne 0) { throw 'ASAR install failed' }
+          $base=(Resolve-Path 'notiq-stage5ma-base').Path
+          $asar=Get-ChildItem $base -File -Recurse -Filter 'app.asar' | Select-Object -First 1
+          if (-not $asar) { throw 'Electron ASAR missing' }
+          $res=Split-Path $asar.FullName -Parent
+          $cli=Join-Path $res 'bridge-bin/notiq-muscriptor-cli.exe'
+          if (-not (Test-Path $cli)) { throw 'Original native CLI missing' }
+          $self=& $cli --self-test
+          if ($LASTEXITCODE -ne 0 -or $self -notmatch '"ready":true') { throw 'MuScriptor original native self-test failed' }
+          node desktop-preview/repack-5m-a.cjs "$($asar.FullName)" "$((Resolve-Path web/dist).Path)"
+          if ($LASTEXITCODE -ne 0) { throw 'Benchmark ASAR repack failed' }
+          $appRoot=Split-Path $res -Parent
+          @(
+            'NOTIQ Stage 5M-A CPU benchmark -- experimental Windows Portable'
+            'Extract entire app to E: or your chosen disk and use existing compatible models folder.'
+            'Benchmark 20/30/60-second source WAV windows. Real MuScriptor model is NOT bundled.'
+            'Measures model SHA256, model load, inference, wall time, Windows-process RAM and CPU.'
+            'Results JSON saved in NOTIQ-Data/benchmarks beside the app. No CMD needed.'
+            'Do not run full-song Large CPU inference first; start with a 20-second clip.'
+            'The original C++ MuScriptor engine and thread count (2) remain UNCHANGED.'
+            'No acceleration or higher accuracy is claimed. Metrics are local-only.'
+          ) -join [Environment]::NewLine | Set-Content -Path (Join-Path $appRoot 'README-STAGE5M-A.txt')
+          Write-Host 'NOTIQ_STAGE5MA_WINDOWS_BENCHMARK_PACKAGE_PASS'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NOTIQ-Stage5M-A-CPU-Benchmark-Windows-Preview
+          path: notiq-stage5ma-base/
+          retention-days: 7
+          compression-level: 6
+          if-no-files-found: error

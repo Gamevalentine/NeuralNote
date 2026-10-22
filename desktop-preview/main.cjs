@@ -15,6 +15,7 @@ const { spawn } = require('node:child_process');
 const { MODELS, getModel } = require('./models.cjs');
 const { hasVerifiedModel, downloadVerifiedModel } = require('./model-download.cjs');
 const { createNativeProgressParser } = require('./native-progress.cjs');
+const { runBenchmark } = require('./benchmark-native.cjs');
 const pianoRuntime = require('./transkun-runtime.cjs');
 const pianoRunnerSource = fs.readFileSync(path.join(__dirname,'transkun-runner.py'),'utf8');
 const portableDir = path.dirname(process.execPath);
@@ -39,6 +40,7 @@ try {
 let window = null;
 let downloadJob = null;
 let transcriptionJob = null;
+let benchmarkJob = null;
 let activeMuScriptor = null;
 let pianoJob = null;
 let pianoSetupJob = null;
@@ -63,12 +65,13 @@ function bridgeStatus() {
     modelLocation: 'models/' + model.filename,
     availableModels: Object.keys(MODELS),
     license: 'CC BY-NC 4.0; phi thương mại',
-    busy: !!transcriptionJob,
+    busy: !!transcriptionJob || !!benchmarkJob,
+    benchmarkBusy: !!benchmarkJob,
     downloading: !!downloadJob,
   };
 }
 function selectModel(id) {
-  if (downloadJob || transcriptionJob || pianoJob || pianoSetupJob) throw Error('Hãy kết thúc tải mô hình/nhận diện trước khi đổi model.');
+  if (downloadJob || transcriptionJob || benchmarkJob || pianoJob || pianoSetupJob) throw Error('Hãy kết thúc tải mô hình/nhận diện trước khi đổi model.');
   // Check against the whitelist before persisting; never accept a file path.
   const selected=getModel(id);
   selectedModel=selected.id;
@@ -76,6 +79,7 @@ function selectModel(id) {
   return bridgeStatus();
 }
 async function downloadModel() {
+  if(benchmarkJob)throw Error('Hãy dừng benchmark trước khi tải model.');
   if(downloadJob) return downloadJob;
   const selected=getModel(selectedModel);
   const filename=path.join(modelsDir,selected.filename);
@@ -105,7 +109,7 @@ function cancelMuScriptor() {
   return { requested: true };
 }
 async function transcribeViaNative(input) {
-  if (transcriptionJob || pianoJob) throw new Error('Engine nhận diện khác đang xử lý một bản nhạc.');
+  if (transcriptionJob || pianoJob || benchmarkJob) throw new Error('Engine nhận diện khác đang xử lý một bản nhạc.');
   if (!bridgeStatus().available) throw new Error('Không tìm thấy MuScriptor native CLI trong bản Windows này.');
   const model=getModel(selectedModel);
   const modelPath=path.join(modelsDir,model.filename);
@@ -194,13 +198,53 @@ async function transcribeViaNative(input) {
   finally{transcriptionJob=null;if(activeMuScriptor===job)activeMuScriptor=null;}
 }
 
+async function benchmarkViaNative(payload) {
+  if(benchmarkJob || transcriptionJob || pianoJob || pianoSetupJob || downloadJob)
+    throw Error('Một tác vụ AI khác đang hoạt động. Dừng hoặc hoàn tất trước khi benchmark.');
+  if(!bridgeStatus().available || !bridgeStatus().modelInstalled)
+    throw Error('Cần mô hình MuScriptor đã tải và ứng dụng Windows có native CLI.');
+  const model=getModel(selectedModel);
+  const job={cancelled:false,child:null,percent:0};
+  activeMuScriptor=job; // shared scoped cancellation with normal inference
+  const task=(async()=>{
+    const reportBenchmark=(message,percent)=>{
+      job.percent=percent;
+      report('benchmark',percent,message);
+    };
+    const results=await runBenchmark({
+      wav:payload?.wav,seconds:payload?.seconds,startSeconds:payload?.startSeconds??0,
+      model,modelPath:path.join(modelsDir,model.filename),
+      bridgeBinary,dataDir,job,verifyModel:hasVerifiedModel,
+      onProgress:reportBenchmark,
+    });
+    if(job.cancelled)throw Error('Đã hủy benchmark, không lưu kết quả.');
+    results.audioPrepareMs=Number.isFinite(payload?.audioPrepareMs)
+      ?Math.max(0,Math.min(3600000,Math.round(payload.audioPrepareMs))):null;
+    const benchmarkDir=path.join(dataDir,'benchmarks');
+    await fsp.mkdir(benchmarkDir,{recursive:true});
+    const filename='notiq-'+model.id+'-'+results.clipSeconds+'s-'+
+      new Date().toISOString().replace(/[^0-9]/g,'').slice(0,14)+'.json';
+    const file=path.join(benchmarkDir,filename);
+    // Only time/CPU/RAM/notes count. Never write source audio or recognized notes.
+    await fsp.writeFile(file,JSON.stringify(results,null,2),'utf8');
+    reportBenchmark('Benchmark hoàn tất. Đã lưu kết quả trong NOTIQ-Data/benchmarks.',100);
+    return {...results,savedRelativePath:'NOTIQ-Data/benchmarks/'+filename};
+  })();
+  benchmarkJob=task;
+  try{return await task}
+  finally{
+    benchmarkJob=null;
+    if(activeMuScriptor===job)activeMuScriptor=null;
+  }
+}
+
 async function pianoStatus(){
   return {available:process.platform==='win32',installed:await pianoRuntime.installed(dataDir),
     description:'Transkun V2 Piano CPU · MIT; checkpoint chính thức đi kèm gói PyPI'};
 }
 async function installPiano() {
   if(pianoSetupJob)return pianoSetupJob;
-  if(transcriptionJob || pianoJob || downloadJob)throw Error('Hãy hoàn tất tác vụ đang chạy.');
+  if(transcriptionJob || benchmarkJob || pianoJob || downloadJob)throw Error('Hãy hoàn tất tác vụ đang chạy.');
   pianoSetupJob=(async()=>{
     const result=await pianoRuntime.setup(dataDir,pianoRunnerSource,message=>
       report('setup',0,'Transkun V2: '+message));
@@ -210,7 +254,7 @@ async function installPiano() {
   try{return await pianoSetupJob}finally{pianoSetupJob=null}
 }
 async function transcribePiano(input) {
-  if(pianoJob || transcriptionJob || downloadJob || pianoSetupJob)
+  if(pianoJob || transcriptionJob || benchmarkJob || downloadJob || pianoSetupJob)
     throw Error('Một tác vụ AI khác đang chạy. Hãy hoàn tất trước.');
   const raw=input instanceof Uint8Array?input:new Uint8Array(input);
   if(raw.byteLength<44||raw.byteLength>15*60*16000*4+44 ||
@@ -255,6 +299,7 @@ app.whenReady().then(() => {
   ipcMain.handle('notiq:select-model', (_event, id) => selectModel(id));
   ipcMain.handle('notiq:transcribe', (_event, bytes) => transcribeViaNative(bytes));
   ipcMain.handle('notiq:cancel-transcription', () => cancelMuScriptor());
+  ipcMain.handle('notiq:benchmark', (_event, payload) => benchmarkViaNative(payload));
   ipcMain.handle('notiq:piano-status', () => pianoStatus());
   ipcMain.handle('notiq:piano-install', () => installPiano());
   ipcMain.handle('notiq:piano-transcribe', (_event, bytes) => transcribePiano(bytes));
