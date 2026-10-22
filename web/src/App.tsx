@@ -511,7 +511,7 @@ function App() {
       ? 'Transkun V2 đang nhận diện Piano bằng CPU…'
       : 'MuScriptor C++ (' + (nativeReady ? selectedModelLabel : 'Small Web') + ') đang nhận diện bài hát…');
     try {
-      const update = ({kind, percent, message}: {kind: 'download' | 'transcribe' | 'setup'; percent: number; message: string}) => {
+      const update = ({kind, percent, message}: {kind: 'download' | 'transcribe' | 'setup' | 'benchmark'; percent: number; message: string}) => {
         if (kind === 'transcribe') {
           setStatus(message);
           setProgress(percent);
@@ -572,6 +572,7 @@ function App() {
       return;
     }
     recognitionInFlight.current=true;
+    stop(); // prevent SoundFont playback from contaminating CPU benchmark measurements
     setBenchRunning(true);
     setBenchResult(null);
     setBenchPercent(null);
