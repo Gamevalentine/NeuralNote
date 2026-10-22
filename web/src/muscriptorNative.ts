@@ -27,6 +27,7 @@ declare global {
       downloadModel: () => Promise<NativeStatus>;
       selectModel?: (size: 'small' | 'large') => Promise<NativeStatus>;
       transcribe: (wave: Uint8Array) => Promise<MuScriptorResult>;
+      cancelTranscription?: () => Promise<{requested:boolean;reason?:string}>;
       pianoStatus?: () => Promise<{available:boolean;installed:boolean;description:string}>;
       installPiano?: () => Promise<{ready:boolean;installedAlready:boolean}>;
       transcribePiano?: (wave:Uint8Array) => Promise<unknown>;
