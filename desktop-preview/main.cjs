@@ -158,7 +158,11 @@ async function transcribeViaNative(input) {
   const modelPath=path.join(modelsDir,model.filename);
   if (!bridgeStatus().modelInstalled)
     throw new Error('Chưa tải MuScriptor '+model.label+'. Hãy chọn Tải mô hình trước.');
-  const raw = input instanceof Uint8Array ? input : new Uint8Array(input);
+  const resumable=!!(input && typeof input==='object' && input.resumable===true);
+  const supplied=resumable?input.wav:input;
+  if(!supplied || !(supplied instanceof Uint8Array) && !(supplied instanceof ArrayBuffer))
+    throw Error('Dữ liệu âm thanh không hợp lệ.');
+  const raw=supplied instanceof Uint8Array?supplied:new Uint8Array(supplied);
   if (raw.byteLength < 44 || raw.byteLength > 15*60*16000*4+4096)
     throw new Error('MuScriptor hỗ trợ tệp đã chuyển đổi tối đa 15 phút.');
   if (String.fromCharCode(...raw.subarray(0,4)) !== 'RIFF')
@@ -172,6 +176,13 @@ async function transcribeViaNative(input) {
     if (!(await hasVerifiedModel(model,modelPath)))
       throw new Error('SHA-256 model '+model.label+' không hợp lệ. Hãy tải lại bản chính thức.');
     if(job.cancelled)throw new Error('Bạn đã hủy nhận diện trước khi khởi động AI.');
+    // Keep only an atomic resume checkpoint, never the user's source WAV.
+    const cpuThreads=cpuThreadCapabilities().supported?selectedCpuThreads:2;
+    const digest=resumable?createHash('sha256').update(raw).update(':')
+      .update(model.sha256).update(':').update(String(cpuThreads)).digest('hex'):null;
+    const checkpointDir=path.join(dataDir,'long-song-checkpoints');
+    const checkpointPath=resumable?path.join(checkpointDir,digest+'.cp'):null;
+    if(resumable)await fsp.mkdir(checkpointDir,{recursive:true});
     const workRoot=path.join(dataDir,'bridge-work');
     await fsp.mkdir(workRoot,{recursive:true});
     const work=await fsp.mkdtemp(path.join(workRoot,'job-'));
@@ -184,8 +195,13 @@ async function transcribeViaNative(input) {
       await new Promise((resolve,reject)=>{
         let stderr='',stdout='';
         let settled=false;
-        const threads=cpuThreadCapabilities().supported ? selectedCpuThreads : 2;
-        const args=cpuThreadCapabilities().supported ? [audio,modelPath,output,'--threads='+threads]:[audio,modelPath,output];
+        const threads=cpuThreads;
+        const args=cpuThreadCapabilities().supported
+          ? [audio,modelPath,output,'--threads='+threads]:[audio,modelPath,output];
+        if(resumable){
+          if(!cpuThreadCapabilities().supported)throw Error('Cần bản MuScriptor mới có checkpoint hỗ trợ.');
+          args.push('--checkpoint='+checkpointPath);
+        }
         const child=spawn(bridgeBinary,args,{
           shell:false,windowsHide:true,stdio:['ignore','pipe','pipe'],cwd:work,
         });
@@ -207,6 +223,24 @@ async function transcribeViaNative(input) {
             : 'MuScriptor đang chạy (tổng '+elapsed+' giây, cập nhật cuối '+seconds+' giây trước). Bạn có thể Dừng AI.';
           report('transcribe',job.percent,label);
         },15000);
+        let checkpointLines='';
+        const parseCheckpoints=text=>{
+          checkpointLines=(checkpointLines+text).slice(-4096);
+          let at;
+          while((at=checkpointLines.indexOf('\n'))!==-1){
+            const line=checkpointLines.slice(0,at).trim();
+            checkpointLines=checkpointLines.slice(at+1);
+            const update=/^NOTIQ_CHECKPOINT (\d+) ([0-9]+(?:\.[0-9]+)?)$/.exec(line);
+            if(update && resumable){
+              report('checkpoint',job.percent,
+                'Đã lưu '+update[1]+' nốt · đã xác nhận tới '+update[2]+
+                ' giây. Có thể Dừng và tiếp tục từ checkpoint.');
+            }
+            const resumed=/^NOTIQ_RESUMED_NOTES (\d+)$/.exec(line);
+            if(resumed && resumable)report('checkpoint',job.percent,
+              'Đang tiếp tục bài cũ từ checkpoint, giữ nguyên '+resumed[1]+' nốt đã xác nhận.');
+          }
+        };
         const progressParser=createNativeProgressParser(pct=>{
           job.percent=pct;
           job.lastProgressAt=Date.now();
@@ -218,6 +252,7 @@ async function transcribeViaNative(input) {
           const value=String(chunk);
           stderr=(stderr+value).slice(-9000);
           progressParser.push(value);
+          parseCheckpoints(value);
         });
         child.stdout.on('data',chunk=>{stdout=(stdout+String(chunk)).slice(-1500);});
         child.once('error',error=>finish(error));
@@ -346,6 +381,19 @@ app.whenReady().then(() => {
   ipcMain.handle('notiq:select-model', (_event, id) => selectModel(id));
   ipcMain.handle('notiq:apply-cpu-threads', (_event,n) => applyCpuThreads(n));
   ipcMain.handle('notiq:transcribe', (_event, bytes) => transcribeViaNative(bytes));
+  ipcMain.handle('notiq:clear-checkpoint', async (_event, supplied)=>{
+    if(transcriptionJob||benchmarkJob||pianoJob)throw Error('Hãy dừng AI trước khi xóa checkpoint.');
+    const raw=supplied instanceof Uint8Array?supplied:new Uint8Array(supplied);
+    if(raw.byteLength<44||raw.byteLength>15*60*16000*4+4096)
+      throw Error('WAV không hợp lệ.');
+    const model=getModel(selectedModel);
+    const cpu=cpuThreadCapabilities().supported?selectedCpuThreads:2;
+    const digest=createHash('sha256').update(raw).update(':').update(model.sha256)
+      .update(':').update(String(cpu)).digest('hex');
+    const file=path.join(dataDir,'long-song-checkpoints',digest+'.cp');
+    try{await fsp.unlink(file);return {cleared:true}}
+    catch(e){if(e?.code==='ENOENT')return {cleared:false};throw e}
+  });
   ipcMain.handle('notiq:cancel-transcription', () => cancelMuScriptor());
   ipcMain.handle('notiq:benchmark', (_event, payload) => benchmarkViaNative(payload));
   ipcMain.handle('notiq:piano-status', () => pianoStatus());
