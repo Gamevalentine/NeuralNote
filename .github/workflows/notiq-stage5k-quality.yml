@@ -1,0 +1,36 @@
+name: NOTIQ Stage 5K Audio Quality Regression
+on:
+  push:
+    branches: [feature/notiq-stage5k-note-cleanup-pedal-playback]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install NOTIQ Web
+        working-directory: web
+        run: npm install --no-fund --no-audit
+      - name: Typecheck and bundle 5K preview
+        working-directory: web
+        run: npm run build
+      - name: Note-quality and CC64 sustain timing
+        working-directory: web
+        run: node --experimental-strip-types --test tests/note-quality.test.mts
+      - name: All prior recognition evaluation, DAW, Piano, SoundFont regression tests
+        working-directory: web
+        run: |
+          node --experimental-strip-types --test tests/reference-benchmark.test.mts tests/web-benchmark-5j.test.mts tests/compare-engines.test.mts
+          npm run test:daw
+          npm run test:piano
+          npm run test:soundfont
+      - name: Consent-gated future server remains isolated
+        run: node --test notiq-ai-core/remote/tests/protocol.test.mjs

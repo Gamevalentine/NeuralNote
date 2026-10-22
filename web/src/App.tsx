@@ -20,7 +20,9 @@ import {ComparisonPanel} from './ComparisonPanel';
 import {ComparisonOverlay} from './ComparisonOverlay';
 import {BenchmarkPanel} from './BenchmarkPanel';
 import {WebBenchmarkPanel} from './WebBenchmarkPanel';
-import {readReferenceMidi,benchmarkComparison,type MidiReference,type MusicMode} from './referenceBenchmark';
+import {previewOverlapCleanup} from './noteQuality';
+import {soundingDurationWithPedal} from './pedalPlayback';
+import {readReferenceMidi,benchmarkComparison,scoreAgainstReference,type MidiReference,type MusicMode} from './referenceBenchmark';
 import { runPianoV2 } from './transkunNative';
 import { webAiEnabled, installWebModel, recognizeWeb, closeWebModel } from './muscriptorWebLocal';
 
@@ -96,6 +98,23 @@ function App() {
   const [zoom, setZoom] = useState(1);
   const [bpm, setBpm] = useState(120);
   const [pedalEvents, setPedalEvents] = useState<PedalEvent[]>([]);
+  const [rawRecognitionNotes, setRawRecognitionNotes] = useState<Note[]|null>(null);
+  const noteCleanup=useMemo(()=>previewOverlapCleanup(notes),[notes]);
+  const overlapBenchmark=useMemo(()=>{
+    if(!referenceMidi || !noteCleanup.merged || !notes.length)return null;
+    const isPiano=musicMode==='piano' || (musicMode==='guided' &&
+      referenceMidi.notes.every(n=>n.program>=0&&n.program<8));
+    const ref=isPiano?referenceMidi.notes.filter(n=>n.program>=0&&n.program<8):referenceMidi.notes;
+    if(!ref.length)return null;
+    const byMode=(array:Note[])=>isPiano
+      ?array.filter(n=>n.program===undefined||n.program>=0&&n.program<8):array;
+    try{
+      const before=scoreAgainstReference(ref,byMode(notes),referenceOffset);
+      const after=scoreAgainstReference(ref,byMode(noteCleanup.notes),referenceOffset);
+      return {before,after,change:Math.round((after.f1-before.f1)*10000)/100};
+    }catch{return null}
+  },[referenceMidi,noteCleanup,notes,musicMode,referenceOffset]);
+
   const [pedalTrack, setPedalTrack] = useState('*');
   // Transcribed notes are the default listening target; the original recording
   // is available explicitly from the playback selector.
@@ -301,6 +320,7 @@ function App() {
     setInfo(null);
     setTime(0);
     setPedalEvents([]);
+    setRawRecognitionNotes(null);
     setPedalTrack('*');
     setComparison(null);
     setCompareOpen(false);
@@ -492,6 +512,7 @@ function App() {
         : await recognizeWeb(target.file, update);
       // All replacement occurs only after the selected engine returns validated
       // output. Failed V2 never deletes the existing MuScriptor MIDI.
+      setRawRecognitionNotes(copyNotes(detected));
       clearHistory(detected);
       setPedalEvents(piano?.pedalEvents || []);
       // Display Piano CC64 points on its GM Piano track immediately; the
@@ -809,13 +830,13 @@ function App() {
             (Number.isFinite(n.amplitude) ? n.amplitude : 0.7874015748) / 0.7874015748));
           // The previous 0.85s cap cut off long held notes during MIDI preview.
           // SoundFont player's existing safe maximum is 8 seconds.
-          void previewNote(n.pitchMidi, Math.min(8, n.durationSeconds),
+          void previewNote(n.pitchMidi, soundingDurationWithPedal(n,pedalEvents),
             Math.min(1, level * masterVolume * velocityGain), n.program);
         }
       }
     }, 45);
     return () => window.clearInterval(interval);
-  }, [playing, notes, playbackMode, activeGroups, gain, masterVolume, info, usesMidiClock, totalSeconds, loop, instrumentSelection, nativeGain, nativeMuted, nativeSolo]);
+  }, [playing, notes, playbackMode, activeGroups, gain, masterVolume, info, usesMidiClock, totalSeconds, loop, instrumentSelection, nativeGain, nativeMuted, nativeSolo, pedalEvents]);
 
   useEffect(() => {
     if (audioEl.current) audioEl.current.volume = playbackMode === 'midi' ? 0 : masterVolume * (playbackMode === 'mix' ? 0.65 : 1);
@@ -915,13 +936,26 @@ function App() {
       mid: instrumentProgram(instrumentSelection.mid),
       low: instrumentProgram(instrumentSelection.low) },
     new Set<PitchGroup>(['high', 'mid', 'low'])).filter(track => !track.isDrum);
+  const applyOverlapCleanup = () => {
+    if(phase==='analyzing'||!notesRef.current.length)return;
+    const updated=previewOverlapCleanup(notesRef.current);
+    if(!updated.merged){setStatus('Không có nốt chồng cùng cao độ/track; bản MIDI không thay đổi.');return}
+    commitNotes(updated.notes);
+    setStatus('Đã gộp '+updated.merged+' nốt chồng trong '+updated.affectedTracks+
+      ' track. Bấm Hoàn tác để khôi phục.');
+  };
+  const restoreRawRecognition = () => {
+    if(phase==='analyzing'||!rawRecognitionNotes)return;
+    commitNotes(copyNotes(rawRecognitionNotes));
+    setStatus('Đã khôi phục nốt nguyên bản do AI nhận diện, chưa qua sửa nốt chồng.');
+  };
   const writePedalPoint = (value: 0 | 127) => {
     if (!notes.length || phase === 'analyzing') return;
     const at = Math.max(0, Math.min(info?.duration || totalSeconds, time));
     setPedalEvents(previous => addPedalPoint(previous, {
       trackKey: pedalTrack, timeSeconds: at, value,
     }));
-    setStatus((value === 127 ? 'Đạp' : 'Nhả') + ' pedal CC64 ở ' + fmt(at) + ' · Chỉ ghi vào MIDI khi xuất.');
+    setStatus((value === 127 ? 'Đạp' : 'Nhả') + ' CC64 tại ' + fmt(at) + ' · MIDI giữ note-off gốc; SoundFont kéo tiếng khi có nhả pedal.');
   };
   const exportFile = (kind: 'multitrack' | 'bundle' = 'multitrack', scope: 'all' | 'audible' = 'all') => {
     const source = scope === 'all' ? notes : visibleNotes;
@@ -967,6 +1001,7 @@ function App() {
     clearHistory();
     setTime(0);
     setPedalEvents([]);
+    setRawRecognitionNotes(null);
     setPedalTrack('*');
     setPhase('empty');
     setError('');
@@ -1251,6 +1286,27 @@ function App() {
       {comparison&&compareOpen&&nativeReady&&<ComparisonPanel result={comparison}
         onUse={useComparedResult} onSeek={seekTo} onClose={()=>setCompareOpen(false)}
         disabled={phase==='analyzing'} canRestore={!!comparisonBaseline}/>}
+      {notes.length>0&&aiAvailable&&<section className="notiq-quality-controls"
+        aria-label="Tối ưu nốt và pedal">
+        <strong>Chất lượng MIDI</strong>
+        <button type="button" aria-label="Xử lý nốt chồng cùng cao độ"
+          disabled={phase==='analyzing'||noteCleanup.merged===0} onClick={applyOverlapCleanup}>
+          Gộp {noteCleanup.merged} nốt chồng (xem trước)
+        </button>
+        <button type="button" aria-label="Khôi phục nốt AI gốc"
+          disabled={!rawRecognitionNotes||phase==='analyzing'} onClick={restoreRawRecognition}>
+          Khôi phục nốt AI gốc
+        </button>
+        {overlapBenchmark&&<span className="notiq-overlap-score" aria-label="F1 trước và sau gộp nốt">
+          F1 theo MIDI chuẩn: trước {(overlapBenchmark.before.f1*100).toFixed(1)}% →
+          sau {(overlapBenchmark.after.f1*100).toFixed(1)}% ({overlapBenchmark.change>=0?'+':''}{overlapBenchmark.change.toFixed(2)} điểm %)
+        </span>}
+        <small>Chỉ gộp nốt chồng cùng cao độ và nhạc cụ; không tự sửa pitch/thiếu nốt.
+          {overlapBenchmark?.change!==undefined&&overlapBenchmark.change<0?
+            ' MIDI tham chiếu đang cho thấy F1 giảm nếu gộp: chỉ áp dụng sau khi nghe kỹ.' :
+            ' Nếu có MIDI chuẩn, kiểm F1 trước/sau rồi mới áp dụng.'}
+          Có thể hoàn tác. CC64 chỉ kéo dài sample khi có điểm nhả, không mô phỏng cộng hưởng thật.</small>
+      </section>}
       {selection && (nativeReady || browserAi) && <section className="notiq-5i-toggle">
         <strong>AI 5I</strong>
         <button type="button" aria-label="Mở kiểm tra MIDI chuẩn 5I"
@@ -1495,7 +1551,7 @@ function App() {
               onClick={() => writePedalPoint(0)}>Nhả tại {fmt(time)}</button>
             <button type="button" disabled={!pedalEvents.length || phase === 'analyzing'}
               onClick={() => setPedalEvents([])}>Xóa pedal</button>
-            <small>{pedalEvents.length} điểm · Đặt vị trí bằng thước thời gian. CC64 chỉ có trong MIDI xuất, chưa mô phỏng bằng SoundFont.</small>
+            <small>{pedalEvents.length} điểm · Đặt vị trí bằng thước thời gian. CC64 xuất MIDI và giữ tiếng SoundFont đến điểm nhả (tối đa 8 giây); không mô phỏng cộng hưởng piano thật.</small>
           </div>
           <div className="editor-status">
             <span>{status}</span>
