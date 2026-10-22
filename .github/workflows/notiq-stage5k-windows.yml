@@ -68,7 +68,7 @@ jobs:
           $test=& $native --self-test
           if ($LASTEXITCODE -ne 0 -or $test -notmatch '"ready":true') {throw 'MuScriptor native CLI self-test failed'}
           node desktop-preview/repack-5g.cjs "$($asar.FullName)" "$((Resolve-Path 'web/dist').Path)"
-          if ($LASTEXITCODE -ne 0) {throw 'Failed to pack 5I renderer'}
+          if ($LASTEXITCODE -ne 0) {throw 'Failed to pack 5K renderer'}
           $exeDir=Split-Path $resources -Parent
           $exe=Get-ChildItem $exeDir -File -Filter '*.exe' | Select-Object -First 1
           if (-not $exe) {throw 'NOTIQ portable exe missing'}
@@ -87,8 +87,8 @@ jobs:
             'Pedal CC64 extends SoundFont sample duration to release (max 8 seconds); no acoustic resonance or pedal AI invention.'
             'This is NOT a trained AI model improvement. Use matching MIDI reference for before/after F1 validation.'
             'QA results and reviewer approval required before any production merge.'
-          ) -join [Environment]::NewLine | Set-Content -Path (Join-Path $exeDir 'README-STAGE5I.txt')
-          Write-Host 'NOTIQ_STAGE5I_WINDOWS_PACKAGING_PASS'
+          ) -join [Environment]::NewLine | Set-Content -Path (Join-Path $exeDir 'README-STAGE5K.txt')
+          Write-Host 'NOTIQ_STAGE5K_WINDOWS_PACKAGING_PASS'
       - uses: actions/upload-artifact@v4
         with:
           name: NOTIQ-Stage5K-Quality-Windows-Preview
