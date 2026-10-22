@@ -14,10 +14,11 @@ const native = Object.freeze({
   cancelTranscription: () => ipcRenderer.invoke('notiq:cancel-transcription'),
   benchmark: (payload) => ipcRenderer.invoke('notiq:benchmark', payload),
   applyCpuThreads: (n) => ipcRenderer.invoke('notiq:apply-cpu-threads', n),
+  clearCheckpoint: (wav) => ipcRenderer.invoke('notiq:clear-checkpoint', wav),
   onProgress: (handler) => {
     if (typeof handler !== 'function') return () => {};
     const listener = (_event, message) => {
-      if (message && (message.kind === 'download' || message.kind === 'transcribe')) {
+      if (message && (message.kind === 'download' || message.kind === 'transcribe' || message.kind === 'benchmark' || message.kind === 'checkpoint')) {
         handler(message);
       }
     };
