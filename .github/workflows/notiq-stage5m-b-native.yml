@@ -53,6 +53,7 @@ jobs:
           if ($LASTEXITCODE -eq 0 -or "$bad" -notmatch 'Invalid CPU thread count') { throw 'Unsafe CPU threads were accepted' }
           New-Item -ItemType Directory -Force 'stage5mb-native' | Out-Null
           Copy-Item $native.FullName 'stage5mb-native/notiq-muscriptor-cli.exe'
+          $global:LASTEXITCODE = 0
           Write-Host 'NOTIQ_STAGE5MB_NATIVE_CPU_2_4_6_CAPABILITIES_PASS'
       - uses: actions/upload-artifact@v4
         with:
