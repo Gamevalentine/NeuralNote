@@ -23,7 +23,11 @@ const page=await browser.newPage({viewport:{width:1440,height:900}});
 const errors=[];page.on('pageerror',error=>errors.push(error.message));
 const assert=(condition,message)=>{if(!condition)throw Error(message)};
 try{
- await page.goto('http://127.0.0.1:4188/',{waitUntil:'domcontentloaded'});
+ await page.goto(process.env.NOTIQ_HOSTED_URL || 'http://127.0.0.1:4188/',{waitUntil:'domcontentloaded',timeout:45000});
+ if(process.env.NOTIQ_HOSTED_URL){
+   const isolated=await page.evaluate(()=>crossOriginIsolated&&typeof SharedArrayBuffer==='function');
+   assert(isolated,'Cloudflare Preview missing cross-origin isolation needed by WASM MuScriptor');
+ }
  assert(await page.getByText('AI: NOTIQ Core (WebAssembly)').count()>0,'Browser WASM AI must be clearly identified');
  await page.getByRole('button',{name:'Tệp',exact:true}).click();
  await page.getByRole('button',{name:'Dùng nhạc mẫu'}).click();
