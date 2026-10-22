@@ -1,0 +1,98 @@
+name: NOTIQ Stage 5K MIDI Quality Windows Portable
+on:
+  push:
+    branches: [feature/notiq-stage5k-reference-benchmark]
+    paths:
+      - .github/workflows/notiq-stage5k-windows.yml
+      - web/src/App.tsx
+      - web/src/noteQuality.ts
+      - web/src/pedalPlayback.ts
+      - web/tests/note-quality.test.mts
+      - web/src/ComparisonPanel.tsx
+      - web/src/ComparisonOverlay.tsx
+      - web/src/compareEngines.ts
+      - web/src/referenceBenchmark.ts
+      - web/src/BenchmarkPanel.tsx
+      - web/src/benchmark-5i.css
+      - web/tests/reference-benchmark.test.mts
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  stage5k-windows:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify matcher unit tests
+        shell: pwsh
+        working-directory: web
+        run: |
+          node --experimental-strip-types --test tests/compare-engines.test.mts
+          if ($LASTEXITCODE -ne 0) {throw '5I comparison unit tests failed'}
+      - name: Compile exact NOTIQ 5I UI
+        shell: pwsh
+        working-directory: web
+        run: |
+          npm install --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) {throw 'NPM install failed'}
+          npm run build
+          if ($LASTEXITCODE -ne 0) {throw '5I build failed'}
+          node --experimental-strip-types --test tests/reference-benchmark.test.mts tests/note-quality.test.mts
+          if ($LASTEXITCODE -ne 0) {throw 'Reference MIDI benchmark test failed'}
+      - name: Retrieve Stage5I verified portable (original native engines preserved)
+        uses: actions/download-artifact@v4
+        with:
+          name: NOTIQ-Stage5I-Reference-MIDI-Windows-Preview
+          repository: Gamevalentine/NeuralNote
+          run-id: 39693721769
+          github-token: ${{ github.token }}
+          path: notiq-stage5k-base
+      - name: Repack only renderer; preserve native MuScriptor/Transkun engines
+        shell: pwsh
+        run: |
+          npm install --prefix package-tools --no-audit --no-fund @electron/asar@3
+          if ($LASTEXITCODE -ne 0) {throw 'ASAR installer failure'}
+          $base=(Resolve-Path 'notiq-stage5k-base').Path
+          $asar=Get-ChildItem $base -File -Recurse -Filter 'app.asar' | Select-Object -First 1
+          if (-not $asar) {throw 'Original Electron ASAR missing'}
+          $resources=Split-Path $asar.FullName -Parent
+          $native=Join-Path $resources 'bridge-bin/notiq-muscriptor-cli.exe'
+          if (-not (Test-Path $native)) {throw 'MuScriptor binary missing'}
+          $test=& $native --self-test
+          if ($LASTEXITCODE -ne 0 -or $test -notmatch '"ready":true') {throw 'MuScriptor native CLI self-test failed'}
+          node desktop-preview/repack-5g.cjs "$($asar.FullName)" "$((Resolve-Path 'web/dist').Path)"
+          if ($LASTEXITCODE -ne 0) {throw 'Failed to pack 5I renderer'}
+          $exeDir=Split-Path $resources -Parent
+          $exe=Get-ChildItem $exeDir -File -Filter '*.exe' | Select-Object -First 1
+          if (-not $exe) {throw 'NOTIQ portable exe missing'}
+          @(
+            'NOTIQ Stage5K: optional same-pitch overlap cleanup and audible sampled CC64 sustain'
+            'No change to original MuScriptor/Transkun inference algorithms.'
+            'Choose E: (or desired drive) and extract ENTIRE ZIP.'
+            'Install MuScriptor and Transkun V2 Piano using UI if missing.'
+            'Open audio and use AI 5I -> load matching .mid/.midi -> compare the two AI engines.'
+            'Both engines process the SAME converted WAV sequentially. Large CPU may be slow.'
+            'Compare same-pitch onsets <=100ms; score note offset separately, no model retraining.'
+            '5I uses real user provided reference MIDI to calculate pitch/onset TP/FP/FN and F1; manual alignment may be needed.'
+            'Piano Roll MIDI is preserved until user selects an AI result; Auto mode only suggests when true MIDI reference exists.'
+            'Transkun/PyTorch are optional downloads and are not bundled into ZIP.'
+            'Overlaps on the same pitch/instrument can be merged by explicit user click, raw notes restored or Undo used.'
+            'Pedal CC64 extends SoundFont sample duration to release (max 8 seconds); no acoustic resonance or pedal AI invention.'
+            'This is NOT a trained AI model improvement. Use matching MIDI reference for before/after F1 validation.'
+            'QA results and reviewer approval required before any production merge.'
+          ) -join [Environment]::NewLine | Set-Content -Path (Join-Path $exeDir 'README-STAGE5I.txt')
+          Write-Host 'NOTIQ_STAGE5I_WINDOWS_PACKAGING_PASS'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NOTIQ-Stage5K-Quality-Windows-Preview
+          path: notiq-stage5k-base/
+          compression-level: 6
+          retention-days: 7
+          if-no-files-found: error
