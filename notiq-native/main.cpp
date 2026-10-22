@@ -116,6 +116,10 @@ void writeJson(const std::filesystem::path& path, const std::vector<msl::Note>& 
 }
 
 int run(const std::vector<std::filesystem::path>& args) {
+    if(args.size()==1 && args[0]==std::filesystem::path("--capabilities")){
+        std::cout << "{\"bridge\":\"notiq-muscriptor\",\"schema\":1,\"cpu_threads\":[2,4,6],\"default_threads\":2}\n";
+        return 0;
+    }
     if(args.size()==1 && args[0]==std::filesystem::path("--version")){
         std::cout << "NOTIQ MuScriptor bridge protocol=1 audio=float32-mono-16000\n";
         return 0;
@@ -132,9 +136,17 @@ int run(const std::vector<std::filesystem::path>& args) {
                   << " seconds=" << (static_cast<double>(audio.size())/kSampleRate) << '\n';
         return 0;
     }
-    if(args.size()!=3){
+    if(args.size()!=3 && args.size()!=4){
         std::cerr << "Usage: notiq-muscriptor-cli <16k-f32-mono.wav> <model.gguf> <result.json>\n";
         return 2;
+    }
+    int requestedThreads=2;
+    if(args.size()==4){
+        const auto setting=args[3].string();
+        if(setting=="--threads=2")requestedThreads=2;
+        else if(setting=="--threads=4")requestedThreads=4;
+        else if(setting=="--threads=6")requestedThreads=6;
+        else throw std::runtime_error("Invalid CPU thread count; allowed --threads=2,4,6 only");
     }
     if(!std::filesystem::is_regular_file(args[1]))
         throw std::runtime_error("MuScriptor model missing; download an approved GGUF first");
@@ -150,7 +162,7 @@ int run(const std::vector<std::filesystem::path>& args) {
     if(!engine) throw std::runtime_error(std::string("MuScriptor could not load weights: ")+msl::describe(engine.error()));
     std::cerr << "PROGRESS 20\n";
     msl::TranscribeOptions options {};
-    options.n_threads=2;
+    options.n_threads=requestedThreads;
     auto onUpdate=[](const msl::TranscriptionUpdate& update){
         std::cerr << "PROGRESS " << std::clamp(20+static_cast<int>(update.progress*78),20,98) << '\n';
         return true;
