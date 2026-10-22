@@ -38,6 +38,7 @@ try {
 let window = null;
 let downloadJob = null;
 let transcriptionJob = null;
+let activeMuScriptor = null;
 let pianoJob = null;
 let pianoSetupJob = null;
 function report(kind, percent, message) {
@@ -93,6 +94,15 @@ async function downloadModel() {
   try{return await downloadJob}finally{downloadJob=null}
 }
 
+function cancelMuScriptor() {
+  const job = activeMuScriptor;
+  if (!job || job.cancelled) return { requested: false, reason: 'Không có MuScriptor đang nhận diện.' };
+  job.cancelled = true;
+  report('transcribe', job.percent, 'Đang dừng MuScriptor theo yêu cầu của bạn…');
+  if (job.child && job.child.exitCode === null && !job.child.killed)
+    job.child.kill(); // Windows TerminateProcess; do not kill any other process.
+  return { requested: true };
+}
 async function transcribeViaNative(input) {
   if (transcriptionJob || pianoJob) throw new Error('Engine nhận diện khác đang xử lý một bản nhạc.');
   if (!bridgeStatus().available) throw new Error('Không tìm thấy MuScriptor native CLI trong bản Windows này.');
@@ -100,50 +110,94 @@ async function transcribeViaNative(input) {
   const modelPath=path.join(modelsDir,model.filename);
   if (!bridgeStatus().modelInstalled)
     throw new Error('Chưa tải MuScriptor '+model.label+'. Hãy chọn Tải mô hình trước.');
-  if (!(await hasVerifiedModel(model,modelPath)))
-    throw new Error('SHA-256 model '+model.label+' không hợp lệ. Hãy tải lại bản chính thức.');
   const raw = input instanceof Uint8Array ? input : new Uint8Array(input);
   if (raw.byteLength < 44 || raw.byteLength > 15*60*16000*4+4096)
     throw new Error('MuScriptor hỗ trợ tệp đã chuyển đổi tối đa 15 phút.');
-  if (String.fromCharCode(...raw.slice(0,4)) !== 'RIFF')
+  if (String.fromCharCode(...raw.subarray(0,4)) !== 'RIFF')
     throw new Error('Dữ liệu âm thanh chuyển sang native không phải WAV.');
-  transcriptionJob = (async () => {
-    const workRoot = path.join(dataDir, 'bridge-work');
-    await fsp.mkdir(workRoot, { recursive: true });
-    const work = await fsp.mkdtemp(path.join(workRoot, 'job-'));
-    const audio = path.join(work, 'input.wav');
-    const output = path.join(work, 'notes.json');
+
+  const job = {cancelled:false,child:null,percent:0,lastProgressAt:Date.now(),startedAt:Date.now()};
+  activeMuScriptor=job;
+  // Protect the entire SHA256 verification + child lifecycle, not just spawn.
+  const task=(async()=>{
+    report('transcribe',0,'Đang xác minh model '+model.label+' (SHA-256 2,74 GB có thể mất thời gian trên ổ ngoài)…');
+    if (!(await hasVerifiedModel(model,modelPath)))
+      throw new Error('SHA-256 model '+model.label+' không hợp lệ. Hãy tải lại bản chính thức.');
+    if(job.cancelled)throw new Error('Bạn đã hủy nhận diện trước khi khởi động AI.');
+    const workRoot=path.join(dataDir,'bridge-work');
+    await fsp.mkdir(workRoot,{recursive:true});
+    const work=await fsp.mkdtemp(path.join(workRoot,'job-'));
+    const audio=path.join(work,'input.wav'),output=path.join(work,'notes.json');
     try {
-      await fsp.writeFile(audio, raw);
-      report('transcribe', 0, 'Đang khởi động MuScriptor '+model.label+' trên CPU (Large có thể rất chậm và dùng nhiều RAM)');
-      await new Promise((resolve, reject) => {
-        const child = spawn(bridgeBinary, [audio, modelPath, output], {
-          shell: false, windowsHide: true, stdio: ['ignore','pipe','pipe'],
-          cwd: work,
+      if(job.cancelled)throw new Error('Bạn đã hủy nhận diện.');
+      await fsp.writeFile(audio,raw);
+      if(job.cancelled)throw new Error('Bạn đã hủy nhận diện.');
+      report('transcribe',0,'MuScriptor '+model.label+' khởi chạy CPU; đang chờ tiến độ thật từ engine…');
+      await new Promise((resolve,reject)=>{
+        let stderr='',stdout='',stderrBuffer='';
+        let settled=false;
+        const child=spawn(bridgeBinary,[audio,modelPath,output],{
+          shell:false,windowsHide:true,stdio:['ignore','pipe','pipe'],cwd:work,
         });
-        let stderr = '';
-        child.stderr.on('data', chunk => {
-          stderr = (stderr + String(chunk)).slice(-9000);
-          const matches = [...String(chunk).matchAll(/PROGRESS\s+(\d+)/g)];
-          for (const match of matches) {
-            const pct = Number(match[1]);
-            report('transcribe', pct, pct < 20 ? 'Đang tải model vào RAM' : 'MuScriptor đang nhận diện nhạc cụ');
+        job.child=child;
+        job.lastProgressAt=Date.now();
+        const finish=(error)=>{
+          if(settled)return;
+          settled=true;
+          clearInterval(heartbeat);
+          if(error)reject(error);else resolve();
+        };
+        // Heartbeats are wall-clock diagnostics, NEVER made-up model progress.
+        const heartbeat=setInterval(()=>{
+          if(settled || job.cancelled)return;
+          const seconds=Math.floor((Date.now()-job.lastProgressAt)/1000);
+          const elapsed=Math.floor((Date.now()-job.startedAt)/1000);
+          const label=seconds>=90
+            ? 'Không có cập nhật AI mới '+seconds+' giây; Large có thể xử lý chậm hoặc bị kẹt. Kiểm tra CPU trong Task Manager, hoặc bấm Dừng AI.'
+            : 'MuScriptor đang chạy (tổng '+elapsed+' giây, cập nhật cuối '+seconds+' giây trước). Bạn có thể Dừng AI.';
+          report('transcribe',job.percent,label);
+        },15000);
+        child.stderr.on('data',chunk=>{
+          const value=String(chunk);
+          stderr=(stderr+value).slice(-9000);
+          stderrBuffer=(stderrBuffer+value).slice(-512);
+          const match=[...stderrBuffer.matchAll(/PROGRESS\s+(\d+)/g)];
+          // Keep only the trailing incomplete line between write chunks.
+          const lastNewLine=stderrBuffer.lastIndexOf('\n');
+          stderrBuffer=lastNewLine>=0?stderrBuffer.slice(lastNewLine+1):stderrBuffer;
+          for(const item of match){
+            const valuePct=Number(item[1]);
+            if(!Number.isFinite(valuePct))continue;
+            const pct=Math.max(0,Math.min(100,Math.round(valuePct)));
+            if(pct>job.percent)job.lastProgressAt=Date.now();
+            job.percent=Math.max(job.percent,pct);
+            report('transcribe',job.percent,
+              job.percent<20?'MuScriptor '+model.label+' đang nạp trọng số vào RAM ('+job.percent+'% từ engine)' :
+              'MuScriptor '+model.label+' nhận diện ('+job.percent+'% từ engine, nếu có cập nhật)');
           }
         });
-        child.on('error', reject);
-        child.on('close', code => code === 0 ? resolve() :
-          reject(new Error('MuScriptor thất bại (mã ' + code + '). ' + stderr.slice(-500))));
+        child.stdout.on('data',chunk=>{stdout=(stdout+String(chunk)).slice(-1500);});
+        child.once('error',error=>finish(error));
+        child.once('close',code=>{
+          if(job.cancelled)finish(new Error('Đã dừng MuScriptor theo yêu cầu. Nốt đang chỉnh vẫn được giữ nguyên.'));
+          else if(code!==0)finish(new Error('MuScriptor kết thúc lỗi (mã '+String(code)+'). '+stderr.slice(-800)));
+          else finish(null);
+        });
+        if(job.cancelled && child.exitCode===null)child.kill();
       });
-      const result = JSON.parse(await fsp.readFile(output, 'utf8'));
-      if (result?.schema !== 1 || result?.engine !== 'muscriptor' || !Array.isArray(result.notes))
+      if(job.cancelled)throw new Error('Đã hủy nhận diện MuScriptor.');
+      const result=JSON.parse(await fsp.readFile(output,'utf8'));
+      if(result?.schema!==1 || result?.engine!=='muscriptor' || !Array.isArray(result.notes))
         throw new Error('Kết quả từ native bridge không hợp lệ.');
-      report('transcribe', 100, 'MuScriptor đã nhận diện ' + result.notes.length + ' nốt');
+      report('transcribe',100,'MuScriptor '+model.label+' đã nhận diện '+result.notes.length+' nốt');
       return result;
-    } finally {
-      await fsp.rm(work, { recursive: true, force: true }).catch(() => {});
+    }finally{
+      await fsp.rm(work,{recursive:true,force:true}).catch(()=>{});
     }
   })();
-  try { return await transcriptionJob; } finally { transcriptionJob = null; }
+  transcriptionJob=task;
+  try{return await task}
+  finally{transcriptionJob=null;if(activeMuScriptor===job)activeMuScriptor=null;}
 }
 
 async function pianoStatus(){
@@ -206,6 +260,7 @@ app.whenReady().then(() => {
   ipcMain.handle('notiq:download-model', () => downloadModel());
   ipcMain.handle('notiq:select-model', (_event, id) => selectModel(id));
   ipcMain.handle('notiq:transcribe', (_event, bytes) => transcribeViaNative(bytes));
+  ipcMain.handle('notiq:cancel-transcription', () => cancelMuScriptor());
   ipcMain.handle('notiq:piano-status', () => pianoStatus());
   ipcMain.handle('notiq:piano-install', () => installPiano());
   ipcMain.handle('notiq:piano-transcribe', (_event, bytes) => transcribePiano(bytes));
