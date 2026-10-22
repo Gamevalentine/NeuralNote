@@ -1,0 +1,7 @@
+.notiq-quality-controls{display:flex;align-items:center;gap:9px;padding:7px 14px;background:#20303b;border-bottom:1px solid #53687e;color:#ecf4ff;flex-wrap:wrap}
+.notiq-quality-controls strong{font-size:12px;color:#a6f1d8}
+.notiq-quality-controls button{padding:6px 9px;border:1px solid #718aa0;background:#344759;border-radius:5px;color:#fff;font-size:11px}
+.notiq-quality-controls button:disabled{opacity:.42;cursor:not-allowed}
+.notiq-quality-controls button:not(:disabled):hover{background:#455e74}
+.notiq-quality-controls small{font-size:10px;color:#b4cadd;flex:1;min-width:180px}
+@media(max-width:600px){.notiq-quality-controls{padding:6px}.notiq-quality-controls small{min-width:100%}}
