@@ -1,0 +1,59 @@
+name: NOTIQ Stage 5L Large Recovery Windows
+on:
+  push:
+    branches: [fix/notiq-stage5l-large-hang-cancel-progress]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify native progress parser and Electron syntax
+        run: |
+          node --test desktop-preview/tests/native-progress.test.cjs
+          node --check desktop-preview/main.cjs
+          node --check desktop-preview/preload.cjs
+          node --check desktop-preview/repack-5l.cjs
+      - name: Compile NOTIQ UI
+        working-directory: web
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+          node --experimental-strip-types --test tests/reference-benchmark.test.mts tests/note-quality.test.mts
+      - uses: actions/download-artifact@v4
+        with:
+          name: NOTIQ-Stage5K-Quality-Windows-Preview
+          repository: Gamevalentine/NeuralNote
+          run-id: 39755214147
+          github-token: ${{ github.token }}
+          path: notiq-stage5l-base
+      - name: Repackage validated native CLI with new cancellation UI
+        shell: pwsh
+        run: |
+          npm install --prefix package-tools --no-audit --no-fund @electron/asar@3
+          if ($LASTEXITCODE -ne 0) { throw 'ASAR dependency failed' }
+          $folder=(Resolve-Path notiq-stage5l-base).Path
+          $asar=Get-ChildItem $folder -File -Recurse -Filter app.asar | Select-Object -First 1
+          if (-not $asar) { throw 'Electron ASAR missing' }
+          $res=Split-Path $asar.FullName -Parent
+          $native=Join-Path $res 'bridge-bin/notiq-muscriptor-cli.exe'
+          if (-not (Test-Path $native)) { throw 'Native CLI missing' }
+          $check=& $native --self-test
+          if ($LASTEXITCODE -ne 0 -or $check -notmatch '"ready":true') { throw 'Native CLI self-test failed' }
+          node desktop-preview/repack-5l.cjs "$($asar.FullName)" "$((Resolve-Path web/dist).Path)"
+          if ($LASTEXITCODE -ne 0) { throw '5L ASAR repack failed' }
+          Write-Host 'NOTIQ_STAGE5L_WINDOWS_PACKAGE_PASS'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NOTIQ-Stage5L-Large-Recovery-Windows-Preview
+          path: notiq-stage5l-base/
+          retention-days: 7
+          compression-level: 6
+          if-no-files-found: error
