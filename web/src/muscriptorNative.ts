@@ -7,6 +7,7 @@ export type NativeStatus = {
   modelInstalled: boolean;
   modelSize?: 'small' | 'large';
   nativeThreadsSupported?: boolean;
+  supportsResumableChunks?: boolean;
   threadOptions?: number[];
   selectedCpuThreads?: number;
   modelLabel?: string;
@@ -18,7 +19,7 @@ export type NativeStatus = {
   downloading: boolean;
 };
 export type NativeProgress = {
-  kind: 'download' | 'transcribe' | 'setup' | 'benchmark';
+  kind: 'download' | 'transcribe' | 'setup' | 'benchmark' | 'checkpoint';
   percent: number;
   message: string;
 };
@@ -29,7 +30,8 @@ declare global {
       status: () => Promise<NativeStatus>;
       downloadModel: () => Promise<NativeStatus>;
       selectModel?: (size: 'small' | 'large') => Promise<NativeStatus>;
-      transcribe: (wave: Uint8Array) => Promise<MuScriptorResult>;
+      transcribe: (wave: Uint8Array | {wav:Uint8Array;resumable:true}) => Promise<MuScriptorResult>;
+      clearCheckpoint?: (wave:Uint8Array) => Promise<{cleared:boolean}>;
       cancelTranscription?: () => Promise<{requested:boolean;reason?:string}>;
       benchmark?: (data:{wav:Uint8Array;seconds:20|30|60;startSeconds:number;audioPrepareMs:number;threads:2|4|6}) => Promise<import('./nativeBenchmark').BenchmarkResult>;
       applyCpuThreads?: (n:2|4|6) => Promise<NativeStatus>;
@@ -95,6 +97,7 @@ export async function convertAudioToNativeWav(source: Blob, onConversionProgress
 
 export async function runMuScriptor(
   source: Blob, onProgress: (progress: NativeProgress) => void,
+  resumable=false,
 ): Promise<Note[]> {
   const bridge = window.notiqNative;
   if (!bridge) throw new Error('MuScriptor chỉ chạy trên bản NOTIQ Windows có native bridge.');
@@ -106,7 +109,7 @@ export async function runMuScriptor(
       onProgress({ kind:'transcribe', percent: Math.min(2, Math.round(percent * 0.02)),
         message: 'Đang chuẩn bị âm thanh toàn bài: ' + percent + '%' }));
     onProgress({ kind:'transcribe', percent: 2, message:'Đang gửi âm thanh sang MuScriptor CPU…' });
-    const result = await bridge.transcribe(wav);
+    const result = await bridge.transcribe(resumable?{wav,resumable:true}:wav);
     return toPianoNotes(result);
   } finally {
     detach();
