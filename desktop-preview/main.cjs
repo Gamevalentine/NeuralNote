@@ -106,6 +106,7 @@ function bridgeStatus() {
     availableModels: Object.keys(MODELS),
     threadOptions: cpuThreadCapabilities().values,
     nativeThreadsSupported: cpuThreadCapabilities().supported,
+    supportsResumableChunks: cpuThreadCapabilities().resumeCheckpoint===true,
     selectedCpuThreads: cpuThreadCapabilities().supported ? selectedCpuThreads : 2,
     license: 'CC BY-NC 4.0; phi thương mại',
     busy: !!transcriptionJob || !!benchmarkJob,
@@ -199,7 +200,7 @@ async function transcribeViaNative(input) {
         const args=cpuThreadCapabilities().supported
           ? [audio,modelPath,output,'--threads='+threads]:[audio,modelPath,output];
         if(resumable){
-          if(!cpuThreadCapabilities().supported)throw Error('Cần bản MuScriptor mới có checkpoint hỗ trợ.');
+          if(!cpuThreadCapabilities().resumeCheckpoint)throw Error('Binary MuScriptor chưa hỗ trợ lưu và tiếp tục từng đoạn.');
           args.push('--checkpoint='+checkpointPath);
         }
         const child=spawn(bridgeBinary,args,{
