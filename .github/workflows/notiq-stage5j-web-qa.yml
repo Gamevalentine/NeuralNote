@@ -1,0 +1,36 @@
+name: NOTIQ Stage 5J Browser MIDI and Architecture QA
+on:
+  push:
+    branches: [feature/notiq-stage5j-web-evaluation]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  web-5j:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install NOTIQ Web
+        working-directory: web
+        run: npm install --no-fund --no-audit
+      - name: Compile 5J preview and TypeScript
+        working-directory: web
+        run: npm run build
+      - name: Genuine MIDI parser and Web F1 tests
+        working-directory: web
+        run: node --experimental-strip-types --test tests/web-benchmark-5j.test.mts
+      - name: Stage 5I and native comparison regressions
+        working-directory: web
+        run: |
+          node --experimental-strip-types --test tests/reference-benchmark.test.mts tests/compare-engines.test.mts
+          npm run test:daw
+          npm run test:piano
+          npm run test:soundfont
+      - name: Remote job protocol security tests (architecture only, no GPU provisioned)
+        run: node --test notiq-ai-core/remote/tests/protocol.test.mjs
