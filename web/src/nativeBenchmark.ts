@@ -6,5 +6,6 @@ export type BenchmarkResult={
  firstInferenceUpdateMs:number|null;notes:number;
  peakWorkingSetBytes:number|null;machineCpuPercent:number|null;
  cpuCoreEquivalent:number|null;cpuSamples:number;logicalCores:number|null;
- threadCount:number;savedRelativePath:string;wallRecordedAt:string;
+ threadCount:2|4|6;pcmSha256:string;notesSha256:string;
+ savedRelativePath:string;wallRecordedAt:string;
 };
