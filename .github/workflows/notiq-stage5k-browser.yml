@@ -1,0 +1,38 @@
+name: NOTIQ 5K Optional Note Cleanup Browser QA
+on:
+  push:
+    branches: [feature/notiq-stage5k-note-cleanup-pedal-playback]
+    paths:
+      - .github/workflows/notiq-stage5k-browser.yml
+      - notiq-ai-core/qa/quality-browser.mjs
+      - web/src/App.tsx
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  chrome:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build complete React preview
+        working-directory: web
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+      - name: Real Chrome verifies native-bridge mock fixture and original MIDI restore
+        run: |
+          npm install --prefix /tmp/notiq-stage5g-playwright --no-audit --no-fund playwright-core@1.56.1
+          node notiq-ai-core/qa/quality-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: notiq-5k-quality-chrome-evidence
+          path: /tmp/notiq-stage5k-quality.png
+          retention-days: 7
+          if-no-files-found: warn
