@@ -10,12 +10,13 @@ const os = require('node:os');
 const { createHash } = require('node:crypto');
 const { Readable, Transform } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
-const { spawn } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
 
 const { MODELS, getModel } = require('./models.cjs');
 const { hasVerifiedModel, downloadVerifiedModel } = require('./model-download.cjs');
 const { createNativeProgressParser } = require('./native-progress.cjs');
 const { runBenchmark } = require('./benchmark-native.cjs');
+const { cpuThreadCount } = require('./cpu-threads.cjs');
 const pianoRuntime = require('./transkun-runtime.cjs');
 const pianoRunnerSource = fs.readFileSync(path.join(__dirname,'transkun-runner.py'),'utf8');
 const portableDir = path.dirname(process.execPath);
@@ -31,10 +32,13 @@ app.setPath('userData', dataDir);
 app.setPath('sessionData', dataDir);
 const preferencesPath = path.join(dataDir,'model-preferences.json');
 let selectedModel = 'small';
+let selectedCpuThreads = 2;
 try {
   const stored = JSON.parse(fs.readFileSync(preferencesPath,'utf8'));
   if (stored && typeof stored.selectedModel === 'string' && Object.hasOwn(MODELS,stored.selectedModel))
     selectedModel = stored.selectedModel;
+  if (stored && [2,4,6].includes(stored.cpuThreads))
+    selectedCpuThreads = stored.cpuThreads;
 } catch { /* first launch or invalid preferences, retain Small */ }
 
 let window = null;
@@ -52,6 +56,42 @@ function report(kind, percent, message) {
   }
 }
 
+let threadCapabilitiesCached=null;
+function cpuThreadCapabilities(){
+  if(threadCapabilitiesCached)return threadCapabilitiesCached;
+  // The old Stage5A-L binary does not understand --threads and must never
+  // silently pretend 4/6 cores are supported.
+  if(process.platform!=='win32'||!fs.existsSync(bridgeBinary))
+    return {supported:false,values:[2],default:2};
+  try{
+    const r=spawnSync(bridgeBinary,['--capabilities'],{
+      shell:false,windowsHide:true,timeout:4000,encoding:'utf8',maxBuffer:4096
+    });
+    if(r.status!==0)return {supported:false,values:[2],default:2};
+    const capabilities=JSON.parse(r.stdout);
+    if(capabilities.bridge==='notiq-muscriptor' && capabilities.schema===1 &&
+       JSON.stringify(capabilities.cpu_threads)==='[2,4,6]' &&
+       capabilities.default_threads===2){
+      threadCapabilitiesCached={supported:true,values:[2,4,6],default:2};
+      return threadCapabilitiesCached;
+    }
+  }catch{ /* stay on legacy default 2 */ }
+  return {supported:false,values:[2],default:2};
+}
+function persistModelPrefs(){
+  fs.writeFileSync(preferencesPath,JSON.stringify({
+    selectedModel,cpuThreads:selectedCpuThreads
+  },null,2),'utf8');
+}
+function applyCpuThreads(threadCount){
+  if(transcriptionJob||benchmarkJob||pianoJob||downloadJob||pianoSetupJob)
+    throw Error('Hãy hoàn tất hoặc dừng tác vụ trước khi thay số luồng CPU.');
+  if(!cpuThreadCapabilities().supported)
+    throw Error('Binary MuScriptor cũ không hỗ trợ 4/6 luồng; dùng gói NOTIQ 5M-B mới.');
+  selectedCpuThreads=cpuThreadCount(threadCount);
+  persistModelPrefs();
+  return bridgeStatus();
+}
 function bridgeStatus() {
   const model=getModel(selectedModel), filename=selectedModelPath();
   let size=0;
@@ -64,6 +104,9 @@ function bridgeStatus() {
     modelBytes: model.bytes,
     modelLocation: 'models/' + model.filename,
     availableModels: Object.keys(MODELS),
+    threadOptions: cpuThreadCapabilities().values,
+    nativeThreadsSupported: cpuThreadCapabilities().supported,
+    selectedCpuThreads: cpuThreadCapabilities().supported ? selectedCpuThreads : 2,
     license: 'CC BY-NC 4.0; phi thương mại',
     busy: !!transcriptionJob || !!benchmarkJob,
     benchmarkBusy: !!benchmarkJob,
@@ -75,7 +118,7 @@ function selectModel(id) {
   // Check against the whitelist before persisting; never accept a file path.
   const selected=getModel(id);
   selectedModel=selected.id;
-  fs.writeFileSync(preferencesPath,JSON.stringify({selectedModel},null,2),'utf8');
+  persistModelPrefs();
   return bridgeStatus();
 }
 async function downloadModel() {
@@ -141,7 +184,9 @@ async function transcribeViaNative(input) {
       await new Promise((resolve,reject)=>{
         let stderr='',stdout='';
         let settled=false;
-        const child=spawn(bridgeBinary,[audio,modelPath,output],{
+        const threads=cpuThreadCapabilities().supported ? selectedCpuThreads : 2;
+        const args=cpuThreadCapabilities().supported ? [audio,modelPath,output,'--threads='+threads]:[audio,modelPath,output];
+        const child=spawn(bridgeBinary,args,{
           shell:false,windowsHide:true,stdio:['ignore','pipe','pipe'],cwd:work,
         });
         job.child=child;
@@ -203,6 +248,7 @@ async function benchmarkViaNative(payload) {
     throw Error('Một tác vụ AI khác đang hoạt động. Dừng hoặc hoàn tất trước khi benchmark.');
   if(!bridgeStatus().available || !bridgeStatus().modelInstalled)
     throw Error('Cần mô hình MuScriptor đã tải và ứng dụng Windows có native CLI.');
+  if(!cpuThreadCapabilities().supported)throw Error('Cần binary CPU 5M-B thực, không thể benchmark 4/6 luồng với binary cũ.');
   const model=getModel(selectedModel);
   const job={cancelled:false,child:null,percent:0};
   activeMuScriptor=job; // shared scoped cancellation with normal inference
@@ -213,6 +259,7 @@ async function benchmarkViaNative(payload) {
     };
     const results=await runBenchmark({
       wav:payload?.wav,seconds:payload?.seconds,startSeconds:payload?.startSeconds??0,
+      threads:cpuThreadCount(payload?.threads ?? 2),
       model,modelPath:path.join(modelsDir,model.filename),
       bridgeBinary,dataDir,job,verifyModel:hasVerifiedModel,
       onProgress:reportBenchmark,
@@ -297,6 +344,7 @@ app.whenReady().then(() => {
   ipcMain.handle('notiq:status', () => bridgeStatus());
   ipcMain.handle('notiq:download-model', () => downloadModel());
   ipcMain.handle('notiq:select-model', (_event, id) => selectModel(id));
+  ipcMain.handle('notiq:apply-cpu-threads', (_event,n) => applyCpuThreads(n));
   ipcMain.handle('notiq:transcribe', (_event, bytes) => transcribeViaNative(bytes));
   ipcMain.handle('notiq:cancel-transcription', () => cancelMuScriptor());
   ipcMain.handle('notiq:benchmark', (_event, payload) => benchmarkViaNative(payload));
