@@ -218,6 +218,8 @@ async function benchmarkViaNative(payload) {
       onProgress:reportBenchmark,
     });
     if(job.cancelled)throw Error('Đã hủy benchmark, không lưu kết quả.');
+    results.audioPrepareMs=Number.isFinite(payload?.audioPrepareMs)
+      ?Math.max(0,Math.min(3600000,Math.round(payload.audioPrepareMs))):null;
     const benchmarkDir=path.join(dataDir,'benchmarks');
     await fsp.mkdir(benchmarkDir,{recursive:true});
     const filename='notiq-'+model.id+'-'+results.clipSeconds+'s-'+
