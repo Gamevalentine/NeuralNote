@@ -1,0 +1,14 @@
+.notiq-5m-panel{padding:11px 15px;background:#182734;color:#e4edfa;border-bottom:1px solid #526477;display:flex;gap:10px;flex-direction:column;font-size:12px;max-height:430px;overflow:auto}
+.notiq-5m-panel header{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.notiq-5m-panel header strong{font-size:14px;color:#9fdecf}
+.notiq-5m-panel small{font-size:11px;color:#b4c7da;line-height:1.5}
+.notiq-5m-controls{display:flex;gap:9px;align-items:end;flex-wrap:wrap}
+.notiq-5m-controls label{display:flex;flex-direction:column;gap:5px}
+.notiq-5m-controls select,.notiq-5m-controls input{background:#2b4157;color:white;border:1px solid #697d96;padding:6px;border-radius:5px}
+.notiq-5m-controls input{max-width:120px}
+.notiq-5m-controls button{background:#37526b;color:#fff;border:1px solid #6386a2;padding:7px 10px;border-radius:5px}
+.notiq-5m-controls button:disabled{opacity:.45;cursor:not-allowed}
+.notiq-5m-results{overflow:auto}
+.notiq-5m-results table{width:100%;max-width:720px;border-collapse:collapse}
+.notiq-5m-results th,.notiq-5m-results td{padding:6px 10px;border-bottom:1px solid #425771;text-align:left}
+.notiq-5m-results th{width:47%;color:#bfe4de;font-weight:600}
