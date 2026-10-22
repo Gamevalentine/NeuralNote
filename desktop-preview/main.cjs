@@ -14,6 +14,7 @@ const { spawn } = require('node:child_process');
 
 const { MODELS, getModel } = require('./models.cjs');
 const { hasVerifiedModel, downloadVerifiedModel } = require('./model-download.cjs');
+const { createNativeProgressParser } = require('./native-progress.cjs');
 const pianoRuntime = require('./transkun-runtime.cjs');
 const pianoRunnerSource = fs.readFileSync(path.join(__dirname,'transkun-runner.py'),'utf8');
 const portableDir = path.dirname(process.execPath);
@@ -134,7 +135,7 @@ async function transcribeViaNative(input) {
       if(job.cancelled)throw new Error('Bạn đã hủy nhận diện.');
       report('transcribe',0,'MuScriptor '+model.label+' khởi chạy CPU; đang chờ tiến độ thật từ engine…');
       await new Promise((resolve,reject)=>{
-        let stderr='',stdout='',stderrBuffer='';
+        let stderr='',stdout='';
         let settled=false;
         const child=spawn(bridgeBinary,[audio,modelPath,output],{
           shell:false,windowsHide:true,stdio:['ignore','pipe','pipe'],cwd:work,
@@ -157,24 +158,17 @@ async function transcribeViaNative(input) {
             : 'MuScriptor đang chạy (tổng '+elapsed+' giây, cập nhật cuối '+seconds+' giây trước). Bạn có thể Dừng AI.';
           report('transcribe',job.percent,label);
         },15000);
+        const progressParser=createNativeProgressParser(pct=>{
+          job.percent=pct;
+          job.lastProgressAt=Date.now();
+          report('transcribe',pct,pct<20
+            ?'MuScriptor '+model.label+' đang nạp model ('+pct+'% từ engine)'
+            :'MuScriptor '+model.label+' nhận diện ('+pct+'% từ engine)');
+        });
         child.stderr.on('data',chunk=>{
           const value=String(chunk);
           stderr=(stderr+value).slice(-9000);
-          stderrBuffer=(stderrBuffer+value).slice(-512);
-          const match=[...stderrBuffer.matchAll(/PROGRESS\s+(\d+)/g)];
-          // Keep only the trailing incomplete line between write chunks.
-          const lastNewLine=stderrBuffer.lastIndexOf('\n');
-          stderrBuffer=lastNewLine>=0?stderrBuffer.slice(lastNewLine+1):stderrBuffer;
-          for(const item of match){
-            const valuePct=Number(item[1]);
-            if(!Number.isFinite(valuePct))continue;
-            const pct=Math.max(0,Math.min(100,Math.round(valuePct)));
-            if(pct>job.percent)job.lastProgressAt=Date.now();
-            job.percent=Math.max(job.percent,pct);
-            report('transcribe',job.percent,
-              job.percent<20?'MuScriptor '+model.label+' đang nạp trọng số vào RAM ('+job.percent+'% từ engine)' :
-              'MuScriptor '+model.label+' nhận diện ('+job.percent+'% từ engine, nếu có cập nhật)');
-          }
+          progressParser.push(value);
         });
         child.stdout.on('data',chunk=>{stdout=(stdout+String(chunk)).slice(-1500);});
         child.once('error',error=>finish(error));
