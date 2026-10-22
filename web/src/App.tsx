@@ -107,6 +107,8 @@ function App() {
   const [benchThreads,setBenchThreads]=useState<2|4|6>(2);
   const [appliedCpuThreads,setAppliedCpuThreads]=useState<2|4|6>(2);
   const [nativeThreadsSupported,setNativeThreadsSupported]=useState(false);
+  const [supportsResumableChunks,setSupportsResumableChunks]=useState(false);
+  const [useResumeChunks,setUseResumeChunks]=useState(false);
   const [status, setStatus] = useState('Chưa tải tệp âm thanh');
   const [error, setError] = useState('');
   const [busyLoading, setBusyLoading] = useState(false);
@@ -195,6 +197,7 @@ function App() {
       setNativeModelInstalled(native.modelInstalled);
       setNativeModelSize(native.modelSize === 'large' ? 'large' : 'small');
       setNativeThreadsSupported(native.nativeThreadsSupported===true);
+      setSupportsResumableChunks(native.supportsResumableChunks===true);
       if([2,4,6].includes(native.selectedCpuThreads??-1))
         setAppliedCpuThreads(native.selectedCpuThreads as 2|4|6);
       setEngineMode('muscriptor');
@@ -520,7 +523,10 @@ function App() {
       ? 'Transkun V2 đang nhận diện Piano bằng CPU…'
       : 'MuScriptor C++ (' + (nativeReady ? selectedModelLabel : 'Small Web') + ') đang nhận diện bài hát…');
     try {
-      const update = ({kind, percent, message}: {kind: 'download' | 'transcribe' | 'setup' | 'benchmark'; percent: number; message: string}) => {
+      const update = ({kind, percent, message}: {kind: 'download' | 'transcribe' | 'setup' | 'benchmark' | 'checkpoint'; percent: number; message: string}) => {
+        if(kind==='checkpoint'){
+          setStatus(message);
+        }
         if (kind === 'transcribe') {
           setStatus(message);
           setProgress(percent);
@@ -538,7 +544,7 @@ function App() {
       const piano = analysisEngine === 'transkun-v2'
         ? await runPianoV2(target.file, update) : null;
       const detected = piano ? piano.notes : nativeReady
-        ? await runMuScriptor(target.file, update)
+        ? await runMuScriptor(target.file, update, useResumeChunks && supportsResumableChunks)
         : await recognizeWeb(target.file, update);
       // All replacement occurs only after the selected engine returns validated
       // output. Failed V2 never deletes the existing MuScriptor MIDI.
@@ -570,6 +576,21 @@ function App() {
     }
   };
 
+  const resetResumeCheckpoint=async()=>{
+    if(!nativeReady||!supportsResumableChunks||!selectionRef.current||
+       phase==='analyzing'||benchRunning||busyLoading||!window.notiqNative?.clearCheckpoint)return;
+    setError('');
+    try{
+      setStatus('Đang chuẩn hóa bài nhạc để xác định chính xác checkpoint cần xóa…');
+      const wav=await convertAudioToNativeWav(selectionRef.current.file);
+      const result=await window.notiqNative.clearCheckpoint(wav);
+      setStatus(result.cleared
+        ?'Đã xóa tiến độ 5M-C lưu cho bài/model/luồng CPU này. Lần sau sẽ nhận diện từ đầu.'
+        :'Chưa có tiến độ 5M-C lưu cho bài/model/luồng CPU này.');
+    }catch(cause){
+      setError(cause instanceof Error?cause.message:'Không thể xóa checkpoint đã lưu.');
+    }
+  };
   const startNativeBenchmark=async()=>{
     const current=selectionRef.current;
     const bridge=window.notiqNative;
@@ -1392,6 +1413,22 @@ function App() {
           disabled={phase === 'analyzing' || benchRunning || busyLoading} onClick={reset}>
           <X size={14}/><span>Đóng bài</span></button>}
       </div>
+      {nativeReady&&selection&&analysisEngine==='muscriptor'&&<section className="notiq-5mc-options"
+         aria-label="5M-C lưu tiến độ nhận diện từng đoạn">
+        <strong>AI 5M-C</strong>
+        <label>
+          <input type="checkbox" checked={useResumeChunks} disabled={!supportsResumableChunks||
+            phase==='analyzing'||benchRunning||busyLoading}
+            onChange={e=>setUseResumeChunks(e.target.checked)}/>
+          Lưu và tiếp tục nhận diện theo đoạn 5 giây (thử nghiệm)
+        </label>
+        <button type="button" disabled={!supportsResumableChunks||phase==='analyzing'||benchRunning||busyLoading}
+          onClick={()=>void resetResumeCheckpoint()}>Xóa tiến độ đã lưu</button>
+        <small>{supportsResumableChunks
+         ?'Bật trước khi bấm Nhận diện. Engine giữ nốt nối qua đoạn; nếu Dừng, lần nhận diện sau trên đúng bài, model và luồng CPU sẽ tự tiếp tục.'
+         :'Binary MuScriptor hiện tại chưa hỗ trợ checkpoint. Hãy dùng bản 5M-C Windows.'}
+         {' '}Checkpoint chứa nốt và trạng thái resume, lưu riêng trên ổ ứng dụng; không tự tăng tốc độ giải mã Large.</small>
+      </section>}
       {nativeReady&&selection&&<section className="notiq-5m-switch" aria-label="Bộ đo hiệu năng MuScriptor">
         <strong>AI 5M-B</strong>
         <button type="button" aria-label="Mở benchmark CPU" aria-expanded={benchOpen}

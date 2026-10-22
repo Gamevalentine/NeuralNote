@@ -1,6 +1,7 @@
 // NOTIQ Stage 4: thin, offline CPU bridge around DamRsn/muscriptor.cpp.
 // The bridge never downloads model weights, sends audio to a server, or logs audio.
 #include <muscriptor/muscriptor.hpp>
+#include "checkpoint.hpp"
 
 #include <algorithm>
 #include <bit>
@@ -15,6 +16,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <chrono>
 
 namespace {
 constexpr std::size_t kMaxWaveBytes = 15 * 60 * 16000 * sizeof(float) + 4096;
@@ -117,12 +119,33 @@ void writeJson(const std::filesystem::path& path, const std::vector<msl::Note>& 
 
 int run(const std::vector<std::filesystem::path>& args) {
     if(args.size()==1 && args[0]==std::filesystem::path("--capabilities")){
-        std::cout << "{\"bridge\":\"notiq-muscriptor\",\"schema\":1,\"cpu_threads\":[2,4,6],\"default_threads\":2}\n";
+        std::cout << "{\"bridge\":\"notiq-muscriptor\",\"schema\":1,\"cpu_threads\":[2,4,6],\"default_threads\":2,\"resume_checkpoint\":true}\n";
         return 0;
     }
     if(args.size()==1 && args[0]==std::filesystem::path("--version")){
         std::cout << "NOTIQ MuScriptor bridge protocol=1 audio=float32-mono-16000\n";
         return 0;
+    }
+    if(args.size()==1 && args[0]==std::filesystem::path("--self-test-checkpoint")){
+        const auto file=std::filesystem::temp_directory_path()/
+          ("notiq-5mc-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())+".cp");
+        try{
+            notiq_checkpoint::State state;
+            state.resume="muscriptor-resume 1\nsamples 80000\n";
+            msl::Note note;
+            note.onset=0.1;note.offset=1.25;note.pitch=60;note.program=0;note.is_drum=false;
+            state.notes.push_back(note);
+            notiq_checkpoint::save(file,state,80000,123456ULL,2);
+            auto restored=notiq_checkpoint::load(file,80000,123456ULL,2);
+            if(restored.notes.size()!=1 || restored.notes[0].offset!=1.25 ||
+               restored.resume!=state.resume)throw std::runtime_error("Checkpoint roundtrip failed");
+            bool mismatchRejected=false;
+            try{(void)notiq_checkpoint::load(file,80000,999ULL,2);}
+            catch(const std::exception&){mismatchRejected=true;}
+            std::filesystem::remove(file);
+            if(!mismatchRejected)throw std::runtime_error("Mismatched WAV checkpoint accepted");
+            std::cout<<"NOTIQ_5MC_CHECKPOINT_SELF_TEST_PASS\n";return 0;
+        }catch(...){std::error_code ec;std::filesystem::remove(file,ec);throw;}
     }
     if(args.size()==1 && args[0]==std::filesystem::path("--self-test")){
         // Does not load weights. Exercising the sample parser and library linkage happens
@@ -136,17 +159,21 @@ int run(const std::vector<std::filesystem::path>& args) {
                   << " seconds=" << (static_cast<double>(audio.size())/kSampleRate) << '\n';
         return 0;
     }
-    if(args.size()!=3 && args.size()!=4){
+    if(args.size()<3 || args.size()>5){
         std::cerr << "Usage: notiq-muscriptor-cli <16k-f32-mono.wav> <model.gguf> <result.json>\n";
         return 2;
     }
     int requestedThreads=2;
-    if(args.size()==4){
-        const auto setting=args[3].string();
+    std::filesystem::path checkpointPath;
+    for(std::size_t arg=3;arg<args.size();++arg){
+        const auto wide=args[arg].wstring();
+        const auto setting=args[arg].string();
         if(setting=="--threads=2")requestedThreads=2;
         else if(setting=="--threads=4")requestedThreads=4;
         else if(setting=="--threads=6")requestedThreads=6;
-        else throw std::runtime_error("Invalid CPU thread count; allowed --threads=2,4,6 only");
+        else if(wide.rfind(L"--checkpoint=",0)==0 && checkpointPath.empty() && wide.size()>13)
+            checkpointPath=wide.substr(13);
+        else throw std::runtime_error("Invalid CLI argument; only --threads=2,4,6 and --checkpoint=<path>");
     }
     if(!std::filesystem::is_regular_file(args[1]))
         throw std::runtime_error("MuScriptor model missing; download an approved GGUF first");
@@ -163,15 +190,41 @@ int run(const std::vector<std::filesystem::path>& args) {
     std::cerr << "PROGRESS 20\n";
     msl::TranscribeOptions options {};
     options.n_threads=requestedThreads;
-    auto onUpdate=[](const msl::TranscriptionUpdate& update){
-        std::cerr << "PROGRESS " << std::clamp(20+static_cast<int>(update.progress*78),20,98) << '\n';
+    const bool resumable=!checkpointPath.empty();
+    const auto audioFingerprint=resumable?notiq_checkpoint::audioHash(audio):0ULL;
+    notiq_checkpoint::State completed;
+    if(resumable){
+        completed=notiq_checkpoint::load(checkpointPath,audio.size(),audioFingerprint,requestedThreads);
+        if(!completed.resume.empty()){
+            options.resume_from=completed.resume;
+            std::cerr<<"NOTIQ_RESUMED_NOTES "<<completed.notes.size()<<"\n";
+        }
+    }
+    auto onUpdate=[&](const msl::TranscriptionUpdate& update){
+        if(resumable){
+            // The original model releases notes one 5-second chunk late.
+            // This preserves cross-boundary continuity without re-decoding
+            // overlaps or adding duplicate notes.
+            completed.notes.insert(completed.notes.end(),update.new_notes.begin(),update.new_notes.end());
+            if(!update.resume_point.empty()){
+                completed.resume=update.resume_point;
+                notiq_checkpoint::save(checkpointPath,completed,audio.size(),
+                                       audioFingerprint,requestedThreads);
+            }
+            std::cerr<<"NOTIQ_CHECKPOINT "<<completed.notes.size()<<' '<<
+                std::fixed<<std::setprecision(2)<<update.finalized_through<<"\n";
+        }
+        std::cerr<<"PROGRESS "<<std::clamp(20+static_cast<int>(update.progress*78),20,98)<<"\n";
         return true;
     };
     auto result=engine->transcribe(std::span<const float>(audio),options,onUpdate);
-    if(!result) throw std::runtime_error(std::string("MuScriptor transcription failed: ")+msl::describe(result.error()));
-    writeJson(args[2],*result);
-    std::cerr << "PROGRESS 100\n";
-    std::cout << "OK notes=" << result->size() << '\n';
+    if(!result)throw std::runtime_error(std::string("MuScriptor transcription failed: ")+msl::describe(result.error()));
+    if(resumable){
+        writeJson(args[2],completed.notes);
+        std::error_code ec;std::filesystem::remove(checkpointPath,ec);
+    }else writeJson(args[2],*result);
+    std::cerr<<"PROGRESS 100\n";
+    std::cout<<"OK notes="<<(resumable?completed.notes.size():result->size())<<'\n';
     return 0;
 }
 }

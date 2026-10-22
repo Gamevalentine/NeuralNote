@@ -1,0 +1,62 @@
+name: NOTIQ 5M-C Native Resumable 5s Chunks
+on:
+  push:
+    branches: [feature/notiq-stage5mc-resume]
+    paths:
+      - .github/workflows/notiq-stage5mc-native.yml
+      - notiq-native/main.cpp
+      - notiq-native/checkpoint.hpp
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - name: Detect MSVC generator
+        shell: pwsh
+        run: |
+          $vswhere=Join-Path ([Environment]::GetFolderPath('ProgramFilesX86')) 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $vs=& $vswhere -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if(-not $vs){throw 'MSVC not installed'}
+          $cmake=cmake --help | Out-String
+          if(($vs -match '[\\/]18[\\/]') -and ($cmake -match 'Visual Studio 18 2026')){$gen='Visual Studio 18 2026'}
+          elseif(($vs -match '[\\/]17[\\/]') -and ($cmake -match 'Visual Studio 17 2022')){$gen='Visual Studio 17 2022'}
+          else {throw 'Unknown MSVC generator'}
+          "NOTIQ_GENERATOR=$gen" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Rebuild official MuScriptor 5M-C CPU CLI
+        shell: pwsh
+        run: |
+          cmake -S notiq-native -B build-5mc -G "$env:NOTIQ_GENERATOR" -A x64 -DMUSCRIPTOR_VULKAN=OFF -DMUSCRIPTOR_METAL=OFF
+          if($LASTEXITCODE -ne 0){throw 'CMake configure failed'}
+          cmake --build build-5mc --config Release --target notiq-muscriptor-cli --parallel 2
+          if($LASTEXITCODE -ne 0){throw 'Native C++ build failed'}
+      - name: Prove genuine checkpoint IO and strict CPU capability
+        shell: pwsh
+        run: |
+          $bin=Get-ChildItem build-5mc -Recurse -File -Filter 'notiq-muscriptor-cli.exe' | Select-Object -First 1
+          if(-not $bin){throw 'CLI missing'}
+          $caps=(& $bin.FullName --capabilities) | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0 -or $caps.resume_checkpoint -ne $true -or
+             ($caps.cpu_threads -join ',') -ne '2,4,6'){throw 'Resume/threads capabilities mismatch'}
+          $self=& $bin.FullName --self-test
+          if($LASTEXITCODE -ne 0 -or "$self" -notmatch '"ready":true'){throw 'Native CLI self-test failed'}
+          $cp=& $bin.FullName --self-test-checkpoint
+          if($LASTEXITCODE -ne 0 -or "$cp" -notmatch 'NOTIQ_5MC_CHECKPOINT_SELF_TEST_PASS'){throw 'Checkpoint roundtrip failed'}
+          $bad=& $bin.FullName 'missing.wav' 'missing.gguf' 'out.json' '--threads=999' 2>&1
+          if($LASTEXITCODE -eq 0){throw 'Unsafe thread value accepted'}
+          $global:LASTEXITCODE=0
+          New-Item -ItemType Directory -Force stage5mc-native | Out-Null
+          Copy-Item $bin.FullName stage5mc-native/
+          Write-Host 'NOTIQ_5MC_NATIVE_RESUME_AND_CHECKPOINT_PASS'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NOTIQ-Stage5M-C-Resumable-Native-CLI
+          path: stage5mc-native/
+          retention-days: 7
+          if-no-files-found: error

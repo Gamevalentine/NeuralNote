@@ -1,0 +1,101 @@
+name: NOTIQ 5M-C Windows Thread Trial Portable
+on:
+  push:
+    branches: [feature/notiq-stage5mc-resume]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  package-and-test:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Native benchmark argument, WAV, resource and progress regressions
+        shell: pwsh
+        run: |
+          node --test desktop-preview/tests/native-thread-spawn.test.cjs desktop-preview/tests/cpu-threads.test.cjs desktop-preview/tests/cpu-benchmark.test.cjs desktop-preview/tests/native-progress.test.cjs desktop-preview/tests/models.test.cjs
+          if ($LASTEXITCODE -ne 0) { throw 'CPU benchmark and thread tests failed' }
+          node --check desktop-preview/benchmark-native.cjs
+          node --check desktop-preview/main.cjs
+          node --check desktop-preview/preload.cjs
+          node --check desktop-preview/repack-5mc.cjs
+          if ($LASTEXITCODE -ne 0) { throw 'Electron and native benchmark JS syntax failed' }
+      - name: Check real Windows PID resources
+        shell: pwsh
+        run: |
+          node -e "require('./desktop-preview/process-metrics.cjs').windowsProcessSample(process.pid).then(x=>{if(!x||!(x.workingSetBytes>0))process.exit(1);console.log('NOTIQ_WINDOWS_PID_METRICS_PASS',JSON.stringify(x))})"
+          if ($LASTEXITCODE -ne 0) { throw 'Real process RAM sampling failed' }
+      - name: Compile Windows React/Electron renderer and run MIDI quality regression
+        working-directory: web
+        shell: pwsh
+        run: |
+          npm install --no-fund --no-audit
+          if ($LASTEXITCODE -ne 0) { throw 'Dependency install failed' }
+          npm run build
+          if ($LASTEXITCODE -ne 0) { throw 'Renderer TypeScript/Vite failed' }
+          node --experimental-strip-types --test tests/reference-benchmark.test.mts tests/note-quality.test.mts
+          if ($LASTEXITCODE -ne 0) { throw 'Benchmark or note-quality regressions failed' }
+      - uses: actions/download-artifact@v4
+        with:
+          repository: Gamevalentine/NeuralNote
+          run-id: 39831920880
+          name: NOTIQ-Stage5M-B-CPU-Threads-Windows-Preview
+          github-token: ${{ github.token }}
+          path: stage5mc-base
+      - uses: actions/download-artifact@v4
+        with:
+          repository: Gamevalentine/NeuralNote
+          run-id: 39837385509
+          name: NOTIQ-Stage5M-C-Resumable-Native-CLI
+          github-token: ${{ github.token }}
+          path: stage5mc-native
+      - name: Repackage UI and replace only approved native thread-configurable CLI
+        shell: pwsh
+        run: |
+          npm install --prefix package-tools --no-audit --no-fund @electron/asar@3
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot use ASAR' }
+          $asar=Get-ChildItem 'stage5mc-base' -File -Recurse -Filter 'app.asar' | Select-Object -First 1
+          if (-not $asar) { throw 'Portable app.asar missing' }
+          $resources=Split-Path $asar.FullName -Parent
+          $target=Join-Path $resources 'bridge-bin/notiq-muscriptor-cli.exe'
+          $source=Get-ChildItem 'stage5mc-native' -Recurse -File -Filter 'notiq-muscriptor-cli.exe' | Select-Object -First 1
+          if (-not (Test-Path $target) -or -not $source) { throw 'Old/new native CLI missing' }
+          $cap=(& $source.FullName --capabilities) | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or ($cap.cpu_threads -join ',') -ne '2,4,6' -or $cap.default_threads -ne 2 -or $cap.resume_checkpoint -ne $true) {
+            throw 'Cannot validate new native thread capabilities'
+          }
+          Copy-Item $source.FullName $target -Force
+          $binaryCap=(& $target --capabilities) | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or ($binaryCap.cpu_threads -join ',') -ne '2,4,6' -or $binaryCap.resume_checkpoint -ne $true) { throw 'Packaged native CLI incompatible' }
+          $self=& $target --self-test
+          if ($LASTEXITCODE -ne 0 -or "$self" -notmatch '"ready":true') { throw 'Packaged native CLI self-test failed' }
+          $cp=& $target --self-test-checkpoint
+          if ($LASTEXITCODE -ne 0 -or "$cp" -notmatch 'NOTIQ_5MC_CHECKPOINT_SELF_TEST_PASS') { throw 'Native checkpoint roundtrip failed' }
+          node desktop-preview/repack-5mc.cjs "$($asar.FullName)" "$((Resolve-Path web/dist).Path)"
+          if ($LASTEXITCODE -ne 0) { throw 'Electron 5M-B repack failed' }
+          $appRoot=Split-Path $resources -Parent
+          @(
+           'NOTIQ 5M-C -- Windows CPU 2/4/6 thread trials'
+           'This bundle contains a RECOMPILED MuScriptor CLI with original 5s chunk checkpoint and resume support.'
+           'Move portable to E: or another user-selected drive. Copy models and NOTIQ-Data beside EXE.'
+           'Load a song; enable 5M-C resume before recognition, then optionally stop and retry same audio/model/thread count.'
+           'The original MuScriptor releases cross-chunk finalized notes one chunk late, avoiding manual note stitching.'
+           'Checkpoints remain in NOTIQ-Data/long-song-checkpoints and contain saved note data and resume state.'
+           'Model GGUF not included. No CMD, server or paid GPU required.'
+           'No new model weights, no promised accuracy/speed gain. No main/production changes.'
+          ) -join [Environment]::NewLine | Set-Content (Join-Path $appRoot 'README-STAGE5M-C.txt')
+          Write-Host 'NOTIQ_STAGE5MC_WINDOWS_RESUME_PACKAGING_PASS'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NOTIQ-Stage5M-C-Resumable-Windows-Preview
+          path: stage5mc-base/
+          retention-days: 7
+          compression-level: 6
+          if-no-files-found: error
