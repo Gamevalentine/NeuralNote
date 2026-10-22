@@ -1,13 +1,7 @@
 name: NOTIQ 5M-C Windows Thread Trial Portable
 on:
   push:
-    branches: [feature/notiq-stage5mc-cpu-thread-trials]
-    paths:
-      - .github/workflows/notiq-stage5mc-windows.yml
-      - desktop-preview/**
-      - web/src/App.tsx
-      - web/src/NativeBenchmarkPanel.tsx
-      - web/src/nativeBenchmark.ts
+    branches: [feature/notiq-stage5mc-resume]
   workflow_dispatch:
 permissions:
   contents: read
@@ -89,11 +83,11 @@ jobs:
           $appRoot=Split-Path $resources -Parent
           @(
            'NOTIQ 5M-C -- Windows CPU 2/4/6 thread trials'
-           'This bundle contains a RECOMPILED native MuScriptor CLI with verified --capabilities [2,4,6].'
+           'This bundle contains a RECOMPILED MuScriptor CLI with original 5s chunk checkpoint and resume support.'
            'Move portable to E: or another user-selected drive. Copy models and NOTIQ-Data beside EXE.'
-           'Load a song; open AI 5M-B; choose the SAME 20 second window and run 2, 4 and 6 threads SEPARATELY.'
-           'Compare measured inference time, RAM and output fingerprints; do not infer 5-minute throughput.'
-           'Default remains 2 threads. Applying 4 or 6 to normal inference requires explicit click.'
+           'Load a song; enable 5M-C resume before recognition, then optionally stop and retry same audio/model/thread count.'
+           'The original MuScriptor releases cross-chunk finalized notes one chunk late, avoiding manual note stitching.'
+           'Checkpoints remain in NOTIQ-Data/long-song-checkpoints and contain saved note data and resume state.'
            'Model GGUF not included. No CMD, server or paid GPU required.'
            'No new model weights, no promised accuracy/speed gain. No main/production changes.'
           ) -join [Environment]::NewLine | Set-Content (Join-Path $appRoot 'README-STAGE5M-C.txt')
