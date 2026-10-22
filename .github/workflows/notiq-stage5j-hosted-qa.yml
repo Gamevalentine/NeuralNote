@@ -1,0 +1,36 @@
+name: NOTIQ 5J Public Cloudflare Preview Chrome QA
+on:
+  push:
+    branches: [feature/notiq-stage5j-web-evaluation]
+    paths:
+      - .github/workflows/notiq-stage5j-hosted-qa.yml
+      - notiq-ai-core/qa/web5j-browser.mjs
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-preview:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Chromium driver (no rebuild, test actual public site)
+        run: npm install --prefix /tmp/notiq-5j-playwright --no-fund --no-audit playwright-core@1.56.1
+      - name: Run Chrome against exact deployed 5J URL, test local MIDI uploads, no fabricated F1
+        env:
+          NOTIQ_HOSTED_URL: https://e6be19d6.neuralnote-e4c.pages.dev/
+        run: |
+          npm install --prefix web --no-fund --no-audit
+          node notiq-ai-core/qa/web5j-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: notiq-5j-real-cloudflare-browser-screenshot
+          path: /tmp/notiq-stage5j-browser-panel.png
+          retention-days: 7
+          if-no-files-found: warn
