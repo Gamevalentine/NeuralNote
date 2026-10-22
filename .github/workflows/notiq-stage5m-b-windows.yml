@@ -26,7 +26,7 @@ jobs:
       - name: Native benchmark argument, WAV, resource and progress regressions
         shell: pwsh
         run: |
-          node --test desktop-preview/tests/cpu-threads.test.cjs desktop-preview/tests/cpu-benchmark.test.cjs desktop-preview/tests/native-progress.test.cjs desktop-preview/tests/models.test.cjs
+          node --test desktop-preview/tests/native-thread-spawn.test.cjs desktop-preview/tests/cpu-threads.test.cjs desktop-preview/tests/cpu-benchmark.test.cjs desktop-preview/tests/native-progress.test.cjs desktop-preview/tests/models.test.cjs
           if ($LASTEXITCODE -ne 0) { throw 'CPU benchmark and thread tests failed' }
           node --check desktop-preview/benchmark-native.cjs
           node --check desktop-preview/main.cjs
