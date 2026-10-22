@@ -22,7 +22,7 @@ import {BenchmarkPanel} from './BenchmarkPanel';
 import {WebBenchmarkPanel} from './WebBenchmarkPanel';
 import {previewOverlapCleanup} from './noteQuality';
 import {soundingDurationWithPedal} from './pedalPlayback';
-import {readReferenceMidi,benchmarkComparison,type MidiReference,type MusicMode} from './referenceBenchmark';
+import {readReferenceMidi,benchmarkComparison,scoreAgainstReference,type MidiReference,type MusicMode} from './referenceBenchmark';
 import { runPianoV2 } from './transkunNative';
 import { webAiEnabled, installWebModel, recognizeWeb, closeWebModel } from './muscriptorWebLocal';
 
@@ -100,6 +100,21 @@ function App() {
   const [pedalEvents, setPedalEvents] = useState<PedalEvent[]>([]);
   const [rawRecognitionNotes, setRawRecognitionNotes] = useState<Note[]|null>(null);
   const noteCleanup=useMemo(()=>previewOverlapCleanup(notes),[notes]);
+  const overlapBenchmark=useMemo(()=>{
+    if(!referenceMidi || !noteCleanup.merged || !notes.length)return null;
+    const isPiano=musicMode==='piano' || (musicMode==='guided' &&
+      referenceMidi.notes.every(n=>n.program>=0&&n.program<8));
+    const ref=isPiano?referenceMidi.notes.filter(n=>n.program>=0&&n.program<8):referenceMidi.notes;
+    if(!ref.length)return null;
+    const byMode=(array:Note[])=>isPiano
+      ?array.filter(n=>n.program===undefined||n.program>=0&&n.program<8):array;
+    try{
+      const before=scoreAgainstReference(ref,byMode(notes),referenceOffset);
+      const after=scoreAgainstReference(ref,byMode(noteCleanup.notes),referenceOffset);
+      return {before,after,change:Math.round((after.f1-before.f1)*10000)/100};
+    }catch{return null}
+  },[referenceMidi,noteCleanup,notes,musicMode,referenceOffset]);
+
   const [pedalTrack, setPedalTrack] = useState('*');
   // Transcribed notes are the default listening target; the original recording
   // is available explicitly from the playback selector.
@@ -1282,8 +1297,15 @@ function App() {
           disabled={!rawRecognitionNotes||phase==='analyzing'} onClick={restoreRawRecognition}>
           Khôi phục nốt AI gốc
         </button>
+        {overlapBenchmark&&<span className="notiq-overlap-score" aria-label="F1 trước và sau gộp nốt">
+          F1 theo MIDI chuẩn: trước {(overlapBenchmark.before.f1*100).toFixed(1)}% →
+          sau {(overlapBenchmark.after.f1*100).toFixed(1)}% ({overlapBenchmark.change>=0?'+':''}{overlapBenchmark.change.toFixed(2)} điểm %)
+        </span>}
         <small>Chỉ gộp nốt chồng cùng cao độ và nhạc cụ; không tự sửa pitch/thiếu nốt.
-          Bấm mới áp dụng, có thể hoàn tác. CC64 kéo dài sample khi có điểm nhả pedal.</small>
+          {overlapBenchmark?.change!==undefined&&overlapBenchmark.change<0?
+            ' MIDI tham chiếu đang cho thấy F1 giảm nếu gộp: chỉ áp dụng sau khi nghe kỹ.' :
+            ' Nếu có MIDI chuẩn, kiểm F1 trước/sau rồi mới áp dụng.'}
+          Có thể hoàn tác. CC64 chỉ kéo dài sample khi có điểm nhả, không mô phỏng cộng hưởng thật.</small>
       </section>}
       {selection && (nativeReady || browserAi) && <section className="notiq-5i-toggle">
         <strong>AI 5I</strong>
