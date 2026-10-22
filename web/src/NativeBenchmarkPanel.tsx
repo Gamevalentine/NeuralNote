@@ -15,14 +15,14 @@ const ram=(n:number|null)=>n===null?'Chưa đo được':(n/1024/1024/1024).toFi
 export function NativeBenchmarkPanel(p:Props){
  const maxStart=Math.max(0,Math.floor(p.duration-p.seconds));
  // Only comparable exact bytes, model and clip parameters may be considered.
- const source=p.trials.findLast(x=>x.model===p.result?.model &&
+ const source=[...p.trials].reverse().find(x=>x.model===p.result?.model &&
   x.pcmSha256===p.result?.pcmSha256 && x.clipSeconds===p.seconds &&
   x.startSeconds===p.offset);
  const sample=source||null;
  const comparable=p.trials.filter(x=>sample&&x.model===sample.model&&
   x.clipSeconds===sample.clipSeconds&&x.startSeconds===sample.startSeconds&&
   x.pcmSha256===sample.pcmSha256);
- const latest=(threads:Threads)=>comparable.findLast(t=>t.threadCount===threads);
+ const latest=(threads:Threads)=>[...comparable].reverse().find(t=>t.threadCount===threads);
  const baseline=latest(2);
  const rows=([2,4,6] as Threads[]).map(threads=>{
   const r=latest(threads);
