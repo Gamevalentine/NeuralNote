@@ -13,6 +13,7 @@ const native = Object.freeze({
   transcribe: (waveBytes) => ipcRenderer.invoke('notiq:transcribe', waveBytes),
   cancelTranscription: () => ipcRenderer.invoke('notiq:cancel-transcription'),
   benchmark: (payload) => ipcRenderer.invoke('notiq:benchmark', payload),
+  applyCpuThreads: (n) => ipcRenderer.invoke('notiq:apply-cpu-threads', n),
   onProgress: (handler) => {
     if (typeof handler !== 'function') return () => {};
     const listener = (_event, message) => {

@@ -6,6 +6,9 @@ export type NativeStatus = {
   available: boolean;
   modelInstalled: boolean;
   modelSize?: 'small' | 'large';
+  nativeThreadsSupported?: boolean;
+  threadOptions?: number[];
+  selectedCpuThreads?: number;
   modelLabel?: string;
   availableModels?: string[];
   modelBytes: number;
@@ -28,7 +31,8 @@ declare global {
       selectModel?: (size: 'small' | 'large') => Promise<NativeStatus>;
       transcribe: (wave: Uint8Array) => Promise<MuScriptorResult>;
       cancelTranscription?: () => Promise<{requested:boolean;reason?:string}>;
-      benchmark?: (data:{wav:Uint8Array;seconds:20|30|60;startSeconds:number;audioPrepareMs:number}) => Promise<import('./nativeBenchmark').BenchmarkResult>;
+      benchmark?: (data:{wav:Uint8Array;seconds:20|30|60;startSeconds:number;audioPrepareMs:number;threads:2|4|6}) => Promise<import('./nativeBenchmark').BenchmarkResult>;
+      applyCpuThreads?: (n:2|4|6) => Promise<NativeStatus>;
       pianoStatus?: () => Promise<{available:boolean;installed:boolean;description:string}>;
       installPiano?: () => Promise<{ready:boolean;installedAlready:boolean}>;
       transcribePiano?: (wave:Uint8Array) => Promise<unknown>;

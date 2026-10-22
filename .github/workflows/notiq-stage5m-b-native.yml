@@ -1,0 +1,63 @@
+name: NOTIQ 5M-B Build Native Configurable CPU Threads
+on:
+  push:
+    branches: [feature/notiq-stage5m-b-cpu-thread-trials]
+    paths:
+      - notiq-native/main.cpp
+      - .github/workflows/notiq-stage5m-b-native.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-cpu:
+    runs-on: windows-latest
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - name: Select installed Visual Studio C++ generator
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ([Environment]::GetFolderPath('ProgramFilesX86')) 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $vsPath = & $vswhere -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $vsPath) { throw 'Missing Windows MSVC workload' }
+          $text = cmake --help | Out-String
+          if (($vsPath -match '[\\/]18[\\/]') -and ($text -match 'Visual Studio 18 2026')) {
+            $generator = 'Visual Studio 18 2026'
+          } elseif (($vsPath -match '[\\/]17[\\/]') -and ($text -match 'Visual Studio 17 2022')) {
+            $generator = 'Visual Studio 17 2022'
+          } else { throw "Cannot match CMake generator to MSVC: $vsPath" }
+          "NOTIQ_GENERATOR=$generator" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Build real C++ bridge from pinned MuScriptor CPU library
+        shell: pwsh
+        run: |
+          cmake -S notiq-native -B build-5mb -G "$env:NOTIQ_GENERATOR" -A x64 -DMUSCRIPTOR_VULKAN=OFF -DMUSCRIPTOR_METAL=OFF
+          if ($LASTEXITCODE -ne 0) { throw 'Native CMake configure failed' }
+          cmake --build build-5mb --config Release --target notiq-muscriptor-cli --parallel 2
+          if ($LASTEXITCODE -ne 0) { throw 'Native C++ compile failed' }
+      - name: Verify actual Windows CLI capability handshake and reject unsafe thread counts
+        shell: pwsh
+        run: |
+          $native=Get-ChildItem build-5mb -Recurse -File -Filter notiq-muscriptor-cli.exe | Select-Object -First 1
+          if (-not $native) { throw 'Native binary absent' }
+          $caps=(& $native.FullName --capabilities) | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $caps.schema -ne 1 -or
+              ($caps.cpu_threads -join ',') -ne '2,4,6' -or $caps.default_threads -ne 2) {
+              throw 'Native 2/4/6 handshake invalid'
+          }
+          $self=& $native.FullName --self-test
+          if ($LASTEXITCODE -ne 0 -or $self -notmatch '"ready":true') { throw 'C++ runtime self-test failed' }
+          $bad=& $native.FullName 'missing.wav' 'missing.gguf' 'out.json' '--threads=999' 2>&1
+          if ($LASTEXITCODE -eq 0 -or "$bad" -notmatch 'Invalid CPU thread count') { throw 'Unsafe CPU threads were accepted' }
+          New-Item -ItemType Directory -Force 'stage5mb-native' | Out-Null
+          Copy-Item $native.FullName 'stage5mb-native/notiq-muscriptor-cli.exe'
+          $global:LASTEXITCODE = 0
+          Write-Host 'NOTIQ_STAGE5MB_NATIVE_CPU_2_4_6_CAPABILITIES_PASS'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NOTIQ-Stage5M-B-Native-CPU-Threads
+          path: stage5mb-native/
+          retention-days: 7
+          if-no-files-found: error

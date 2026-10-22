@@ -103,6 +103,10 @@ function App() {
   const [benchStatus,setBenchStatus]=useState('Chưa đo');
   const [benchPercent,setBenchPercent]=useState<number|null>(null);
   const [benchResult,setBenchResult]=useState<BenchmarkResult|null>(null);
+  const [benchTrials,setBenchTrials]=useState<BenchmarkResult[]>([]);
+  const [benchThreads,setBenchThreads]=useState<2|4|6>(2);
+  const [appliedCpuThreads,setAppliedCpuThreads]=useState<2|4|6>(2);
+  const [nativeThreadsSupported,setNativeThreadsSupported]=useState(false);
   const [status, setStatus] = useState('Chưa tải tệp âm thanh');
   const [error, setError] = useState('');
   const [busyLoading, setBusyLoading] = useState(false);
@@ -190,6 +194,9 @@ function App() {
       setNativeReady(true);
       setNativeModelInstalled(native.modelInstalled);
       setNativeModelSize(native.modelSize === 'large' ? 'large' : 'small');
+      setNativeThreadsSupported(native.nativeThreadsSupported===true);
+      if([2,4,6].includes(native.selectedCpuThreads??-1))
+        setAppliedCpuThreads(native.selectedCpuThreads as 2|4|6);
       setEngineMode('muscriptor');
       if(window.notiqNative?.pianoStatus)
         void window.notiqNative.pianoStatus().then(p=>{
@@ -333,6 +340,7 @@ function App() {
     setPedalEvents([]);
     setRawRecognitionNotes(null);
     setBenchResult(null);
+    setBenchTrials([]);
     setBenchPercent(null);
     setBenchOffset(0);
     setBenchStatus('Chưa đo');
@@ -439,6 +447,7 @@ function App() {
       const selected = await window.notiqNative.selectModel(size);
       setNativeModelSize(selected.modelSize === 'large' ? 'large' : 'small');
       setNativeModelInstalled(selected.modelInstalled);
+      setBenchResult(null);setBenchTrials([]);
       const name = size === 'large' ? 'Large 2,74 GB' : 'Small 209 MB';
       setStatus('Đã chọn MuScriptor ' + name +
         (selected.modelInstalled ? '. Nhấn Nhận diện nốt để chạy lại bằng model mới.'
@@ -588,11 +597,14 @@ function App() {
       const wav=await convertAudioToNativeWav(current.file,percent=>
         setBenchStatus('Đang chuẩn bị PCM: '+percent+'%'));
       const audioPrepareMs=Math.round(performance.now()-start);
-      setBenchStatus('Đang chạy benchmark '+benchSeconds+' giây bằng MuScriptor '+selectedModelLabel+'…');
+      setBenchStatus('Đang đo '+benchThreads+' luồng CPU trên đoạn '+benchSeconds+' giây, model '+selectedModelLabel+'…');
       const result=await bridge.benchmark({
-        wav,seconds:benchSeconds,startSeconds:benchOffset,audioPrepareMs
+        wav,seconds:benchSeconds,startSeconds:benchOffset,audioPrepareMs,threads:benchThreads
       });
       setBenchResult(result);
+      setBenchTrials(prev=>[...prev.filter(x=>!(x.threadCount===result.threadCount &&
+        x.pcmSha256===result.pcmSha256 && x.model===result.model &&
+        x.clipSeconds===result.clipSeconds && x.startSeconds===result.startSeconds)),result]);
       setBenchStatus('Đo hoàn tất và đã lưu số liệu ở '+result.savedRelativePath);
       setStatus('5M-A hoàn tất benchmark '+benchSeconds+' giây — nốt MIDI đang chỉnh không thay đổi.');
     }catch(cause){
@@ -604,6 +616,20 @@ function App() {
       recognitionInFlight.current=false;
       setBenchRunning(false);
     }
+  };
+  const applyBenchCpuThreads=async(threads:2|4|6)=>{
+    if(!nativeReady||!nativeThreadsSupported||benchRunning||
+       recognitionInFlight.current||!window.notiqNative?.applyCpuThreads)return;
+    if(!benchTrials.some(x=>x.threadCount===threads&&x.model===nativeModelSize)){
+      setError('Cần đo thử thành công mức '+threads+' luồng trên model này trước khi áp dụng.');
+      return;
+    }
+    try{
+      const status=await window.notiqNative.applyCpuThreads(threads);
+      setAppliedCpuThreads(status.selectedCpuThreads as 2|4|6);
+      setStatus('Đã áp dụng '+threads+' luồng CPU cho lần nhận diện tiếp theo; MIDI hiện tại vẫn giữ nguyên.');
+      setError('');
+    }catch(cause){setError(cause instanceof Error?cause.message:'Không thể đổi số luồng CPU.')}
   };
   const cancelNativeBenchmark=async()=>{
     try{
@@ -1094,6 +1120,7 @@ function App() {
     setPedalEvents([]);
     setRawRecognitionNotes(null);
     setBenchResult(null);
+    setBenchTrials([]);
     setBenchPercent(null);
     setBenchOffset(0);
     setBenchStatus('Chưa đo');
@@ -1366,17 +1393,19 @@ function App() {
           <X size={14}/><span>Đóng bài</span></button>}
       </div>
       {nativeReady&&selection&&<section className="notiq-5m-switch" aria-label="Bộ đo hiệu năng MuScriptor">
-        <strong>AI 5M-A</strong>
+        <strong>AI 5M-B</strong>
         <button type="button" aria-label="Mở benchmark CPU" aria-expanded={benchOpen}
-          onClick={()=>setBenchOpen(v=>!v)}>{benchOpen?'Ẩn benchmark':'Đo tốc độ CPU · 20/30/60 giây'}</button>
-        <small>Thử model {selectedModelLabel}, giữ nguyên tất cả nốt đã chỉnh</small>
+          onClick={()=>setBenchOpen(v=>!v)}>{benchOpen?'Ẩn benchmark':'So sánh CPU 2 / 4 / 6 luồng'}</button>
+        <small>Model {selectedModelLabel} · nhận diện hiện tại {appliedCpuThreads} luồng · giữ nguyên MIDI</small>
       </section>}
       {nativeReady&&selection&&benchOpen&&<NativeBenchmarkPanel
         running={benchRunning} status={benchStatus} percent={benchPercent}
         seconds={benchSeconds} setSeconds={v=>{setBenchSeconds(v);setBenchOffset(0)}}
         offset={benchOffset} setOffset={setBenchOffset}
         duration={info?.duration??0} model={selectedModelLabel}
-        result={benchResult}
+        result={benchResult} trials={benchTrials} threads={benchThreads}
+        setThreads={setBenchThreads} nativeThreadsSupported={nativeThreadsSupported}
+        activeThreads={appliedCpuThreads} onApply={n=>void applyBenchCpuThreads(n)}
         canRun={nativeModelInstalled&&!busyLoading&&!pianoInstalling&&!modelSwitching&&
           !nativeDownloading&&phase!=='analyzing'}
         onRun={()=>void startNativeBenchmark()}
