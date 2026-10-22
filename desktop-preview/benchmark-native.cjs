@@ -5,11 +5,15 @@ const {spawn}=require('node:child_process');
 const {createNativeProgressParser}=require('./native-progress.cjs');
 const {createProcessSampler}=require('./process-metrics.cjs');
 const {makeClip}=require('./wav-benchmark.cjs');
+const {cpuThreadCount,fingerprintPCM}=require('./cpu-threads.cjs');
+const {createHash}=require('node:crypto');
 const now=()=>Number(process.hrtime.bigint()/1000000n);
 const round=x=>Math.round(x);
-async function runBenchmark({wav,seconds,startSeconds=0,model,modelPath,bridgeBinary,dataDir,
+async function runBenchmark({wav,seconds,startSeconds=0,threads=2,model,modelPath,bridgeBinary,dataDir,
   verifyModel,onProgress,job,runProcess=spawn,sampleProcess=createProcessSampler}){
+ const nThreads=cpuThreadCount(threads);
  const clip=makeClip(wav,seconds,startSeconds); // bounds and format validated before disk write.
+ const pcmSha256=fingerprintPCM(clip);
  if(job.cancelled)throw Error('Đã hủy benchmark.');
  const start=now();
  onProgress('Đang xác minh checksum model trên ổ đã chọn…',0);
@@ -29,7 +33,7 @@ async function runBenchmark({wav,seconds,startSeconds=0,model,modelPath,bridgeBi
   const spawnAt=now();
   const results=await new Promise((resolve,reject)=>{
    let settled=false,stderr='',loadAt=null,firstInferenceProgressAt=null,modelProgress=0;
-   const child=runProcess(bridgeBinary,[input,modelPath,output],{
+   const child=runProcess(bridgeBinary,[input,modelPath,output,'--threads='+nThreads],{
     cwd:work,shell:false,windowsHide:true,stdio:['ignore','pipe','pipe']
    });
    job.child=child;
@@ -58,20 +62,21 @@ async function runBenchmark({wav,seconds,startSeconds=0,model,modelPath,bridgeBi
         data.notes.length>150000)throw Error('Native output không hợp lệ.');
      resolve({
       schema:1,engine:'muscriptor',model:model.id,modelLabel:model.label,
-      clipSeconds:seconds,startSeconds,audioBytes:clip.length,
+      clipSeconds:seconds,startSeconds,audioBytes:clip.length,pcmSha256,
       checksumMs,writeMs:wavWriteMs,
       nativeTotalMs:endAt-spawnAt,
       loadMs:loadAt===null?null:loadAt-spawnAt,
       inferenceMs:loadAt===null?null:endAt-loadAt,
       firstInferenceUpdateMs:firstInferenceProgressAt===null?null:firstInferenceProgressAt-spawnAt,
       notes:data.notes.length,
+      notesSha256:createHash('sha256').update(JSON.stringify(data.notes)).digest('hex'),
       peakWorkingSetBytes:stats.peakWorkingSetBytes,
       machineCpuPercent:stats.machineCpuPercent,
       cpuCoreEquivalent:stats.cpuCoreEquivalent,
       cpuSamples:stats.samples,logicalCores:stats.logicalCores,
       sampleSource:'Windows Get-Process PID',
       measurement:'CPU/RAM riêng tiến trình MuScriptor; không phải số liệu của cả NOTIQ',
-      threadCount:2,
+      threadCount:nThreads,
       actualFullSongEstimateMs:null,
       wallRecordedAt:new Date().toISOString()
      });
