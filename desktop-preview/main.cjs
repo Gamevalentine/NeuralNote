@@ -72,7 +72,7 @@ function cpuThreadCapabilities(){
     if(capabilities.bridge==='notiq-muscriptor' && capabilities.schema===1 &&
        JSON.stringify(capabilities.cpu_threads)==='[2,4,6]' &&
        capabilities.default_threads===2){
-      threadCapabilitiesCached={supported:true,values:[2,4,6],default:2};
+      threadCapabilitiesCached={supported:true,values:[2,4,6],default:2,resumeCheckpoint:capabilities.resume_checkpoint===true};
       return threadCapabilitiesCached;
     }
   }catch{ /* stay on legacy default 2 */ }
