@@ -94,7 +94,7 @@ export function Stage5MDAcceptance(p:Props){
   <header><strong>5M-D · Nghiệm thu tốc độ, RAM và chất lượng MIDI</strong>
    <small>Chưa có kết quả Large trên máy thì chưa thể kết luận tăng tốc.</small>
   </header>
-  <p>**Bước 1 — Hiệu năng:** chạy cùng đoạn {p.clipSeconds} giây tại {p.clipOffset} giây,
+  <p><b>Bước 1 — Hiệu năng:</b> chạy cùng đoạn {p.clipSeconds} giây tại {p.clipOffset} giây,
    mỗi mức 2/4/6 luồng tối thiểu <b>hai lần</b> trong mục AI 5M-B. Số liệu lưu trong phiên làm việc hiện tại.</p>
   <label>Nhập báo cáo CPU 5M-B đã lưu (không cần chạy lại Large)
     <input type="file" accept=".json,application/json" multiple disabled={p.busy}
@@ -112,7 +112,7 @@ export function Stage5MDAcceptance(p:Props){
     <td>{g.status==='candidate'?'Đáng thử':g.reasons.length?g.reasons.join('; '):'Mốc gốc'}</td>
    </tr>)}</tbody>
   </table></div>}
-  <p>**Bước 2 — Chất lượng MIDI:** nạp MIDI chuẩn trong mục 5I, sau đó chọn MIDI đã xuất từ bản 5L trước đây của chính bài nhạc này.</p>
+  <p><b>Bước 2 — Chất lượng MIDI:</b> nạp MIDI chuẩn trong mục 5I, sau đó chọn MIDI đã xuất từ bản 5L trước đây của chính bài nhạc này.</p>
   <label>Nhập MIDI kết quả cũ (5L)
    <input type="file" accept=".mid,.midi" disabled={p.busy}
     onChange={e=>void readOld(e.target.files?.[0])}/>
@@ -128,7 +128,7 @@ export function Stage5MDAcceptance(p:Props){
    <span>Chênh lệch: <b>{qa.deltaF1===null?'Chưa xác định':(qa.deltaF1>=0?'+':'')+qa.deltaF1.toFixed(2)+' điểm %'}</b></span>
   </div>
   <small>{qa.explanation} F1 dựa vào pitch/onset dung sai 100ms, không thay cho nghe thật hay đánh giá pedal.</small>
-  <p>**Bước 3 — Xác nhận thủ công trên Windows**</p>
+  <p><b>Bước 3 — Xác nhận thủ công trên Windows</b></p>
   <label><input type="checkbox" checked={completed} onChange={e=>setCompleted(e.target.checked)}/>
    Đã xử lý và xuất MIDI hoàn chỉnh cho một bài dài, không mất nốt đã xác nhận.</label>
   <label><input type="checkbox" checked={resumed} onChange={e=>setResumed(e.target.checked)}/>
