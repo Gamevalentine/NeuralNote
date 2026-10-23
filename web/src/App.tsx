@@ -1460,7 +1460,7 @@ function App() {
         <small>Đánh giá trên máy của bạn · không tự đổi cấu hình hoặc merge bản chính</small>
       </section>}
       {nativeReady&&selection&&acceptanceOpen&&<Stage5MDAcceptance
-         key={selection.url}
+         key={selection.url+'|'+nativeModelSize+'|'+appliedCpuThreads+'|'+(referenceMidi?.fileName||'none')}
          trials={benchTrials} clipSeconds={benchSeconds} clipOffset={benchOffset}
          model={nativeModelSize} notes={notes} referenceMidi={referenceMidi}
          onImportBenchmarks={reports=>setBenchTrials(prev=>[...prev,...reports].slice(-36))}
