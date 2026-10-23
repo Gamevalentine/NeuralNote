@@ -25,7 +25,17 @@ permissions:
   actions: read
 
 jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Refuse any non-isolated branch or non-manual event
+        shell: bash
+        run: |
+          test "${GITHUB_EVENT_NAME}" = "workflow_dispatch" || exit 2
+          test "${GITHUB_REF}" = "refs/heads/ci/notiq-5md-ui-dispatch" || exit 3
+          echo 'NOTIQ_5MD_DISPATCH_BRANCH_PREFLIGHT_PASS'
   notiq-5md-windows:
+    needs: preflight
     permissions:
       contents: read
       actions: read
