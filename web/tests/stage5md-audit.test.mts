@@ -44,3 +44,11 @@ test('reference MIDI and confirmed same recording required; F1 drop warning',()=
  assert.equal(down.status,'risk');assert.ok((down.deltaF1??0)<-1);
  assert.equal(validateFullSongEvidence(true,true,.9,.91,true).status,'comparable');
 });
+
+test('importing same saved JSON twice never counts as independent repeat',()=>{
+ const a=t(2,100000),b=t(4,60000,2100000000);
+ const g=auditCpuTrials([a,a,b,b],'large',20,0);
+ assert.equal(g.status,'insufficient');
+ assert.equal(g.gates.find(x=>x.threads===2)?.samples,1);
+ assert.equal(g.gates.find(x=>x.threads===4)?.samples,1);
+});
