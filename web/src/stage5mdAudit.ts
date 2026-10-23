@@ -27,7 +27,14 @@ export function auditCpuTrials(trials:BenchmarkResult[],model:string,seconds:20|
    ?'Các lần đo không cùng dữ liệu PCM; phải thử lại đúng một nguồn âm thanh.'
    :'Cần dữ liệu benchmark thật cùng đoạn và model.',gates:[],excerptFingerprint:null,notesCompared:false
  };
- const same=pool.filter(t=>t.pcmSha256===fingerprints[0]);
+ // A saved JSON imported twice is still one observation, not two independent CPU tests.
+ const distinct=new Set<string>();
+ const same=pool.filter(t=>{
+  if(t.pcmSha256!==fingerprints[0])return false;
+  const signature=[t.threadCount,t.wallRecordedAt,t.inferenceMs,t.notesSha256].join(':');
+  if(distinct.has(signature))return false;
+  distinct.add(signature);return true;
+ });
  const median=(n:number[])=>{if(!n.length)return null;const sorted=n.slice().sort((a,b)=>a-b);return sorted.length%2?sorted[(sorted.length-1)/2]:(sorted[sorted.length/2-1]+sorted[sorted.length/2])/2};
  const runs=(threads:TrialThread)=>same.filter(t=>t.threadCount===threads);
  const baseline=runs(2),baseTime=median(baseline.map(t=>t.inferenceMs!));
