@@ -4,7 +4,6 @@ on:
     branches: [feature/notiq-stage5md-acceptance]
   pull_request:
     branches: [feature/notiq-stage5mc-resume]
-    types: [opened, reopened, synchronize, edited]
   workflow_dispatch:
 permissions:
   contents: read
