@@ -17,3 +17,11 @@ New Windows workflow tests pure 5M-D audit strictness (repeats, matching PCM, RA
 ## Important limitations
 Neither GitHub Actions nor the local audit panel has the user's Large 2.74GB GGUF or actual five-minute recording. **No end-to-end Large inference speedup, F1 non-regression, checkpoint/resume after a real interruption, or 4/6 CPU superiority is claimed without those tests.** A 20-second clip is not the complete song. The F1 matcher checks note pitch/onset (offset errors shown separately), not acoustic naturalness/CC64 resonance.
 Retain default 2 threads and keep the draft PR unmerged until acceptance reports support another choice.
+
+## Continuation log — 23 October 2026 (post-PR #39)
+- Preserved legacy 5M-C Windows packaging workflow byte-for-byte on the 5M-D branch. Only `.github/workflows/notiq-stage5md-windows.yml` may produce the 5M-D release artifact; this avoids competing artifacts and accidental 5M-C relabeling.
+- Strengthened benchmark acceptance: **every** one of the two or more independent runs per configuration must provide a finite positive native-process RAM peak, for both 2-thread baseline and 4/6 candidate. One sampled run plus another with missing RAM is **insufficient**, never accepted. The baseline 2-thread row is not interpreted as a failed candidate.
+- MIDI F1 checks now reject invalid/non-finite scores and flag more than a **1 absolute percentage point** drop against 5L; smaller decreases are displayed as decreases, not improvements. Added targeted regression cases.
+- Validation status: GitHub API reports **zero workflow runs on the 5M-D branch** at time of update. Therefore the changes above are **source changes only**, not a Windows CI PASS and not a verified Windows ZIP. Do not offer a renamed 5M-C artifact as 5M-D.
+- Packaging remains pinned to the verified 5M-C artifact from run 39838381380, which is subject to GitHub retention. If that artifact expires, update the packaging source from a newly verified 5M-C build instead of silently substituting an older binary.
+- Next gate: trigger the dedicated 5M-D Windows Action; verify Node/TypeScript/MIDI tests, native CLI checkpoint self-test, ZIP integrity and artifact identifier. Only then hand off the package for on-device Large benchmarking and five-minute audio acceptance.
