@@ -19,7 +19,7 @@ export function auditCpuTrials(trials:BenchmarkResult[],model:string,seconds:20|
  const pool=trials.filter(t=>t.model===model&&t.clipSeconds===seconds&&
   t.startSeconds===offset&&/^[a-f0-9]{64}$/.test(t.pcmSha256)&&
   [2,4,6].includes(t.threadCount)&&t.inferenceMs!==null&&t.inferenceMs>0&&
-  Number.isFinite(t.inferenceMs)&&t.notesSha256?.length===64);
+  Number.isFinite(t.inferenceMs)&&/^[a-f0-9]{64}$/.test(t.notesSha256||''));
  const fingerprints=[...new Set(pool.map(t=>t.pcmSha256))];
  // Never compare entries from different audio decoding outputs, even same filename.
  if(fingerprints.length!==1)return{
@@ -42,10 +42,16 @@ export function auditCpuTrials(trials:BenchmarkResult[],model:string,seconds:20|
  const gates=([2,4,6] as TrialThread[]).map(threads=>{
   const values=runs(threads);
   const inferenceMedianMs=median(values.map(t=>t.inferenceMs!));
-  const peaks=values.map(t=>t.peakWorkingSetBytes).filter((n):n is number=>n!==null&&n>0);
-  const peakRamBytes=peaks.length?Math.max(...peaks):null;
-  const basePeaks=baseline.map(t=>t.peakWorkingSetBytes).filter((n):n is number=>n!==null&&n>0);
-  const baselinePeak=basePeaks.length?Math.max(...basePeaks):null;
+  const peaks=values.map(t=>t.peakWorkingSetBytes).filter((n):n is number=>
+    n!==null&&Number.isFinite(n)&&n>0);
+  // Every independent observation must have its own valid native-process RAM measurement.
+  // A single sampled peak cannot stand in for missing values from other runs.
+  const completeRam=peaks.length===values.length&&values.length>=2;
+  const peakRamBytes=completeRam?Math.max(...peaks):null;
+  const basePeaks=baseline.map(t=>t.peakWorkingSetBytes).filter((n):n is number=>
+    n!==null&&Number.isFinite(n)&&n>0);
+  const completeBaselineRam=basePeaks.length===baseline.length&&baseline.length>=2;
+  const baselinePeak=completeBaselineRam?Math.max(...basePeaks):null;
   const speedup=baseTime&&inferenceMedianMs?baseTime/inferenceMedianMs:null;
   const reasons:string[]=[];
   if(values.length<2)reasons.push('Cần ít nhất 2 lần đo độc lập mức '+threads+' luồng');
@@ -64,7 +70,8 @@ export function auditCpuTrials(trials:BenchmarkResult[],model:string,seconds:20|
     speedup!==null&&speedup>=1.1&&peakRamBytes<=baselinePeak*1.3;
   return{threads,samples:values.length,inferenceMedianMs,baselineMedianMs:baseTime,
     speedup,peakRamBytes,outputIdentical,
-    status:ready?'candidate':values.length>=2&&baseline.length>=2?'reject':'pending',
+    status:ready?'candidate':threads===2?'pending':
+      values.length>=2&&baseline.length>=2&&completeRam&&completeBaselineRam?'reject':'pending',
     reasons} as TrialGate;
  });
  const hasCandidate=gates.some(t=>t.status==='candidate');
@@ -78,11 +85,17 @@ export function auditCpuTrials(trials:BenchmarkResult[],model:string,seconds:20|
 }
 export function validateFullSongEvidence(referencePresent:boolean,baselinePresent:boolean,baselineF1:number|null,currentF1:number|null,
   sameAudioConfirmed:boolean):{status:'missing'|'risk'|'comparable';explanation:string;deltaF1:number|null}{
- if(!referencePresent||!baselinePresent||!sameAudioConfirmed||baselineF1===null||currentF1===null)
-  return{status:'missing',explanation:'Cần MIDI chuẩn, MIDI 5L cũ và xác nhận chúng thuộc đúng cùng bản ghi để đối chiếu F1.',deltaF1:null};
+ if(!referencePresent||!baselinePresent||!sameAudioConfirmed||baselineF1===null||currentF1===null||
+    !Number.isFinite(baselineF1)||!Number.isFinite(currentF1)||
+    baselineF1<0||baselineF1>1||currentF1<0||currentF1>1)
+  return{status:'missing',explanation:'Cần MIDI chuẩn, MIDI 5L cũ và điểm F1 hợp lệ của cùng bản ghi.',deltaF1:null};
  const delta=Math.round((currentF1-baselineF1)*10000)/100;
- return{status:delta<0?'risk':'comparable',
-   explanation:delta<0?'F1 giảm so với 5L; không đạt tiêu chí không suy giảm chất lượng.'
+ // More than one absolute F1 percentage point below baseline fails; smaller
+ // drops must still be reported honestly and are never described as improvement.
+ const failed=delta< -1;
+ return{status:failed?'risk':'comparable',
+   explanation:failed?'F1 giảm quá 1 điểm % so với 5L; không đạt tiêu chí nghiệm thu.'
+    :delta<0?'F1 giảm nhẹ (trong ngưỡng 1 điểm %); phải kiểm tra nốt thủ công trước khi nghiệm thu.'
     :'Có số liệu F1 cùng MIDI chuẩn. Cần nghe và đối chiếu nốt ở ranh giới nữa.',
    deltaF1:delta};
 }
