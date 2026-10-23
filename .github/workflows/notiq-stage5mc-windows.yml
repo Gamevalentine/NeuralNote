@@ -1,7 +1,7 @@
-name: NOTIQ 5M-C Windows Thread Trial Portable
+name: NOTIQ 5M-D Final Quality Acceptance Portable
 on:
   push:
-    branches: [feature/notiq-stage5mc-resume]
+    branches: [feature/notiq-stage5md-acceptance]
   workflow_dispatch:
 permissions:
   contents: read
@@ -25,7 +25,7 @@ jobs:
           node --check desktop-preview/benchmark-native.cjs
           node --check desktop-preview/main.cjs
           node --check desktop-preview/preload.cjs
-          node --check desktop-preview/repack-5mc.cjs
+          node --check desktop-preview/repack-5md.cjs
           if ($LASTEXITCODE -ne 0) { throw 'Electron and native benchmark JS syntax failed' }
       - name: Check real Windows PID resources
         shell: pwsh
@@ -40,7 +40,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Dependency install failed' }
           npm run build
           if ($LASTEXITCODE -ne 0) { throw 'Renderer TypeScript/Vite failed' }
-          node --experimental-strip-types --test tests/reference-benchmark.test.mts tests/note-quality.test.mts
+          node --experimental-strip-types --test tests/stage5md-audit.test.mts tests/reference-benchmark.test.mts tests/note-quality.test.mts
           if ($LASTEXITCODE -ne 0) { throw 'Benchmark or note-quality regressions failed' }
       - uses: actions/download-artifact@v4
         with:
@@ -78,7 +78,7 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or "$self" -notmatch '"ready":true') { throw 'Packaged native CLI self-test failed' }
           $cp=& $target --self-test-checkpoint
           if ($LASTEXITCODE -ne 0 -or "$cp" -notmatch 'NOTIQ_5MC_CHECKPOINT_SELF_TEST_PASS') { throw 'Native checkpoint roundtrip failed' }
-          node desktop-preview/repack-5mc.cjs "$($asar.FullName)" "$((Resolve-Path web/dist).Path)"
+          node desktop-preview/repack-5md.cjs "$($asar.FullName)" "$((Resolve-Path web/dist).Path)"
           if ($LASTEXITCODE -ne 0) { throw 'Electron 5M-B repack failed' }
           $appRoot=Split-Path $resources -Parent
           @(
@@ -90,11 +90,11 @@ jobs:
            'Checkpoints remain in NOTIQ-Data/long-song-checkpoints and contain saved note data and resume state.'
            'Model GGUF not included. No CMD, server or paid GPU required.'
            'No new model weights, no promised accuracy/speed gain. No main/production changes.'
-          ) -join [Environment]::NewLine | Set-Content (Join-Path $appRoot 'README-STAGE5M-C.txt')
-          Write-Host 'NOTIQ_STAGE5MC_WINDOWS_RESUME_PACKAGING_PASS'
+          ) -join [Environment]::NewLine | Set-Content (Join-Path $appRoot 'README-STAGE5M-D.txt')
+          Write-Host 'NOTIQ_STAGE5MD_WINDOWS_AUDIT_PACK_PASS'
       - uses: actions/upload-artifact@v4
         with:
-          name: NOTIQ-Stage5M-C-Resumable-Windows-Preview
+          name: NOTIQ-Stage5M-D-Windows-Acceptance-Preview
           path: stage5mc-base/
           retention-days: 7
           compression-level: 6
