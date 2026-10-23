@@ -2,6 +2,8 @@ name: NOTIQ Stage 5M-D Windows Acceptance
 on:
   push:
     branches: [feature/notiq-stage5md-acceptance]
+  pull_request:
+    branches: [feature/notiq-stage5mc-resume]
   workflow_dispatch:
 permissions:
   contents: read
