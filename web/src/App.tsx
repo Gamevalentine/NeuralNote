@@ -623,9 +623,10 @@ function App() {
         wav,seconds:benchSeconds,startSeconds:benchOffset,audioPrepareMs,threads:benchThreads
       });
       setBenchResult(result);
-      setBenchTrials(prev=>[...prev.filter(x=>!(x.threadCount===result.threadCount &&
-        x.pcmSha256===result.pcmSha256 && x.model===result.model &&
-        x.clipSeconds===result.clipSeconds && x.startSeconds===result.startSeconds)),result]);
+      // Keep independent repetitions (5M-D acceptance needs >=2 per thread).
+      // Limit in-memory history to avoid unbounded growth; never discard earlier
+      // samples just because they share a clip and CPU-thread count.
+      setBenchTrials(prev=>[...prev,result].slice(-36));
       setBenchStatus('Đo hoàn tất và đã lưu số liệu ở '+result.savedRelativePath);
       setStatus('5M-A hoàn tất benchmark '+benchSeconds+' giây — nốt MIDI đang chỉnh không thay đổi.');
     }catch(cause){
