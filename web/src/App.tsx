@@ -1463,6 +1463,7 @@ function App() {
          key={selection.url}
          trials={benchTrials} clipSeconds={benchSeconds} clipOffset={benchOffset}
          model={nativeModelSize} notes={notes} referenceMidi={referenceMidi}
+         onImportBenchmarks={reports=>setBenchTrials(prev=>[...prev,...reports].slice(-36))}
          musicMode={musicMode} referenceOffset={referenceOffset}
          songDuration={info?.duration??0} busy={phase==='analyzing'||benchRunning||busyLoading}
        />}
