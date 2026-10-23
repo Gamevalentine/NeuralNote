@@ -79,3 +79,24 @@ export function validateFullSongEvidence(referencePresent:boolean,baselinePresen
     :'Có số liệu F1 cùng MIDI chuẩn. Cần nghe và đối chiếu nốt ở ranh giới nữa.',
    deltaF1:delta};
 }
+
+/** Import only NOTIQ's own compact benchmark JSON; never execute file contents. */
+export function parseSavedBenchmark(data:unknown):BenchmarkResult{
+ if(!data||typeof data!=='object')throw Error('Tệp không phải báo cáo benchmark JSON.');
+ const r=data as Record<string,unknown>;
+ if(r.schema!==1||r.engine!=='muscriptor'||!['small','large'].includes(String(r.model))||
+    ![2,4,6].includes(Number(r.threadCount))||
+    ![20,30,60].includes(Number(r.clipSeconds))||
+    !Number.isFinite(r.startSeconds)||Number(r.startSeconds)<0||Number(r.startSeconds)>900||
+    !/^[a-f0-9]{64}$/.test(String(r.pcmSha256))||
+    !/^[a-f0-9]{64}$/.test(String(r.notesSha256))||
+    !Number.isFinite(r.inferenceMs)||Number(r.inferenceMs)<=0||
+    !Number.isFinite(r.nativeTotalMs)||Number(r.nativeTotalMs)<=0||
+    typeof r.wallRecordedAt!=='string'||!Number.isFinite(Date.parse(r.wallRecordedAt))||
+    typeof r.modelLabel!=='string')
+    throw Error('Báo cáo không đúng định dạng NOTIQ 5M-B hoặc thiếu số liệu đo thật.');
+ if(r.peakWorkingSetBytes!==null &&
+    (!Number.isFinite(r.peakWorkingSetBytes)||Number(r.peakWorkingSetBytes)<=0))
+    throw Error('Thông số RAM trong báo cáo không hợp lệ.');
+ return r as BenchmarkResult;
+}
