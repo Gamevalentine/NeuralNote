@@ -52,3 +52,33 @@ test('importing same saved JSON twice never counts as independent repeat',()=>{
  assert.equal(g.gates.find(x=>x.threads===2)?.samples,1);
  assert.equal(g.gates.find(x=>x.threads===4)?.samples,1);
 });
+
+test('one missing RAM observation blocks a tempting median speedup',()=>{
+ const values=[t(2,100000),t(2,105000,null),t(4,60000,2150000000),t(4,62000,2140000000)];
+ const a=auditCpuTrials(values,'large',20,0);
+ assert.equal(a.status,'insufficient');
+ assert.equal(a.gates.find(g=>g.threads===4)?.status,'pending');
+ assert.equal(a.gates.find(g=>g.threads===4)?.peakRamBytes,2150000000);
+ assert.ok(a.gates.find(g=>g.threads===4)?.reasons.some(s=>s.includes('RAM')));
+});
+
+test('missing one candidate RAM sample never certifies the candidate',()=>{
+ const values=[t(2,100000),t(2,105000),t(4,60000,null),t(4,62000,2150000000)];
+ const a=auditCpuTrials(values,'large',20,0);
+ assert.equal(a.status,'insufficient');
+ assert.equal(a.gates.find(g=>g.threads===4)?.peakRamBytes,null);
+ assert.equal(a.gates.find(g=>g.threads===4)?.status,'pending');
+});
+
+test('2-thread baseline alone is neutral, not a performance regression',()=>{
+ const a=auditCpuTrials([t(2,100000),t(2,101000)],'large',20,0);
+ assert.equal(a.status,'insufficient');
+ assert.equal(a.gates.find(g=>g.threads===2)?.status,'pending');
+});
+
+test('quality permits only <=1 absolute F1 point drop; invalid scores never pass',()=>{
+ assert.equal(validateFullSongEvidence(true,true,.90,.895,true).status,'comparable');
+ assert.equal(validateFullSongEvidence(true,true,.90,.88,true).status,'risk');
+ assert.equal(validateFullSongEvidence(true,true,Number.NaN,.90,true).status,'missing');
+ assert.equal(validateFullSongEvidence(true,true,1.2,.90,true).status,'missing');
+});
