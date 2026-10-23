@@ -15,6 +15,7 @@ import type { InstrumentId, InstrumentSelection } from './soundfont';
 import { nativeInstrumentPrograms, nativeProgramName } from './muscriptorProtocol';
 import { nativeBridgeAvailable, runMuScriptor, convertAudioToNativeWav } from './muscriptorNative';
 import {NativeBenchmarkPanel} from './NativeBenchmarkPanel';
+import {Stage5MDAcceptance} from './Stage5MDAcceptance';
 import type {BenchmarkResult} from './nativeBenchmark';
 import {type Comparison} from './compareEngines';
 import {compareOriginalAudio} from './dualEngineNative';
@@ -97,6 +98,7 @@ function App() {
   const [nativeReportedPercent, setNativeReportedPercent] = useState<number | null>(null);
   const [cancelPending, setCancelPending] = useState(false);
   const [benchOpen,setBenchOpen]=useState(false);
+  const [acceptanceOpen,setAcceptanceOpen]=useState(false);
   const [benchRunning,setBenchRunning]=useState(false);
   const [benchSeconds,setBenchSeconds]=useState<20|30|60>(20);
   const [benchOffset,setBenchOffset]=useState(0);
@@ -1449,6 +1451,21 @@ function App() {
         onRun={()=>void startNativeBenchmark()}
         onCancel={()=>void cancelNativeBenchmark()}
       />}
+      {nativeReady&&selection&&<section className="notiq-5md-toggle" aria-label="5M-D kiểm tra nghiệm thu">
+        <strong>5M-D · Đánh giá phiên bản</strong>
+        <button type="button" aria-expanded={acceptanceOpen}
+         onClick={()=>setAcceptanceOpen(v=>!v)}>
+         {acceptanceOpen?'Ẩn bảng nghiệm thu':'Mở bảng kiểm tốc độ và MIDI'}
+        </button>
+        <small>Đánh giá trên máy của bạn · không tự đổi cấu hình hoặc merge bản chính</small>
+      </section>}
+      {nativeReady&&selection&&acceptanceOpen&&<Stage5MDAcceptance
+         key={selection.url}
+         trials={benchTrials} clipSeconds={benchSeconds} clipOffset={benchOffset}
+         model={nativeModelSize} notes={notes} referenceMidi={referenceMidi}
+         musicMode={musicMode} referenceOffset={referenceOffset}
+         songDuration={info?.duration??0} busy={phase==='analyzing'||benchRunning||busyLoading}
+       />}
       {nativeReady && selection && <section className="notiq-5h-controls" aria-label="So sánh AI Piano">
         <strong>AI 5H</strong>
         <button type="button" aria-label="So sánh hai AI" onClick={()=>void runComparison()}
