@@ -81,8 +81,8 @@ export function validateFullSongEvidence(referencePresent:boolean,baselinePresen
  if(!referencePresent||!baselinePresent||!sameAudioConfirmed||baselineF1===null||currentF1===null)
   return{status:'missing',explanation:'Cần MIDI chuẩn, MIDI 5L cũ và xác nhận chúng thuộc đúng cùng bản ghi để đối chiếu F1.',deltaF1:null};
  const delta=Math.round((currentF1-baselineF1)*10000)/100;
- return{status:delta<-1?'risk':'comparable',
-   explanation:delta<-1?'F1 giảm trên 1 điểm phần trăm; chưa nên nghiệm thu.'
+ return{status:delta<0?'risk':'comparable',
+   explanation:delta<0?'F1 giảm so với 5L; không đạt tiêu chí không suy giảm chất lượng.'
     :'Có số liệu F1 cùng MIDI chuẩn. Cần nghe và đối chiếu nốt ở ranh giới nữa.',
    deltaF1:delta};
 }
