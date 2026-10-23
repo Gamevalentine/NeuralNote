@@ -1,12 +1,13 @@
 import {useMemo,useState} from 'react';
 import type {Note} from './audio';
 import type {BenchmarkResult} from './nativeBenchmark';
-import {auditCpuTrials,validateFullSongEvidence} from './stage5mdAudit';
+import {auditCpuTrials,parseSavedBenchmark,validateFullSongEvidence} from './stage5mdAudit';
 import {readReferenceMidi,scoreAgainstReference,type MidiReference,type MusicMode,type NoteScore} from './referenceBenchmark';
 type Props={
  trials:BenchmarkResult[];clipSeconds:20|30|60;clipOffset:number;
  model:'small'|'large';notes:Note[];referenceMidi:MidiReference|null;
  musicMode:MusicMode;referenceOffset:number;songDuration:number;busy:boolean;
+ onImportBenchmarks:(reports:BenchmarkResult[])=>void;
 };
 const pct=(n:number|null)=>n===null?'Chưa đo':(n*100).toFixed(1)+'%';
 const sec=(ms:number|null)=>ms===null?'Chưa đo':(ms/1000).toFixed(1)+' giây';
@@ -19,6 +20,7 @@ export function Stage5MDAcceptance(p:Props){
  const [resumed,setResumed]=useState(false);
  const [seamsChecked,setSeamsChecked]=useState(false);
  const [exportStatus,setExportStatus]=useState('');
+ const [importStatus,setImportStatus]=useState('');
  const perf=useMemo(()=>auditCpuTrials(p.trials,p.model,p.clipSeconds,p.clipOffset),
   [p.trials,p.model,p.clipSeconds,p.clipOffset]);
  const quality=useMemo(()=>{
@@ -50,6 +52,22 @@ export function Stage5MDAcceptance(p:Props){
   try{setOldMidi(await readReferenceMidi(file,file.name))}
   catch(err){setOldError(err instanceof Error?err.message:'Không mở được MIDI 5L cũ.')}
  };
+ const importBenchmarks=async(files:FileList|null)=>{
+  if(!files?.length)return;
+  if(files.length>36){setImportStatus('Tối đa 36 tệp mỗi lượt.');return}
+  const reports:BenchmarkResult[]=[];
+  let rejected=0;
+  for(const file of Array.from(files)){
+   try{
+    if(!file.name.toLowerCase().endsWith('.json')||file.size<10||file.size>64000)
+      throw Error('Invalid file');
+    reports.push(parseSavedBenchmark(JSON.parse(await file.text())));
+   }catch{rejected++}
+  }
+  if(reports.length)p.onImportBenchmarks(reports);
+  setImportStatus('Đã nhập '+reports.length+' báo cáo hợp lệ; '+rejected+
+    ' tệp bị từ chối. Chỉ dùng dữ liệu cùng PCM SHA-256 để so sánh.');
+ };
  const saveReport=()=>{
   const report={
    schema:'notiq-5md-acceptance-v1',
@@ -78,6 +96,11 @@ export function Stage5MDAcceptance(p:Props){
   </header>
   <p>**Bước 1 — Hiệu năng:** chạy cùng đoạn {p.clipSeconds} giây tại {p.clipOffset} giây,
    mỗi mức 2/4/6 luồng tối thiểu <b>hai lần</b> trong mục AI 5M-B. Số liệu lưu trong phiên làm việc hiện tại.</p>
+  <label>Nhập báo cáo CPU 5M-B đã lưu (không cần chạy lại Large)
+    <input type="file" accept=".json,application/json" multiple disabled={p.busy}
+      onChange={e=>void importBenchmarks(e.target.files)}/>
+  </label>
+  {importStatus&&<small role="status">{importStatus}</small>}
   <p role="status">{perf.summary}</p>
   {perf.gates.length>0&&<div className="notiq-5md-scroll"><table>
    <thead><tr><th>Luồng</th><th>Lượt</th><th>Trung vị suy luận</th><th>So với 2 luồng</th><th>RAM đỉnh</th><th>Đối chiếu nốt</th><th>Đánh giá</th></tr></thead>
