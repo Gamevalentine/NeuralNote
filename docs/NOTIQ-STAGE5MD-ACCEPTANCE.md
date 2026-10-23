@@ -25,3 +25,13 @@ Retain default 2 threads and keep the draft PR unmerged until acceptance reports
 - Validation status: GitHub API reports **zero workflow runs on the 5M-D branch** at time of update. Therefore the changes above are **source changes only**, not a Windows CI PASS and not a verified Windows ZIP. Do not offer a renamed 5M-C artifact as 5M-D.
 - Packaging remains pinned to the verified 5M-C artifact from run 39838381380, which is subject to GitHub retention. If that artifact expires, update the packaging source from a newly verified 5M-C build instead of silently substituting an older binary.
 - Next gate: trigger the dedicated 5M-D Windows Action; verify Node/TypeScript/MIDI tests, native CLI checkpoint self-test, ZIP integrity and artifact identifier. Only then hand off the package for on-device Large benchmarking and five-minute audio acceptance.
+
+
+## Stage 5M-D1 GitHub Actions diagnosis — 23 October 2026
+- Read back draft PR #39 and current Windows 5M-D/5M-C workflow sources before work. PR #39 remains open, draft, unmerged, targeting `feature/notiq-stage5mc-resume` (not `main`). Its branch is `feature/notiq-stage5md-acceptance`.
+- The dedicated 5M-D YAML has `push` on the exact head branch and `pull_request` for the exact base branch; no skipped-CI commit annotation or merge conflict was observed in reviewed PR/commit metadata.
+- Observed several source commits on the 5M-D branch, then attempted reopening the draft PR and, separately, a controlled `pull_request.edited` diagnostic. The latter was **reverted** after it yielded no runs. The normal workflow trigger is preserved.
+- The GitHub Actions runs API still returns **0 runs** for the 5M-D branch after these events. No jobs have executed; zero runs is **not a test failure or PASS** and cannot be treated as a valid package.
+- Connected GitHub actions support repository file commits, PR updates, status reads and rerunning **existing** jobs, but expose no workflow-dispatch action for a workflow that has never run. Actions workflow state/organization policy endpoints were not accessible through the connected read surface, so whether trigger suppression, workflow-registration restrictions or repository settings are responsible remains **unconfirmed**.
+- Verified 5M-C Windows artifact ID **12452640664**, from run **39838381380**, is still available (expired=false, expires 2026-10-29 19:16:02 UTC). This validates the 5M-D packaging *input*, **not** the output ZIP.
+- Blocker remaining: execute a new authorized GitHub workflow-dispatch or another genuinely delivered push/PR trigger, then inspect actual run ID, job logs and ZIP integrity. Do not edit `main`, mark D1 PASS or relabel 5M-C as 5M-D to bypass the gate.
