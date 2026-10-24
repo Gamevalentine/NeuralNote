@@ -1,0 +1,115 @@
+name: NOTIQ 5P Full Source Windows Packaging QA
+on:
+  push:
+    branches: [feature/notiq-stage5p-release-gates]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-windows:
+    runs-on: windows-latest
+    timeout-minutes: 110
+    steps:
+      - name: Checkout full pinned MuScriptor source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - name: Prepare Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test CPU, full song monitoring and 5P packaging guards
+        shell: pwsh
+        run: |
+          node --test desktop-preview/tests/native-thread-spawn.test.cjs desktop-preview/tests/cpu-threads.test.cjs desktop-preview/tests/cpu-benchmark.test.cjs desktop-preview/tests/native-progress.test.cjs desktop-preview/tests/models.test.cjs desktop-preview/tests/full-song-5ne.test.cjs desktop-preview/tests/release-audit-5p.test.cjs
+          if($LASTEXITCODE -ne 0){throw 'Native QA or release preflight tests failed'}
+          node --check desktop-preview/main.cjs
+          node --check desktop-preview/release-audit.cjs
+          if($LASTEXITCODE -ne 0){throw 'Desktop syntax failed'}
+      - name: Detect installed MSVC CMake generator
+        shell: pwsh
+        run: |
+          $vswhere=Join-Path ([Environment]::GetFolderPath('ProgramFilesX86')) 'Microsoft Visual Studio/Installer/vswhere.exe'
+          $vs=& $vswhere -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if(-not $vs){throw 'Visual Studio C++ toolchain not available'}
+          $generators=cmake --help | Out-String
+          if(($vs -match '[\\/]18[\\/]') -and ($generators -match 'Visual Studio 18 2026')){$generator='Visual Studio 18 2026'}
+          elseif(($vs -match '[\\/]17[\\/]') -and ($generators -match 'Visual Studio 17 2022')){$generator='Visual Studio 17 2022'}
+          else{throw 'MSVC generator unavailable'}
+          "NOTIQ_CMAKE_GENERATOR=$generator" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Rebuild original MuScriptor native CLI from checked-out sources
+        shell: pwsh
+        run: |
+          cmake -S notiq-native -B build-5p -G "$env:NOTIQ_CMAKE_GENERATOR" -A x64 -DMUSCRIPTOR_VULKAN=OFF -DMUSCRIPTOR_METAL=OFF
+          if($LASTEXITCODE -ne 0){throw '5P native CMake configure failed'}
+          cmake --build build-5p --config Release --target notiq-muscriptor-cli --parallel 2
+          if($LASTEXITCODE -ne 0){throw '5P native C++ build failed'}
+          $cli=Get-ChildItem build-5p -Recurse -File -Filter 'notiq-muscriptor-cli.exe' | Select-Object -First 1
+          if(-not $cli){throw 'Native build produced no Windows CLI'}
+          $cap=(& $cli.FullName --capabilities) | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0 -or $cap.resume_checkpoint -ne $true -or ($cap.cpu_threads -join ',') -ne '2,4,6'){throw 'Native CLI checkpoint/thread capability mismatch'}
+          $self=& $cli.FullName --self-test-checkpoint
+          if($LASTEXITCODE -ne 0 -or "$self" -notmatch 'NOTIQ_5MC_CHECKPOINT_SELF_TEST_PASS'){throw 'Native checkpoint round-trip test failed'}
+          $plain=& $cli.FullName --self-test
+          if($LASTEXITCODE -ne 0 -or "$plain" -notmatch '"ready":true'){throw 'Native self-test failed'}
+          "NOTIQ_FRESH_CLI=$($cli.FullName)" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host 'NOTIQ_5P_REAL_NATIVE_SOURCE_BUILD_PASS'
+      - name: Build entire NOTIQ Web UI and regression tests
+        shell: pwsh
+        working-directory: web
+        run: |
+          npm install --no-fund --no-audit
+          if($LASTEXITCODE -ne 0){throw '5P web dependency install failed'}
+          npm run build
+          if($LASTEXITCODE -ne 0){throw '5P Vite/TypeScript build failed'}
+          node --experimental-strip-types --test tests/stage5md-audit.test.mts tests/reference-benchmark.test.mts tests/note-quality.test.mts tests/velocity-from-audio.test.mts tests/daw-midi.test.mts tests/note-quality-5nb.test.mts tests/velocity-editor-5nc.test.mts tests/piano-edit.test.mts tests/pedal-5nd.test.mts
+          if($LASTEXITCODE -ne 0){throw '5P MIDI regression suite failed'}
+      - name: Package Windows Electron app entirely from source, no prior Actions artifacts
+        shell: pwsh
+        run: |
+          npm install --prefix desktop-preview --no-fund --no-audit
+          if($LASTEXITCODE -ne 0){throw 'Electron packager setup failed'}
+          $www=Join-Path (Resolve-Path desktop-preview).Path 'www'
+          New-Item -ItemType Directory -Force $www | Out-Null
+          Copy-Item -Path web/dist/* -Destination $www -Recurse -Force
+          $bridge=Join-Path (Resolve-Path desktop-preview).Path 'bridge-bin'
+          New-Item -ItemType Directory -Force $bridge | Out-Null
+          Copy-Item $env:NOTIQ_FRESH_CLI (Join-Path $bridge 'notiq-muscriptor-cli.exe') -Force
+          & ./desktop-preview/node_modules/.bin/electron-packager.cmd ./desktop-preview NOTIQ-Stage5-FullSong --platform=win32 --arch=x64 --out=release-5p --overwrite --asar --prune=true --extra-resource="$bridge"
+          if($LASTEXITCODE -ne 0){throw '5P source-only Electron packaging failed'}
+          $root=Join-Path (Resolve-Path release-5p).Path 'NOTIQ-Stage5-FullSong-win32-x64'
+          if(-not (Test-Path (Join-Path $root 'NOTIQ-Stage5-FullSong.exe'))){throw 'Packaged EXE missing'}
+          if(-not (Test-Path (Join-Path $root 'resources/bridge-bin/notiq-muscriptor-cli.exe'))){throw 'Native CLI not in resources'}
+          "NOTIQ_5P_PORTABLE=$root" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host 'NOTIQ_5P_SOURCE_ONLY_PORTABLE_PACK_PASS'
+      - name: Verify full app integrity and explicitly block release approval
+        shell: pwsh
+        run: |
+          npm install --prefix package-tools --no-audit --no-fund @electron/asar@3
+          if($LASTEXITCODE -ne 0){throw 'ASAR validation dependency failed'}
+          node desktop-preview/release-audit.cjs "$env:NOTIQ_5P_PORTABLE"
+          if($LASTEXITCODE -ne 0){throw '5P portable integrity check failed'}
+          $report=Get-Content (Join-Path $env:NOTIQ_5P_PORTABLE 'NOTIQ-5P-INTEGRITY.json') -Raw | ConvertFrom-Json
+          if($report.releaseApproved -ne $false -or $report.status -ne 'QA_PREVIEW_ONLY'){throw 'False production acceptance: fail closed'}
+          $cli=Join-Path $env:NOTIQ_5P_PORTABLE 'resources/bridge-bin/notiq-muscriptor-cli.exe'
+          $cp=& $cli --self-test-checkpoint
+          if($LASTEXITCODE -ne 0 -or "$cp" -notmatch 'NOTIQ_5MC_CHECKPOINT_SELF_TEST_PASS'){throw 'Packaged checkpoint CLI is broken'}
+          @(
+            'NOTIQ 5P: independently rebuilt from full pinned source, no expiring base Actions artifacts.'
+            'This Windows file is an INTERNAL QA PREVIEW, not an approved public release.'
+            'MuScriptor Large GGUF model is NOT bundled.'
+            'Large 2.74GB full song inference, peak RAM on target 16GB device, reference MIDI F1 and pedal A/B remain NOT VERIFIED.'
+            'Use original WAV + same-performance reference MIDI for final QA, never use synthetic fixture as proof of accuracy.'
+            'A validation manifest is supplied as NOTIQ-5P-INTEGRITY.json.'
+            'Store model weights and NOTIQ-Data on the user-selected portable drive, not the OS drive.'
+          ) -join [Environment]::NewLine | Set-Content (Join-Path $env:NOTIQ_5P_PORTABLE 'README-STAGE5P-QA.txt')
+          Write-Host 'NOTIQ_5P_SOURCE_BUILD_AUDIT_PASS_PREVIEW_ONLY'
+      - name: Upload isolated source-built Windows QA preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: NOTIQ-Stage5P-SourceBuilt-Windows-QA-Preview
+          path: release-5p/NOTIQ-Stage5-FullSong-win32-x64/
+          retention-days: 7
+          compression-level: 6
+          if-no-files-found: error
