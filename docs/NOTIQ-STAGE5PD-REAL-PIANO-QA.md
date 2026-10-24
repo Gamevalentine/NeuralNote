@@ -23,3 +23,9 @@
 - **NO inference result yet as of this initial engineering record**: no F1, 4–6-minute Large wall-clock, peak native RAM, CC64 perceptual assessment or final release approval may be claimed until the authentic Windows runner completes its expensive real inference and produces a verified report.
 - When a real source run finishes, record GitHub Actions ID, input WAV and reference SHA, selected dataset license and duration, actual model hash, wall time, RAM, F1, onset/offset MAE and whether the recording is only SHORT_SMOKE. Initial run on a GitHub Windows virtual machine is **not proof** of performance on the owner's specific 16GB/i5 laptop.
 - Full release still additionally requires two independently paired 4–6 min user-approved recordings, 2/4/6 thread matrix, resumed checkpoint note seam inspection, human velocity+pedal listening review, and owner sign-off. Keep production `main` unchanged.
+
+
+## Explicit real-run request
+- The owner requested proceeding with Stage 5P-D. Initiate **one** GitHub-hosted licensed real-piano Large inference attempt via this reviewed `[5PD_RUN]` documentation commit. This uses a Windows runner, not the owner's private computer.
+- The workflow is not a recurring long-model job: repeated source commits will only perform lightweight algorithm QA; the costly job runs for this opt-in marker once.
+- Actual result must be read from that run's `NOTIQ-5PD-RealAudio-Large-Measurement-ONLY` JSON artifact after successful inference. An incomplete, failed, cancelled or skipped run is **HOLD**, never 5P-D model success.
