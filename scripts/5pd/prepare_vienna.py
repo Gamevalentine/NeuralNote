@@ -21,6 +21,7 @@ SOURCE_CREDIT="Werner Goebl, Vienna 4x22 Piano Corpus, DOI:10.21939/4X22, CC BY 
 ALLOWED_STEM=re.compile(r"^(?:Chopin|Mozart|Schubert)_[A-Za-z0-9_-]{3,80}_p\d{2}$")
 
 def download_archive(destination):
+    destination.parent.mkdir(parents=True,exist_ok=True)
     if destination.exists():
         if destination.stat().st_size==EXPECTED_ARCHIVE_BYTES:
             return destination
