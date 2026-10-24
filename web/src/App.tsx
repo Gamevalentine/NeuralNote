@@ -8,7 +8,7 @@ import { assertSupportedSong, MAX_SONG_BYTES, MAX_SONG_SECONDS } from './longAud
 import { createDawMidi, createDawBundle, extractDawTracks, midiChannelLimitExceeded } from './dawMidi';
 import { addPedalPoint } from './pedal.ts';
 import type { PedalEvent } from './pedal.ts';
-import { addNote, copyNotes, removeNote, sameNotes, SNAP_SECONDS, snapSeconds, updateNote, clamp } from './pianoEdit';
+import { addNote, copyNotes, removeNote, sameNotes, SNAP_SECONDS, snapSeconds, updateNote, nudgeNoteBoundary, clamp } from './pianoEdit';
 import type { Note, AudioInfo, PitchGroup } from './audio';
 import { DEFAULT_INSTRUMENTS, INSTRUMENTS, instrumentProgram, playSoundfontNote, prepareInstrument, stopSoundfontNotes } from './soundfont';
 import type { InstrumentId, InstrumentSelection } from './soundfont';
@@ -1126,6 +1126,15 @@ function App() {
     setStatus('Đã gộp '+updated.merged+' nốt chồng trong '+updated.affectedTracks+
       ' track. Bấm Hoàn tác để khôi phục.');
   };
+  const nudgeSelectedNote = (edge:'onset'|'offset',delta:number) => {
+    if(phase==='analyzing'||selectedNote===null||!notesRef.current[selectedNote])return;
+    const old=notesRef.current;
+    const result=nudgeNoteBoundary(old,selectedNote,edge,delta,totalSeconds);
+    if(result===old)return;
+    commitNotes(result);
+    setStatus('5N-B: chỉnh ' + (edge==='onset'?'thời điểm nhấn':'thời điểm nhả') +
+      (delta>0?' +10 ms':' −10 ms') + '. Có thể Hoàn tác (Ctrl+Z).');
+  };
   const applyStrictDuplicates = () => {
     if(phase==='analyzing'||!notesRef.current.length)return;
     const candidate=previewNearExactDuplicates(notesRef.current);
@@ -1147,6 +1156,7 @@ function App() {
       }catch{setError('5N-B: không kiểm tra được MIDI chuẩn; giữ nguyên MIDI.');return;}
     }
     commitNotes(candidate.notes);
+    setSelectedNote(null);
     setStatus('5N-B: lọc ' + candidate.removed +
       ' nốt gần như trùng tuyệt đối. Cao độ/thời gian nốt còn lại không đổi; có thể Hoàn tác.');
   };
@@ -1597,6 +1607,19 @@ function App() {
             <b> {(qualityDuplicateScores.before.f1*100).toFixed(2)}% → {(qualityDuplicateScores.after.f1*100).toFixed(2)}%</b>
             {qualityDuplicateScores.safe?' · Không giảm tiêu chí F1/onset/offset.':
               ' · Không đạt: thao tác bị chặn để giữ nốt gốc.'}</p>}
+          <div className="notiq-5nb-nudge">
+            <strong>Chỉnh chính xác nốt đang chọn {selectedNote===null?'(chọn nốt trên Piano Roll)':
+              '('+noteName(notes[selectedNote]?.pitchMidi??60)+')'}</strong>
+            {([
+              ['Nhấn −10 ms','onset',-.01],['Nhấn +10 ms','onset',.01],
+              ['Nhả −10 ms','offset',-.01],['Nhả +10 ms','offset',.01]
+            ] as const).map(([label,edge,delta])=>
+              <button type="button" key={label}
+                disabled={phase==='analyzing'||selectedNote===null||!notes[selectedNote]}
+                onClick={()=>nudgeSelectedNote(edge,delta)}>{label}</button>)}
+            <small>Thay đổi một nốt, không làm tròn vào lưới 125 ms.
+              Thao tác được lưu vào lịch sử Hoàn tác.</small>
+          </div>
           <button type="button" disabled={!duplicateReview.removed||phase==='analyzing'||
              (!!qualityReferenceScope&&!qualityDuplicateScores?.safe)}
             onClick={applyStrictDuplicates}>
