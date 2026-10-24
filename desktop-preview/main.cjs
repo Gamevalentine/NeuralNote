@@ -17,7 +17,7 @@ const { hasVerifiedModel, downloadVerifiedModel } = require('./model-download.cj
 const { createNativeProgressParser } = require('./native-progress.cjs');
 const { createProcessSampler } = require('./process-metrics.cjs');
 const { songSecondsFromWav, heartbeatInfo, safeFullSongReport } = require('./full-song-health.cjs');
-const { audit5PB } = require('./acceptance-5pb.cjs');
+const { audit5PB,validRun } = require('./acceptance-5pb.cjs');
 const { finalReadiness } = require('./final-review-5pc.cjs');
 const { sha256: localFileSha256, isX64PE } = require('./release-audit.cjs');
 const { runBenchmark } = require('./benchmark-native.cjs');
@@ -479,6 +479,20 @@ app.whenReady().then(() => {
     }
     const result=audit5PB(reports,[],null);
     return {...result,loadedReports:reports.length};
+  });
+  ipcMain.handle('notiq:5pc-fingerprint', async(_event,audioSha256)=>{
+    if(typeof audioSha256!=='string'||!(/^[0-9a-f]{64}$/).test(audioSha256))
+      throw Error('Checksum âm thanh không hợp lệ.');
+    const reports=await readNativeReports5PC();
+    const matching=reports.filter(r=>validRun(r)&&r.audioSha256===audioSha256);
+    if(!matching.length)return null;
+    const source=matching[matching.length-1];
+    return{
+      audioSha256:source.audioSha256,
+      currentModelNotesSha256:source.notesSha256,
+      modelSha256:source.modelSha256,
+      threads:source.threads,songSeconds:source.songSeconds
+    };
   });
   ipcMain.handle('notiq:5pc-review', async(_event,payload)=>{
     // Only user-entered MIDI summary/checkboxes cross IPC, never arbitrary
