@@ -153,8 +153,14 @@ def measure_inference(cli,wav,model,output,threads,timeout,checkpoint):
     args=[str(cli),str(wav),str(model),str(output),f"--threads={threads}"]
     if checkpoint:args.append(f"--checkpoint={checkpoint}")
     started=time.monotonic()
-    proc=subprocess.Popen(args,stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,
-        text=True,encoding="utf-8",errors="replace")
+    # A PIPE can deadlock after many progress lines over a long recital.
+    # Spool native stderr to a local temporary file; never upload it.
+    native_log=open(str(output)+".stderr.txt","w+",encoding="utf-8")
+    try:
+        proc=subprocess.Popen(args,stdout=subprocess.DEVNULL,stderr=native_log)
+    except:
+        native_log.close()
+        raise
     native=psutil.Process(proc.pid)
     readings=0;peak=0;cpu=0.;checkpoints=0;resumed=False
     lines=[]
@@ -172,7 +178,9 @@ def measure_inference(cli,wav,model,output,threads,timeout,checkpoint):
                 pass
             time.sleep(.5)
         # Progress is from native STDERR; do not infer it from elapsed time.
-        lines=(proc.stderr.read() if proc.stderr else "").splitlines()
+        native_log.flush()
+        native_log.seek(0)
+        lines=native_log.read().splitlines()
         checkpoints=sum(line.startswith("NOTIQ_CHECKPOINT ") for line in lines)
         resumed=any(line.startswith("NOTIQ_RESUMED_NOTES ") for line in lines)
         if proc.returncode!=0 or not output.exists():
@@ -189,7 +197,9 @@ def measure_inference(cli,wav,model,output,threads,timeout,checkpoint):
         if proc.poll() is None:
             proc.kill()
             proc.wait(timeout=10)
-        if proc.stderr:proc.stderr.close()
+        native_log.close()
+        try: Path(str(output)+".stderr.txt").unlink()
+        except OSError: pass
 
 def execute(args):
     audio=args.audio.resolve(strict=True)
