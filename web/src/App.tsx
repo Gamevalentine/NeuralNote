@@ -6,7 +6,7 @@ import { AudioWaveform, CircleHelp, Gauge, Headphones, Info, LoaderCircle,
 import { fmt, generateDemo, groupFor, GROUPS, noteName, readAudio } from './audio';
 import { assertSupportedSong, MAX_SONG_BYTES, MAX_SONG_SECONDS } from './longAudio';
 import { createDawMidi, createDawBundle, extractDawTracks, midiChannelLimitExceeded } from './dawMidi';
-import { addPedalPoint } from './pedal.ts';
+import { addPedalPoint, addPedalSpan, shiftPedalPoint, pedalDownAt } from './pedal.ts';
 import type { PedalEvent } from './pedal.ts';
 import { addNote, copyNotes, removeNote, sameNotes, SNAP_SECONDS, snapSeconds, updateNote, nudgeNoteBoundary, clamp } from './pianoEdit';
 import type { Note, AudioInfo, PitchGroup } from './audio';
@@ -120,6 +120,14 @@ function App() {
   const [zoom, setZoom] = useState(1);
   const [bpm, setBpm] = useState(120);
   const [pedalEvents, setPedalEvents] = useState<PedalEvent[]>([]);
+  const pedalEventsRef = useRef<PedalEvent[]>([]);
+  useEffect(()=>{pedalEventsRef.current=pedalEvents},[pedalEvents]);
+  const pedalUndoRef=useRef<PedalEvent[][]>([]);
+  const pedalRedoRef=useRef<PedalEvent[][]>([]);
+  const [pedalHistoryTick,setPedalHistoryTick]=useState(0);
+  const [selectedPedalIndex,setSelectedPedalIndex]=useState<number|null>(null);
+  const [pedalSpanSeconds,setPedalSpanSeconds]=useState<0.5|1|2>(1);
+  useEffect(()=>{setSelectedPedalIndex(null)},[selection]);
   const [rawRecognitionNotes, setRawRecognitionNotes] = useState<Note[]|null>(null);
   const [velocityBusy, setVelocityBusy] = useState(false);
   // 5N-C slider is a draft, so dragging produces only one Undo step when applied.
@@ -1248,12 +1256,69 @@ function App() {
     commitNotes(copyNotes(rawRecognitionNotes));
     setStatus('Đã khôi phục nốt nguyên bản do AI nhận diện, chưa qua sửa nốt chồng.');
   };
+  const commitPedalEvents=(next:PedalEvent[])=>{
+    const previous=pedalEventsRef.current;
+    if(next===previous||JSON.stringify(next)===JSON.stringify(previous))return false;
+    pedalUndoRef.current=[...pedalUndoRef.current.slice(-49),
+      previous.map(e=>({...e}))];
+    pedalRedoRef.current=[];
+    pedalEventsRef.current=next;
+    setPedalEvents(next);
+    setPedalHistoryTick(t=>t+1);
+    return true;
+  };
+  const pedalUndo=()=>{
+    if(phase==='analyzing'||!pedalUndoRef.current.length)return;
+    const old=pedalUndoRef.current.pop()!;
+    pedalRedoRef.current.push(pedalEventsRef.current.map(e=>({...e})));
+    pedalEventsRef.current=old;
+    setPedalEvents(old);
+    setSelectedPedalIndex(null);
+    setPedalHistoryTick(t=>t+1);
+    setStatus('5N-D: đã Hoàn tác chỉnh pedal; MIDI nốt không thay đổi.');
+  };
+  const pedalRedo=()=>{
+    if(phase==='analyzing'||!pedalRedoRef.current.length)return;
+    const next=pedalRedoRef.current.pop()!;
+    pedalUndoRef.current.push(pedalEventsRef.current.map(e=>({...e})));
+    pedalEventsRef.current=next;
+    setPedalEvents(next);
+    setSelectedPedalIndex(null);
+    setPedalHistoryTick(t=>t+1);
+    setStatus('5N-D: đã Làm lại chỉnh pedal.');
+  };
+  const createPedalSpan=()=>{
+    if(!notes.length||phase==='analyzing')return;
+    const at=Math.max(0,Math.min(totalSeconds,time));
+    const to=Math.min(900,at+pedalSpanSeconds);
+    const next=addPedalSpan(pedalEventsRef.current,pedalTrack,at,to);
+    if(commitPedalEvents(next)){
+      setSelectedPedalIndex(null);
+      setStatus('5N-D: đã thêm một khoảng đạp–nhả CC64 '+fmt(at)+' → '+fmt(to)+
+        '. Xuất MIDI giữ nguyên note-off; SoundFont mô phỏng ngân đến khi nhả.');
+    }else setStatus('5N-D: đã có pedal tại vị trí này hoặc khoảng thời gian không hợp lệ.');
+  };
+  const nudgeSelectedPedal=(delta:number)=>{
+    if(phase==='analyzing'||selectedPedalIndex===null)return;
+    const old=pedalEventsRef.current;
+    const point=old[selectedPedalIndex];
+    if(!point)return;
+    const next=shiftPedalPoint(old,selectedPedalIndex,delta);
+    if(commitPedalEvents(next)){
+      const shifted=next.findIndex(e=>e.trackKey===point.trackKey&&
+        e.value===point.value&&Math.abs(e.timeSeconds-(point.timeSeconds+delta))<.002);
+      setSelectedPedalIndex(shifted>=0?shifted:null);
+      setStatus('5N-D: đã dịch điểm CC64 '+(delta>0?'+10':'−10')+
+        ' ms; MIDI và SoundFont dùng cùng thời điểm.');
+    }else setStatus('Không thể dịch qua một điểm pedal lân cận hoặc ngoài thời gian hợp lệ.');
+  };
   const writePedalPoint = (value: 0 | 127) => {
     if (!notes.length || phase === 'analyzing') return;
     const at = Math.max(0, Math.min(info?.duration || totalSeconds, time));
-    setPedalEvents(previous => addPedalPoint(previous, {
+    commitPedalEvents(addPedalPoint(pedalEventsRef.current, {
       trackKey: pedalTrack, timeSeconds: at, value,
     }));
+    setSelectedPedalIndex(null);
     setStatus((value === 127 ? 'Đạp' : 'Nhả') + ' CC64 tại ' + fmt(at) + ' · MIDI giữ note-off gốc; SoundFont kéo tiếng khi có nhả pedal.');
   };
   const exportFile = (kind: 'multitrack' | 'bundle' = 'multitrack', scope: 'all' | 'audible' = 'all') => {
@@ -1988,11 +2053,13 @@ function App() {
                   {pedalEvents.map((event, index) => (
                     (pedalTrack === '*' ? event.trackKey === '*' : (event.trackKey === '*' || event.trackKey === pedalTrack)) &&
                     <button key={event.trackKey + '-' + event.timeSeconds + '-' + index} type="button"
-                      className={'pedal-marker ' + (event.value === 127 ? 'pedal-on' : 'pedal-off')}
+                      className={'pedal-marker ' + (event.value === 127 ? 'pedal-on' : 'pedal-off') +
+                        (selectedPedalIndex===index?' pedal-selected':'')}
                       style={{left:(event.timeSeconds / totalSeconds * 100) + '%'}}
-                      title={(event.value === 127 ? 'Đạp' : 'Nhả') + ' pedal · ' + fmt(event.timeSeconds) + ' · ' + (event.trackKey === '*' ? 'Mọi track giai điệu' : event.trackKey) + ' · Nhấn để xóa điểm'}
-                      aria-label={(event.value === 127 ? 'Xóa điểm đạp' : 'Xóa điểm nhả') + ' pedal lúc ' + fmt(event.timeSeconds)}
-                      onClick={() => setPedalEvents(previous => previous.filter(point => point !== event))}
+                      title={(event.value === 127 ? 'Đạp' : 'Nhả') + ' pedal · ' + fmt(event.timeSeconds) + ' · ' + (event.trackKey === '*' ? 'Mọi track giai điệu' : event.trackKey) + ' · Nhấn để chọn và chỉnh ±10 ms'}
+                      aria-label={(event.value === 127 ? 'Chọn điểm đạp' : 'Chọn điểm nhả') + ' pedal lúc ' + fmt(event.timeSeconds)}
+                      aria-pressed={selectedPedalIndex===index}
+                      onClick={() => setSelectedPedalIndex(index)}
                     >{event.value === 127 ? '▼' : '▲'}</button>
                   ))}
                 </div>
@@ -2011,9 +2078,46 @@ function App() {
               onClick={() => writePedalPoint(127)}>Đạp tại {fmt(time)}</button>
             <button type="button" disabled={!notes.length || phase === 'analyzing'}
               onClick={() => writePedalPoint(0)}>Nhả tại {fmt(time)}</button>
+            <label htmlFor="notiq-pedal-span">Độ dài đạp</label>
+            <select id="notiq-pedal-span" value={pedalSpanSeconds}
+              onChange={event=>setPedalSpanSeconds(Number(event.target.value) as 0.5|1|2)}>
+              <option value={0.5}>0,5 giây</option>
+              <option value={1}>1 giây</option>
+              <option value={2}>2 giây</option>
+            </select>
+            <button type="button" disabled={!notes.length||phase==='analyzing'}
+              onClick={createPedalSpan}>Thêm khoảng đạp–nhả</button>
+            <span className="notiq-pedal-status">
+              {pedalDownAt(pedalTrack,pedalEvents,time)?'● Đang đạp':'○ Đã nhả'}
+            </span>
+            {selectedPedalIndex!==null&&pedalEvents[selectedPedalIndex]&&<>
+              <span className="notiq-pedal-selection">
+                {pedalEvents[selectedPedalIndex].value===127?'Đạp':'Nhả'} ·
+                {fmt(pedalEvents[selectedPedalIndex].timeSeconds)}
+              </span>
+              <button type="button" disabled={phase==='analyzing'}
+                onClick={()=>nudgeSelectedPedal(-.01)}>−10 ms</button>
+              <button type="button" disabled={phase==='analyzing'}
+                onClick={()=>nudgeSelectedPedal(.01)}>+10 ms</button>
+              <button type="button" disabled={phase==='analyzing'}
+                onClick={()=>{
+                  if(selectedPedalIndex===null)return;
+                  const next=pedalEventsRef.current.filter((_,i)=>i!==selectedPedalIndex);
+                  if(commitPedalEvents(next))setSelectedPedalIndex(null);
+                }}>Xóa điểm đã chọn</button>
+            </>}
             <button type="button" disabled={!pedalEvents.length || phase === 'analyzing'}
-              onClick={() => setPedalEvents([])}>Xóa pedal</button>
-            <small>{pedalEvents.length} điểm · Đặt vị trí bằng thước thời gian. CC64 xuất MIDI và giữ tiếng SoundFont đến điểm nhả (tối đa 8 giây); không mô phỏng cộng hưởng piano thật.</small>
+              onClick={()=>{
+                if(commitPedalEvents([]))setSelectedPedalIndex(null);
+              }}>Xóa pedal</button>
+            <button type="button" disabled={phase==='analyzing'||pedalHistoryTick<0||
+              pedalUndoRef.current.length===0} onClick={pedalUndo}>Hoàn tác pedal</button>
+            <button type="button" disabled={phase==='analyzing'||pedalHistoryTick<0||
+              pedalRedoRef.current.length===0} onClick={pedalRedo}>Làm lại pedal</button>
+            <small>{pedalEvents.length} điểm · Bấm một dấu CC64 để chọn rồi dịch ±10 ms.
+              Pedal toàn bài và theo track được ưu tiên nhất quán khi trùng thời điểm;
+              xuất MIDI không kéo dài note-off. SoundFont chỉ kéo tiếng đến lúc nhả pedal
+              (tối đa 8 giây), chưa mô phỏng cộng hưởng piano thật.</small>
           </div>
           <div className="editor-status">
             <span>{status}</span>
