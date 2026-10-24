@@ -20,7 +20,7 @@ const output=target+'.stage5md';
   fs.cpSync(renderer,html,{recursive:true});
   for(const name of ['main.cjs','preload.cjs','models.cjs','model-download.cjs',
       'transkun-runtime.cjs','transkun-runner.py','native-progress.cjs',
-      'process-metrics.cjs','wav-benchmark.cjs','benchmark-native.cjs','cpu-threads.cjs']){
+      'process-metrics.cjs','full-song-health.cjs','wav-benchmark.cjs','benchmark-native.cjs','cpu-threads.cjs']){
     const src=path.resolve('desktop-preview',name);
     if(!fs.existsSync(src))throw Error('Missing new adapter: '+name);
     fs.copyFileSync(src,path.join(work,name));
