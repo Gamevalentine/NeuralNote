@@ -78,9 +78,15 @@ export function estimateVelocityFromAudio(notes: readonly Note[], audio: Velocit
   let changed = 0, skippedTracks = 0;
   for (const group of grouped.values()) {
     // Few notes or original expressive velocity: do not invent a dynamics curve.
-    const amplitudes = group.map(p => notes[p.index].amplitude);
-    if (group.length < 6 || amplitudes.some(a => !Number.isFinite(a))
-      || Math.max(...amplitudes) - Math.min(...amplitudes) > 0.06) {
+    let amplitudeMin = Infinity, amplitudeMax = -Infinity;
+    for (const p of group) {
+      const amplitude = notes[p.index].amplitude;
+      if (!Number.isFinite(amplitude)) break;
+      amplitudeMin = Math.min(amplitudeMin, amplitude);
+      amplitudeMax = Math.max(amplitudeMax, amplitude);
+    }
+    if (group.length < 6 || !Number.isFinite(amplitudeMin)
+      || !Number.isFinite(amplitudeMax) || amplitudeMax - amplitudeMin > 0.06) {
       skippedTracks++;
       continue;
     }
