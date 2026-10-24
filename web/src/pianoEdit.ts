@@ -71,7 +71,7 @@ export function nudgeNoteBoundary(notes:Note[],index:number,edge:'onset'|'offset
  const original=notes[index];
  const start=original.startTimeSeconds,end=start+original.durationSeconds;
  if(!Number.isFinite(start)||!Number.isFinite(end)||start<0||end<=start)return notes;
- const ceiling=Math.max(maxSeconds,end);
+ const ceiling=Math.max(maxSeconds,end+0.05); // preserve short note tails near the recording end
  const roundMillis=(value:number)=>Math.round(value*1000)/1000;
  let nextStart=start,nextEnd=end;
  if(edge==='onset')nextStart=roundMillis(clamp(start+deltaSeconds,0,end-0.01));
