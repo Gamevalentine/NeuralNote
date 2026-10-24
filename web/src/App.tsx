@@ -127,7 +127,11 @@ function App() {
   const [,setPedalHistoryTick]=useState(0);
   const [selectedPedalIndex,setSelectedPedalIndex]=useState<number|null>(null);
   const [pedalSpanSeconds,setPedalSpanSeconds]=useState<0.5|1|2>(1);
-  useEffect(()=>{setSelectedPedalIndex(null)},[selection]);
+  useEffect(()=>{
+    // Pedal edit history belongs to one loaded song. Do not undo into old audio.
+    pedalUndoRef.current=[];pedalRedoRef.current=[];
+    setSelectedPedalIndex(null);setPedalHistoryTick(t=>t+1);
+  },[selection]);
   const [rawRecognitionNotes, setRawRecognitionNotes] = useState<Note[]|null>(null);
   const [velocityBusy, setVelocityBusy] = useState(false);
   // 5N-C slider is a draft, so dragging produces only one Undo step when applied.
@@ -606,6 +610,7 @@ function App() {
       setRawRecognitionNotes(copyNotes(detected));
       clearHistory(detected);
       setPedalEvents(piano?.pedalEvents || []);
+      pedalUndoRef.current=[];pedalRedoRef.current=[];setSelectedPedalIndex(null);setPedalHistoryTick(t=>t+1);
       // Display Piano CC64 points on its GM Piano track immediately; the
       // existing '*' filter only shows user-created global pedal points.
       setPedalTrack(piano ? 'gm-0' : '*');
@@ -819,6 +824,7 @@ function App() {
     stop();
     commitNotes(copyNotes(chosen.notes));
     setPedalEvents(chosen.pedalEvents.map(p=>({...p})));
+      pedalUndoRef.current=[];pedalRedoRef.current=[];setSelectedPedalIndex(null);setPedalHistoryTick(t=>t+1);
     setPedalTrack(chosen.pedalEvents.find(p=>p.trackKey!=='*')?.trackKey || (engine==='transkun-v2'?'gm-0':'*'));
     setNativeMuted(new Set());
     setNativeSolo(null);
