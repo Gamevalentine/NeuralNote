@@ -156,7 +156,7 @@ def load_native_notes(path):
 def parse_native_telemetry(log_text):
     lines=log_text.splitlines()
     progress=[int(match.group(1)) for line in lines
-      if (match:=re.fullmatch(r"PROGRESS\\s+(\\d{1,3})",line.strip()))]
+      if (match:=re.fullmatch(r"PROGRESS\s+(\d{1,3})",line.strip()))]
     return {
       "last_real_percent":progress[-1] if progress else None,
       "highest_real_percent":max(progress) if progress else None,
@@ -216,7 +216,7 @@ def measure_inference(cli,wav,model,output,threads,timeout,checkpoint):
         native_log.flush()
         native_log.seek(0)
         lines=native_log.read().splitlines()
-        signal=parse_native_telemetry("\\n".join(lines))
+        signal=parse_native_telemetry("\n".join(lines))
         checkpoints=signal["checkpoint_events"]
         resumed=signal["resumed"]
         if proc.returncode!=0 or not output.exists():
@@ -302,7 +302,7 @@ def execute(args):
             }
             target=args.report.resolve()
             target.parent.mkdir(parents=True,exist_ok=True)
-            target.write_text(json.dumps(report,indent=2,ensure_ascii=False)+"\\n",encoding="utf-8")
+            target.write_text(json.dumps(report,indent=2,ensure_ascii=False)+"\n",encoding="utf-8")
             print("NOTIQ_5PD_FAILURE_DIAGNOSTICS_SAVED_NO_SCORE",file=sys.stderr)
             raise
         candidate=load_native_notes(native_json)
