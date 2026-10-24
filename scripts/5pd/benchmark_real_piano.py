@@ -62,10 +62,15 @@ def safe_riiffloat_duration(path):
         if path.stat().st_size<44+data: raise ValueError("Truncated PCM data")
         return data/(16000*4)
 
-def prepare_wav(audio,output,ffmpeg):
-    subprocess.run([ffmpeg,"-nostdin","-hide_banner","-loglevel","error","-y",
-                    "-i",str(audio),"-vn","-ar","16000","-ac","1",
-                    "-c:a","pcm_f32le",str(output)],check=True,timeout=180)
+def prepare_wav(audio,output,ffmpeg,excerpt_seconds=None):
+    if excerpt_seconds is not None and not 5<=excerpt_seconds<=30:
+        raise ValueError("Real acoustic excerpt smoke only supports 5–30 seconds")
+    command=[ffmpeg,"-nostdin","-hide_banner","-loglevel","error","-y",
+             "-i",str(audio)]
+    if excerpt_seconds is not None:
+        command.extend(["-t",str(excerpt_seconds)])
+    command.extend(["-vn","-ar","16000","-ac","1","-c:a","pcm_f32le",str(output)])
+    subprocess.run(command,check=True,timeout=180)
     return safe_riiffloat_duration(output)
 
 def read_reference_midi(path):
@@ -148,6 +153,23 @@ def load_native_notes(path):
         notes.append((pitch,on,on+duration,prog))
     return notes
 
+def parse_native_telemetry(log_text):
+    lines=log_text.splitlines()
+    progress=[int(match.group(1)) for line in lines
+      if (match:=re.fullmatch(r"PROGRESS\\s+(\\d{1,3})",line.strip()))]
+    return {
+      "last_real_percent":progress[-1] if progress else None,
+      "highest_real_percent":max(progress) if progress else None,
+      "progress_lines":len(progress),
+      "checkpoint_events":sum(line.startswith("NOTIQ_CHECKPOINT ") for line in lines),
+      "resumed":any(line.startswith("NOTIQ_RESUMED_NOTES ") for line in lines)
+    }
+
+class NativeRunIncomplete(RuntimeError):
+    def __init__(self, reason, diagnostics):
+        self.diagnostics=diagnostics
+        super().__init__(reason)
+
 def measure_inference(cli,wav,model,output,threads,timeout,checkpoint):
     import psutil
     args=[str(cli),str(wav),str(model),str(output),f"--threads={threads}"]
@@ -167,7 +189,20 @@ def measure_inference(cli,wav,model,output,threads,timeout,checkpoint):
     try:
         while proc.poll() is None:
             if time.monotonic()-started>timeout:
-                proc.kill();raise TimeoutError("Real MuScriptor run exceeded timeout; NOT PASS")
+                proc.kill()
+                proc.wait(timeout=10)
+                native_log.flush();native_log.seek(0)
+                diag=parse_native_telemetry(native_log.read())
+                elapsed=time.monotonic()-started
+                diag.update({
+                    "elapsed_seconds":round(elapsed,2),
+                    "peak_native_rss_bytes":peak if readings else None,
+                    "cpu_core_equivalent":round(cpu/elapsed,3) if elapsed else None,
+                    "samples":readings,
+                    "termination":"TIMEOUT",
+                    "midi_score_available":False
+                })
+                raise NativeRunIncomplete("Real MuScriptor did not finish within benchmark timeout; NO MIDI F1",diag)
             try:
                 mem=native.memory_info().rss
                 peak=max(peak,mem)
@@ -181,17 +216,30 @@ def measure_inference(cli,wav,model,output,threads,timeout,checkpoint):
         native_log.flush()
         native_log.seek(0)
         lines=native_log.read().splitlines()
-        checkpoints=sum(line.startswith("NOTIQ_CHECKPOINT ") for line in lines)
-        resumed=any(line.startswith("NOTIQ_RESUMED_NOTES ") for line in lines)
+        signal=parse_native_telemetry("\\n".join(lines))
+        checkpoints=signal["checkpoint_events"]
+        resumed=signal["resumed"]
         if proc.returncode!=0 or not output.exists():
-            raise RuntimeError(f"MuScriptor inference failed, code={proc.returncode}; no score")
+            elapsed=time.monotonic()-started
+            signal.update({
+              "elapsed_seconds":round(elapsed,2),
+              "peak_native_rss_bytes":peak if readings else None,
+              "cpu_core_equivalent":round(cpu/elapsed,3) if elapsed else None,
+              "samples":readings,
+              "termination":"NATIVE_FAILED",
+              "midi_score_available":False
+            })
+            raise NativeRunIncomplete("MuScriptor returned no successful MIDI result",signal)
         elapsed=time.monotonic()-started
         if readings<2 or peak<=0:raise RuntimeError("Native memory sampling unavailable")
         return {
           "elapsed_seconds":round(elapsed,2),"peak_native_rss_bytes":peak,
           "cpu_core_equivalent":round(cpu/elapsed,3),"samples":readings,
           "checkpoint_events":checkpoints,"resumed":resumed,
-          "native_progress_confirmed":any(line.startswith("PROGRESS 100") for line in lines)
+          "native_progress_confirmed":signal["highest_real_percent"]==100,
+          "last_real_percent":signal["last_real_percent"],
+          "highest_real_percent":signal["highest_real_percent"],
+          "progress_lines":signal["progress_lines"]
         }
     finally:
         if proc.poll() is None:
@@ -216,8 +264,12 @@ def execute(args):
     with tempfile.TemporaryDirectory(prefix="notiq-5pd-") as temp:
         tmp=Path(temp)
         wav=tmp/"actual_audio_16k.wav"
-        duration=prepare_wav(audio,wav,args.ffmpeg)
-        if duration<240 or duration>360:
+        excerpt=getattr(args,"excerpt_seconds",None)
+        duration=prepare_wav(audio,wav,args.ffmpeg,excerpt)
+        if excerpt is not None:
+            category="REAL_ACOUSTIC_EXCERPT_SMOKE_NOT_FULL_LENGTH"
+            ref=[(p,o,min(end,duration),program) for p,o,end,program in ref if o<duration and end>o]
+        elif duration<240 or duration>360:
             if not args.allow_short_smoke:
                 raise ValueError("Real full-song acceptance requires 240–360 seconds")
             category="REAL_AUDIO_SHORT_SMOKE_ONLY"
@@ -225,7 +277,34 @@ def execute(args):
             category="REAL_AUDIO_FULL_LENGTH"
         native_json=tmp/"native_muscriptor.json"
         checkpoint=tmp/"resume.cp" if args.checkpoint else None
-        metrics=measure_inference(cli,wav,model,native_json,args.threads,args.timeout,checkpoint)
+        try:
+            metrics=measure_inference(cli,wav,model,native_json,args.threads,args.timeout,checkpoint)
+        except NativeRunIncomplete as exc:
+            # Save the actual CPU/RAM/progress evidence when native inference
+            # fails; NEVER emit a fabricated F1/recall or note count.
+            report={
+              "schema":"notiq-5pd-real-piano-v1",
+              "status":"INCOMPLETE_NOT_SCORED",
+              "test_kind":category,
+              "license_id":args.license_id,
+              "audio_sha256":sha256_file(audio),
+              "native_wav_sha256":sha256_file(wav),
+              "reference_midi_sha256":sha256_file(reference),
+              "model_sha256":model_hash,
+              "real_audio_used":True,
+              "measured_audio_seconds":round(duration,2),
+              "native_model":"large",
+              "threads":args.threads,
+              "metrics":exc.diagnostics,
+              "score":None,
+              "release_approved":False,
+              "reason":str(exc)
+            }
+            target=args.report.resolve()
+            target.parent.mkdir(parents=True,exist_ok=True)
+            target.write_text(json.dumps(report,indent=2,ensure_ascii=False)+"\\n",encoding="utf-8")
+            print("NOTIQ_5PD_FAILURE_DIAGNOSTICS_SAVED_NO_SCORE",file=sys.stderr)
+            raise
         candidate=load_native_notes(native_json)
         if not candidate:raise ValueError("Native output contains zero piano notes, not accepted")
         results=score_midi(ref,candidate,args.offset)
@@ -264,6 +343,8 @@ def main():
     p.add_argument("--offset",type=float,default=0.,help="Predetermined MIDI alignment shift seconds; no F1 optimization")
     p.add_argument("--timeout",type=int,default=3600)
     p.add_argument("--checkpoint",action="store_true")
+    p.add_argument("--excerpt-seconds",type=float,default=None,
+                   help="Explicit real-audio excerpt (5–30 seconds), NOT full-song approval")
     p.add_argument("--allow-short-smoke",action="store_true")
     try: execute(p.parse_args())
     except Exception as exc:
