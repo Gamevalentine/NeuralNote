@@ -1,9 +1,9 @@
-name: NOTIQ Stage 5M-D Windows Acceptance
+name: NOTIQ Stage 5N Audio Velocity Windows QA
 on:
   push:
-    branches: [feature/notiq-stage5md-acceptance]
+    branches: [feature/notiq-stage5n-audio-velocity]
   pull_request:
-    branches: [feature/notiq-stage5mc-resume]
+    branches: [feature/notiq-stage5md-acceptance]
   workflow_dispatch:
 permissions:
   contents: read
@@ -36,7 +36,7 @@ jobs:
           if($LASTEXITCODE -ne 0){throw 'Web dependencies failed'}
           npm run build
           if($LASTEXITCODE -ne 0){throw '5M-D TypeScript build failed'}
-          node --experimental-strip-types --test tests/stage5md-audit.test.mts tests/reference-benchmark.test.mts tests/note-quality.test.mts
+          node --experimental-strip-types --test tests/stage5md-audit.test.mts tests/reference-benchmark.test.mts tests/note-quality.test.mts tests/velocity-from-audio.test.mts tests/daw-midi.test.mts
           if($LASTEXITCODE -ne 0){throw 'Audit/MIDI regression test failed'}
       - uses: actions/download-artifact@v4
         with:
@@ -72,10 +72,20 @@ jobs:
            'Do not claim faster Large 2.74GB inference or quality improvement before true on-device tests.'
            'Original MuScriptor native C++ model weights and algorithm unchanged.'
           ) -join [Environment]::NewLine | Set-Content (Join-Path $appRoot 'README-STAGE5M-D.txt')
-          Write-Host 'NOTIQ_STAGE5MD_WINDOWS_AUDIT_PACK_PASS'
+          @(
+           'NOTIQ Stage 5N — Audio-derived velocity experimental edition'
+           'Velocity proxy is OFF by default; activate it manually from Chất lượng MIDI.'
+           'RMS-derived per-track volume is NOT recovered key pressure and is inaccurate in dense ensembles.'
+           'Original MIDI note pitch/onsets/offsets are preserved; Ctrl+Z reverts the velocity edit.'
+           'CC64 remains user-controlled or comes from optional separate Piano V2.'
+           'This is not a production release. Benchmark actual Large inference and musical quality locally.'
+          ) -join [Environment]::NewLine | Set-Content (Join-Path $appRoot 'README-STAGE5N.txt')
+          if(-not (Test-Path (Join-Path $appRoot 'NOTIQ-Stage5-FullSong.exe'))){throw 'Portable EXE missing'}
+          if(-not (Test-Path (Join-Path $appRoot 'resources/app.asar'))){throw 'Electron ASAR missing'}
+          Write-Host 'NOTIQ_STAGE5N_WINDOWS_VELOCITY_PACK_PASS'
       - uses: actions/upload-artifact@v4
         with:
-          name: NOTIQ-Stage5M-D-Windows-Acceptance-Preview
+          name: NOTIQ-Stage5N-AudioVelocity-Windows-Preview
           path: notiq-stage5md-base/
           retention-days: 7
           compression-level: 6

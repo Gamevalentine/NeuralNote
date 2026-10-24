@@ -24,6 +24,7 @@ import {ComparisonOverlay} from './ComparisonOverlay';
 import {BenchmarkPanel} from './BenchmarkPanel';
 import {WebBenchmarkPanel} from './WebBenchmarkPanel';
 import {previewOverlapCleanup} from './noteQuality';
+import {estimateVelocityFromAudio} from './velocityFromAudio';
 import {soundingDurationWithPedal} from './pedalPlayback';
 import {readReferenceMidi,benchmarkComparison,scoreAgainstReference,type MidiReference,type MusicMode} from './referenceBenchmark';
 import { runPianoV2 } from './transkunNative';
@@ -118,6 +119,7 @@ function App() {
   const [bpm, setBpm] = useState(120);
   const [pedalEvents, setPedalEvents] = useState<PedalEvent[]>([]);
   const [rawRecognitionNotes, setRawRecognitionNotes] = useState<Note[]|null>(null);
+  const [velocityBusy, setVelocityBusy] = useState(false);
   const noteCleanup=useMemo(()=>previewOverlapCleanup(notes),[notes]);
   const overlapBenchmark=useMemo(()=>{
     if(!referenceMidi || !noteCleanup.merged || !notes.length)return null;
@@ -1085,6 +1087,40 @@ function App() {
     setStatus('Đã gộp '+updated.merged+' nốt chồng trong '+updated.affectedTracks+
       ' track. Bấm Hoàn tác để khôi phục.');
   };
+  const applyAudioVelocity = async () => {
+    const selected = selection, sourceNotes = notesRef.current;
+    if (!selected || !sourceNotes.length || phase === 'analyzing'
+        || recognitionInFlight.current || velocityBusy) return;
+    setVelocityBusy(true);
+    let ctx: AudioContext | null = null;
+    try {
+      // Process locally; original file and MIDI never leave the user's machine.
+      ctx = new AudioContext();
+      const buffer = await ctx.decodeAudioData(await selected.file.arrayBuffer());
+      if (selectionRef.current !== selected || notesRef.current !== sourceNotes
+          || recognitionInFlight.current) {
+        setStatus('Audio hoặc MIDI đã thay đổi; bỏ kết quả ước lượng velocity cũ.');
+        return;
+      }
+      const channels = Array.from({length: Math.min(buffer.numberOfChannels, 2)},
+        (_,i) => buffer.getChannelData(i));
+      const candidate = estimateVelocityFromAudio(sourceNotes,
+        {sampleRate: buffer.sampleRate, channels});
+      if (!candidate.changed) {
+        setStatus('Âm lượng bản ghi chưa đủ biến thiên hoặc MIDI đã có velocity; giữ nguyên các nốt.');
+        return;
+      }
+      commitNotes(candidate.notes);
+      setStatus('5N: đã ước lượng velocity cho ' + candidate.changed +
+        ' nốt từ âm lượng bản ghi (không phải lực tay thật). Bấm Hoàn tác để so sánh.');
+    } catch (cause) {
+      setError('Không đo được velocity từ âm thanh: ' +
+        (cause instanceof Error ? cause.message : 'Tệp âm thanh không hợp lệ.'));
+    } finally {
+      if (ctx) await ctx.close().catch(() => undefined);
+      setVelocityBusy(false);
+    }
+  };
   const restoreRawRecognition = () => {
     if(phase==='analyzing'||!rawRecognitionNotes)return;
     commitNotes(copyNotes(rawRecognitionNotes));
@@ -1486,6 +1522,11 @@ function App() {
       {notes.length>0&&aiAvailable&&<section className="notiq-quality-controls"
         aria-label="Tối ưu nốt và pedal">
         <strong>Chất lượng MIDI</strong>
+        <button type="button" aria-label="Ước lượng velocity theo cường độ bản ghi"
+          disabled={phase==='analyzing'||velocityBusy||!selection}
+          onClick={()=>void applyAudioVelocity()}>
+          {velocityBusy?'Đang đo lực nhấn…':'5N · Ước lượng mạnh–nhẹ từ âm thanh'}
+        </button>
         <button type="button" aria-label="Xử lý nốt chồng cùng cao độ"
           disabled={phase==='analyzing'||noteCleanup.merged===0} onClick={applyOverlapCleanup}>
           Gộp {noteCleanup.merged} nốt chồng (xem trước)
@@ -1502,7 +1543,9 @@ function App() {
           {overlapBenchmark?.change!==undefined&&overlapBenchmark.change<0?
             ' MIDI tham chiếu đang cho thấy F1 giảm nếu gộp: chỉ áp dụng sau khi nghe kỹ.' :
             ' Nếu có MIDI chuẩn, kiểm F1 trước/sau rồi mới áp dụng.'}
-          Có thể hoàn tác. CC64 chỉ kéo dài sample khi có điểm nhả, không mô phỏng cộng hưởng thật.</small>
+          Có thể hoàn tác. Velocity 5N chỉ dựa trên âm lượng hỗn hợp gần thời điểm nốt,
+          không khôi phục chính xác lực nhấn từng nhạc cụ. CC64 chỉ kéo dài sample
+          khi có điểm nhả, không mô phỏng cộng hưởng thật.</small>
       </section>}
       {selection && (nativeReady || browserAi) && <section className="notiq-5i-toggle">
         <strong>AI 5I</strong>
