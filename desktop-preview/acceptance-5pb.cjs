@@ -10,7 +10,7 @@ function f1(score){
  const {truePositive:tp,falsePositive:fp,falseNegative:fn}=score;
  if(![tp,fp,fn].every(x=>Number.isInteger(x)&&x>=0))return null;
  const total=2*tp+fp+fn;
- return total?2*tp/total:0;
+ return total>0?2*tp/total:null; // zero reference evidence cannot certify F1
 }
 function validRun(r){
  return r&&r.schema==='notiq-5ne-fullsong-v1'&&r.evidenceVersion===2&&
