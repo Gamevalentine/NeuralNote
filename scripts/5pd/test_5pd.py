@@ -85,6 +85,14 @@ class RealBenchmarkGateTests(unittest.TestCase):
             choices=dataset.selected_pairs(archive,allow_short=True)
             self.assertEqual(choices[0][0],"Chopin_op10_no3_p01")
             self.assertLess(choices[0][1],240)
+    def test_download_creates_windows_temp_folder_before_network_request(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as d:
+            destination=Path(d)/"nested"/"runner-temp"/"audio.zip"
+            with patch.object(dataset.urllib.request,"urlopen",side_effect=OSError("Offline fixture")):
+                with self.assertRaisesRegex(OSError,"Offline fixture"):
+                    dataset.download_archive(destination)
+            self.assertTrue(destination.parent.is_dir())
     def test_dataset_does_not_accept_arbitrary_zip_entry(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d)
