@@ -1,9 +1,9 @@
-name: NOTIQ Stage 5N-D CC64 Pedal Windows QA
+name: NOTIQ Stage 5N-E Long Song Windows QA
 on:
   push:
-    branches: [feature/notiq-stage5nd-pedal-cc64]
+    branches: [feature/notiq-stage5ne-fullsong-stability]
   pull_request:
-    branches: [feature/notiq-stage5nc-note-velocity]
+    branches: [feature/notiq-stage5nd-pedal-cc64]
   workflow_dispatch:
 permissions:
   contents: read
@@ -22,11 +22,12 @@ jobs:
       - name: Verify evidence gates, CLI progress and reference MIDI regressions
         shell: pwsh
         run: |
-          node --test desktop-preview/tests/native-thread-spawn.test.cjs desktop-preview/tests/cpu-threads.test.cjs desktop-preview/tests/cpu-benchmark.test.cjs desktop-preview/tests/native-progress.test.cjs desktop-preview/tests/models.test.cjs
+          node --test desktop-preview/tests/native-thread-spawn.test.cjs desktop-preview/tests/cpu-threads.test.cjs desktop-preview/tests/cpu-benchmark.test.cjs desktop-preview/tests/native-progress.test.cjs desktop-preview/tests/models.test.cjs desktop-preview/tests/full-song-5ne.test.cjs
           if($LASTEXITCODE -ne 0){throw 'CPU/CLI tests failed'}
           node --check desktop-preview/main.cjs
           node --check desktop-preview/preload.cjs
           node --check desktop-preview/repack-5md.cjs
+          node --check desktop-preview/full-song-health.cjs
           if($LASTEXITCODE -ne 0){throw 'Electron syntax failed'}
       - name: React TypeScript and MIDI accuracy tests
         shell: pwsh
@@ -113,10 +114,22 @@ jobs:
             'SoundFont sustain is a sample-duration approximation, not acoustic damper resonance.'
             'MuScriptor models, weights and native inference are unchanged; this is not a final release.'
           ) -join [Environment]::NewLine | Set-Content (Join-Path $appRoot 'README-STAGE5ND.txt')
-          Write-Host 'NOTIQ_STAGE5ND_WINDOWS_CC64_PACK_PASS'
+          @(
+            'NOTIQ Stage 5N-E — Long-song performance and safety preview'
+            'Windows CPU/RAM samples refer to native MuScriptor process only.'
+            'Live heartbeat never fabricates AI progress; 90/180-second stall diagnostics are advisory.'
+            'Real full-song runs save private aggregate JSON beside the portable app under NOTIQ-Data/full-song-reports.'
+            'No raw WAV, MIDI note sequence or personal paths are logged by the 5N-E metrics reporter.'
+            '4/6-minute WAV tests here validate parser and telemetry; they do NOT execute Large GGUF inference.'
+            'Checkpoint self-test runs on genuine native bridge; it is not evidence of 4-minute Large accuracy.'
+            'Complete real Large 2.74 GB on-device full-song benchmarks and MIDI listening before release.'
+          ) -join [Environment]::NewLine | Set-Content (Join-Path $appRoot 'README-STAGE5NE.txt')
+          node -e "const a=require('./package-tools/node_modules/@electron/asar');const f=require('node:fs');const p=require('node:path');const x=p.join(process.argv[1],'resources','app.asar');for(const n of ['main.cjs','process-metrics.cjs','full-song-health.cjs']){const body=a.extractFile(x,n);if(!body.length)throw Error('Missing 5NE package module '+n)}" "$appRoot"
+          if($LASTEXITCODE -ne 0){throw 'Missing full song health adapter from Electron ZIP'}
+          Write-Host 'NOTIQ_STAGE5NE_WINDOWS_FULLSONG_PACK_PASS'
       - uses: actions/upload-artifact@v4
         with:
-          name: NOTIQ-Stage5ND-PedalCC64-Windows-Preview
+          name: NOTIQ-Stage5NE-LongSong-Windows-Preview
           path: notiq-stage5md-base/
           retention-days: 7
           compression-level: 6
