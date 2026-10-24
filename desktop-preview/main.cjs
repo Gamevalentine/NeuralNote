@@ -241,6 +241,7 @@ async function transcribeViaNative(input) {
             const update=/^NOTIQ_CHECKPOINT (\d+) ([0-9]+(?:\.[0-9]+)?)$/.exec(line);
             if(update && resumable){
               checkpointCount++;
+              job.lastProgressAt=Date.now(); // actual disk checkpoint activity, not fake percent
               report('checkpoint',job.percent,
                 'Đã lưu '+update[1]+' nốt · đã xác nhận tới '+update[2]+
                 ' giây. Có thể Dừng và tiếp tục từ checkpoint.');
