@@ -14,7 +14,7 @@ function record(song,threads,extra={}){
  }),...extra};
 }
 function q(song,change=0){
- return {audioSha256:hashes[song],referenceSha256:'01'.repeat(32),
+ return {audioSha256:hashes[song],currentModelNotesSha256:'ef'.repeat(32),referenceSha256:'01'.repeat(32),
   currentMidiSha256:'02'.repeat(32),baselineMidiSha256:'03'.repeat(32),
   baseline:{truePositive:95,falsePositive:5,falseNegative:5},
   current:{truePositive:95+change,falsePositive:5-change,falseNegative:5-change},
