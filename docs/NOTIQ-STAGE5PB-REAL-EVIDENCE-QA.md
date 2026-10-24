@@ -24,3 +24,12 @@
 
 ## CI status
 - The 5P-B branch receives a Windows full-source CI to validate code, QA gates and packaging. See branch Actions runs; final result is recorded only after checking actual completed build and artifact hashes.
+
+
+## 5P-B final code / packaging verification (24 October 2026)
+- Source code commit **`a60dc8a8e2eb7b6835f62d1b7e04dec9a6b42a70`** passed genuine Windows GitHub Actions [run #40090071009](https://github.com/Gamevalentine/NeuralNote/actions/runs/40090071009), job **120860773346**, `completed/success`. GitHub job log: **35/35 native, desktop, health and false-PASS guard tests** plus **71/71 React/TypeScript/MIDI tests** PASS, Vite, MSVC-built fresh MuScriptor native C++, checkpoint self-test, Electron x64 source packaging and acceptance ASAR validator all PASS; no `##[error]`.
+- Native / Electron preview passes the `NOTIQ_STAGE5PB_SOURCE_BUILD_GATED_PREVIEW_PASS` gate. `releaseApproved=false` intentionally remains in the resulting integrity manifest.
+- Windows artifact **`NOTIQ-Stage5PB-EvidenceGated-Windows-QA`**, GitHub ID **12559085505**, ZIP size **130,757,788 bytes**. GitHub SHA-256 `08fc4c0c1236d4f1c1c57bff113ca4d737ffe1daf0cbd4e767443d56482d97a2`; expires **2026-10-31 11:32:06 UTC**.
+- Independently downloaded actual ZIP from GitHub; local SHA-256 matches GitHub exactly. **77/77 ZIP entries** passed complete CRC validation. `NOTIQ-5P-INTEGRITY.json` included, status `QA_PREVIEW_ONLY`, `releaseApproved=false`, **14 ASAR runtime module requirements** verified by Windows CI. Locally recalculated SHA-256 for the full Windows EXE (**210,939,904 bytes**), fresh native MuScriptor x64 CLI (**1,777,664 bytes**), and app.asar (**5,456,810 bytes**); all three exactly matched the per-file hashes in the packaged integrity JSON.
+- The last source code commit is under draft PR #48 into `feature/notiq-stage5p-release-gates` (not `main`). These checks prove source compilation, UI packaging and that the **acceptance validator refuses incomplete evidence**; they do **not** prove actual Large GGUF 4–6 minute inference, full-song human-aligned MIDI F1, end-to-end checkpoint resume during real music, or acoustic/pedal realism.
+- No actual two-song reference corpus/model + target laptop job exists in this environment. Therefore **5P-B final release gate remains HOLD**. Next time real user-provided on-device measurements are available, use locally recorded report fingerprints rather than invented estimates. Do not notify the user that a completed public download is ready.
