@@ -44,13 +44,19 @@ function heartbeatInfo({nowMs,startedMs,lastProgressMs,percent,snapshot}){
   cpuCoreEquivalent:snapshot?.samples>=2?snapshot.cpuCoreEquivalent:null,
   message};
 }
-function safeFullSongReport({model,threadCount,seconds,elapsedMs,noteCount,checkpointCount,resumed,stats}){
+function safeFullSongReport({model,threadCount,seconds,elapsedMs,noteCount,checkpointCount,resumed,stats,
+ audioSha256=null,notesSha256=null,modelSha256=null}){
  if(!['small','large'].includes(model)||![2,4,6].includes(threadCount)||
     !finitePositive(seconds)||seconds<1||seconds>900||
     !finitePositive(elapsedMs)||!Number.isInteger(noteCount)||noteCount<0||
     !Number.isInteger(checkpointCount)||checkpointCount<0||typeof resumed!=='boolean')
   throw Error('Thông số báo cáo toàn bài không hợp lệ.');
+ const shaValid=x=>x===null || (typeof x==='string'&&/^[a-f0-9]{64}$/.test(x));
+ if(!shaValid(audioSha256)||!shaValid(notesSha256)||!shaValid(modelSha256))
+   throw Error('SHA-256 báo cáo phải là checksum thực, không có đường dẫn/tên bản thu.');
  return{schema:'notiq-5ne-fullsong-v1',model,threads:threadCount,songSeconds:Math.round(seconds*100)/100,
+  evidenceVersion:audioSha256&&notesSha256&&modelSha256?2:1,
+  audioSha256,notesSha256,modelSha256,
   totalElapsedMs:Math.round(elapsedMs),notes:noteCount,checkpointCount,resumed,
   samples:stats?.samples||0,peakNativeWorkingSetBytes:stats?.peakWorkingSetBytes??null,
   cpuCoreEquivalent:stats?.cpuCoreEquivalent??null,

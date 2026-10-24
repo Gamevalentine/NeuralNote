@@ -17,6 +17,7 @@ const { hasVerifiedModel, downloadVerifiedModel } = require('./model-download.cj
 const { createNativeProgressParser } = require('./native-progress.cjs');
 const { createProcessSampler } = require('./process-metrics.cjs');
 const { songSecondsFromWav, heartbeatInfo, safeFullSongReport } = require('./full-song-health.cjs');
+const { audit5PB } = require('./acceptance-5pb.cjs');
 const { runBenchmark } = require('./benchmark-native.cjs');
 const { cpuThreadCount } = require('./cpu-threads.cjs');
 const pianoRuntime = require('./transkun-runtime.cjs');
@@ -286,13 +287,18 @@ async function transcribeViaNative(input) {
       const metrics=safeFullSongReport({
         model:model.id,threadCount:cpuThreads,seconds:wavSeconds,
         elapsedMs:Date.now()-nativeStartedAt,noteCount:result.notes.length,
-        checkpointCount,resumed:resumedCount>0,stats
+        checkpointCount,resumed:resumedCount>0,stats,
+        // 5P-B: compare the same real WAV and MIDI across 2/4/6 threads.
+        // Hashes only: never persist the source recording or MIDI note list.
+        audioSha256:createHash('sha256').update(raw).digest('hex'),
+        notesSha256:createHash('sha256').update(JSON.stringify(result.notes)).digest('hex'),
+        modelSha256:model.sha256
       });
       let reportSaved=false;
       try{
         const folder=path.join(dataDir,'full-song-reports');
         await fsp.mkdir(folder,{recursive:true});
-        await fsp.writeFile(path.join(folder,'notiq-5ne-'+Date.now()+'-'+
+        await fsp.writeFile(path.join(folder,'notiq-5pb-'+Date.now()+'-'+
           model.id+'-'+cpuThreads+'threads.json'),JSON.stringify(metrics,null,2),'utf8');
         reportSaved=true;
       }catch{ /* write failure must not discard valid transcribed notes */ }
@@ -410,6 +416,25 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  ipcMain.handle('notiq:5pb-evidence', async()=>{
+    // 5P-B: only inspect NOTIQ's own JSON summary directory; never accept
+    // arbitrary renderer-provided filesystem paths or return audio/note data.
+    const dir=path.join(dataDir,'full-song-reports');
+    let names=[];
+    try{names=await fsp.readdir(dir)}catch{return audit5PB([],[],null)}
+    const recent=names.filter(name=>/^notiq-5pb-[0-9]+-(small|large)-[246]threads\.json$/.test(name))
+      .sort().slice(-80);
+    const reports=[];
+    for(const name of recent){
+      try{
+        const file=path.join(dir,name),stat=await fsp.stat(file);
+        if(!stat.isFile()||stat.size>16000||stat.size<50)continue;
+        reports.push(JSON.parse(await fsp.readFile(file,'utf8')));
+      }catch{/* malformed report is not accepted evidence */}
+    }
+    const result=audit5PB(reports,[],null);
+    return {...result,loadedReports:reports.length};
+  });
   ipcMain.handle('notiq:status', () => bridgeStatus());
   ipcMain.handle('notiq:download-model', () => downloadModel());
   ipcMain.handle('notiq:select-model', (_event, id) => selectModel(id));

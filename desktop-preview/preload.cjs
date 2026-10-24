@@ -5,6 +5,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 // or choose executable paths. Only this narrow and fixed native bridge is exposed.
 const native = Object.freeze({
   status: () => ipcRenderer.invoke('notiq:status'),
+  acceptanceEvidence: () => ipcRenderer.invoke('notiq:5pb-evidence'),
   downloadModel: () => ipcRenderer.invoke('notiq:download-model'),
   pianoStatus: () => ipcRenderer.invoke('notiq:piano-status'),
   installPiano: () => ipcRenderer.invoke('notiq:piano-install'),

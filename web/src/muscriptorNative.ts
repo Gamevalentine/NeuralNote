@@ -28,6 +28,15 @@ declare global {
   interface Window {
     notiqNative?: {
       status: () => Promise<NativeStatus>;
+      acceptanceEvidence?: () => Promise<{
+        schema:string;status:'HOLD'|'READY_FOR_HUMAN_REVIEW';releaseApproved:false;
+        sourceCount:number;validNativeRuns:number;loadedReports:number;
+        blockers:string[];warnings:string[];
+        performance:{audioSha256:string;measurements:{
+          threads:number;seconds:number;peakNativeGiB:number;notes:number;
+          checkpointCount:number;resumed:boolean
+        }[]}[];
+      }>;
       downloadModel: () => Promise<NativeStatus>;
       selectModel?: (size: 'small' | 'large') => Promise<NativeStatus>;
       transcribe: (wave: Uint8Array | {wav:Uint8Array;resumable:true}) => Promise<MuScriptorResult>;
