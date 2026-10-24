@@ -124,7 +124,7 @@ function App() {
   useEffect(()=>{pedalEventsRef.current=pedalEvents},[pedalEvents]);
   const pedalUndoRef=useRef<PedalEvent[][]>([]);
   const pedalRedoRef=useRef<PedalEvent[][]>([]);
-  const [pedalHistoryTick,setPedalHistoryTick]=useState(0);
+  const [,setPedalHistoryTick]=useState(0);
   const [selectedPedalIndex,setSelectedPedalIndex]=useState<number|null>(null);
   const [pedalSpanSeconds,setPedalSpanSeconds]=useState<0.5|1|2>(1);
   useEffect(()=>{setSelectedPedalIndex(null)},[selection]);
@@ -2110,10 +2110,8 @@ function App() {
               onClick={()=>{
                 if(commitPedalEvents([]))setSelectedPedalIndex(null);
               }}>Xóa pedal</button>
-            <button type="button" disabled={phase==='analyzing'||pedalHistoryTick<0||
-              pedalUndoRef.current.length===0} onClick={pedalUndo}>Hoàn tác pedal</button>
-            <button type="button" disabled={phase==='analyzing'||pedalHistoryTick<0||
-              pedalRedoRef.current.length===0} onClick={pedalRedo}>Làm lại pedal</button>
+            <button type="button" disabled={phase==='analyzing'||pedalUndoRef.current.length===0} onClick={pedalUndo}>Hoàn tác pedal</button>
+            <button type="button" disabled={phase==='analyzing'||pedalRedoRef.current.length===0} onClick={pedalRedo}>Làm lại pedal</button>
             <small>{pedalEvents.length} điểm · Bấm một dấu CC64 để chọn rồi dịch ±10 ms.
               Pedal toàn bài và theo track được ưu tiên nhất quán khi trùng thời điểm;
               xuất MIDI không kéo dài note-off. SoundFont chỉ kéo tiếng đến lúc nhả pedal
