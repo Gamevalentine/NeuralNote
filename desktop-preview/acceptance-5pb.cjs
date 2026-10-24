@@ -22,7 +22,7 @@ function validRun(r){
  Number.isFinite(r.cpuCoreEquivalent)&&r.cpuCoreEquivalent>=0;
 }
 function qualityValid(q,sourceHash){
- if(!q||q.audioSha256!==sourceHash||!sha(q.referenceSha256)||
+ if(!q||q.audioSha256!==sourceHash||!sha(q.currentModelNotesSha256)||!sha(q.referenceSha256)||
     !sha(q.currentMidiSha256)||!sha(q.baselineMidiSha256))return false;
  if(!Number.isFinite(q.onsetMeanAbsoluteMs)||q.onsetMeanAbsoluteMs<0||
     !Number.isFinite(q.offsetMeanAbsoluteMs)||q.offsetMeanAbsoluteMs<0)return false;
@@ -56,10 +56,10 @@ function audit5PB(reports,comparisons,review){
   blockers.push('Chưa có bằng chứng phục hồi checkpoint thật sau khi tạm dừng.');
  for(const hash of bySong.keys()){
   const matched=comparisons.filter(c=>c.audioSha256===hash);
-  if(!matched.some(q=>qualityValid(q,hash))){
+  if(!matched.some(q=>qualityValid(q,hash)&&bySong.get(hash).some(r=>r.notesSha256===q.currentModelNotesSha256))){
    blockers.push('Chưa có đối chiếu MIDI chuẩn hợp lệ cho '+hash.slice(0,10)+'.');continue;
   }
-  for(const q of matched.filter(q=>qualityValid(q,hash))){
+  for(const q of matched.filter(q=>qualityValid(q,hash)&&bySong.get(hash).some(r=>r.notesSha256===q.currentModelNotesSha256))){
    const delta=(f1(q.current)-f1(q.baseline))*100;
    if(delta< -1-1e-9)blockers.push('F1 giảm quá 1 điểm phần trăm ở '+hash.slice(0,10)+'.');
    if(q.onsetMeanAbsoluteMs>100||q.offsetMeanAbsoluteMs>180)
