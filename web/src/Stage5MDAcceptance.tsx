@@ -21,6 +21,21 @@ export function Stage5MDAcceptance(p:Props){
  const [seamsChecked,setSeamsChecked]=useState(false);
  const [exportStatus,setExportStatus]=useState('');
  const [importStatus,setImportStatus]=useState('');
+ const [realEvidence,setRealEvidence]=useState<{
+  status:string;sourceCount:number;validNativeRuns:number;loadedReports:number;
+  blockers:string[];warnings:string[];
+  performance:{audioSha256:string;measurements:{
+   threads:number;seconds:number;peakNativeGiB:number;notes:number;resumed:boolean
+  }[]}[];
+ }|null>(null);
+ const [realError,setRealError]=useState('');
+ const inspectRealEvidence=async()=>{
+  setRealError('');
+  try{
+   if(!window.notiqNative?.acceptanceEvidence)throw Error('Chỉ có trên bản NOTIQ Windows 5P-B.');
+   setRealEvidence(await window.notiqNative.acceptanceEvidence());
+  }catch(cause){setRealError(cause instanceof Error?cause.message:'Không đọc được báo cáo 5P-B.')}
+ };
  const perf=useMemo(()=>auditCpuTrials(p.trials,p.model,p.clipSeconds,p.clipOffset),
   [p.trials,p.model,p.clipSeconds,p.clipOffset]);
  const quality=useMemo(()=>{
@@ -94,6 +109,30 @@ export function Stage5MDAcceptance(p:Props){
   <header><strong>5M-D · Nghiệm thu tốc độ, RAM và chất lượng MIDI</strong>
    <small>Chưa có kết quả Large trên máy thì chưa thể kết luận tăng tốc.</small>
   </header>
+  <div className="notiq-5pb-review">
+    <strong>5P-B · Bằng chứng nhận diện thật (Large 2,74 GB)</strong>
+    <button type="button" disabled={p.busy}
+      onClick={()=>void inspectRealEvidence()}>Đọc báo cáo đo thật trên máy</button>
+    {realError&&<small role="alert">{realError}</small>}
+    {realEvidence&&<div role="status">
+      <p><b>{realEvidence.status==='HOLD'?'CHƯA ĐẠT (HOLD)':'CHỜ NGHIỆM THU THỦ CÔNG'}</b>
+        {' · '} {realEvidence.sourceCount} bài · {realEvidence.validNativeRuns} lượt native hợp lệ
+        {' · '} {realEvidence.loadedReports} báo cáo được tìm thấy.</p>
+      {realEvidence.performance.map(entry=><div key={entry.audioSha256}>
+        <small>Mã bài {entry.audioSha256.slice(0,12)}…</small>
+        {entry.measurements.map((m,i)=><small key={i}>
+          {' · '}{m.threads} luồng: {m.seconds}s,
+          RAM native đỉnh {m.peakNativeGiB.toFixed(2)} GiB,
+          {m.notes} nốt{m.resumed?', có tiếp tục checkpoint':''}
+        </small>)}
+      </div>)}
+      {realEvidence.blockers.map((reason,index)=><p key={index}>Chưa đạt: {reason}</p>)}
+      {realEvidence.warnings.map((reason,index)=><small key={index}>Cần kiểm tra: {reason}</small>)}
+      <small>Chỉ đọc JSON tổng hợp trong NOTIQ-Data, không tải audio lên mạng.
+        Thiếu MIDI chuẩn và đánh giá nghe thật thì hệ thống bắt buộc giữ HOLD;
+        kết quả này không tự phê duyệt phát hành.</small>
+    </div>}
+  </div>
   <p><b>Bước 1 — Hiệu năng:</b> chạy cùng đoạn {p.clipSeconds} giây tại {p.clipOffset} giây,
    mỗi mức 2/4/6 luồng tối thiểu <b>hai lần</b> trong mục AI 5M-B. Số liệu lưu trong phiên làm việc hiện tại.</p>
   <label>Nhập báo cáo CPU 5M-B đã lưu (không cần chạy lại Large)
