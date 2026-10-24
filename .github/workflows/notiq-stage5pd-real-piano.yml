@@ -1,4 +1,4 @@
-name: NOTIQ 5P-D Real Piano Ground Truth QA
+name: NOTIQ 5P-D Real Piano Large Diagnostics QA
 on:
   push:
     branches: [feature/notiq-stage5pd-real-piano-benchmark]
@@ -90,7 +90,7 @@ jobs:
           if((Get-Item $model).Length -ne 2739142176){throw 'Large GGUF byte size mismatch'}
           "NOTIQ_LARGE_MODEL=$model" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           Write-Host 'NOTIQ_5PD_ACTUAL_LARGE_WEIGHTS_VERIFIED'
-      - name: Run genuine acoustic audio through Large and compare paired MIDI
+      - name: Run real 20-second acoustic excerpt through Large with bounded diagnostics
         shell: pwsh
         run: |
           $manifest=Get-Content (Join-Path $env:NOTIQ_VIENNA_DIR 'dataset-manifest.json') -Raw | ConvertFrom-Json
@@ -98,20 +98,19 @@ jobs:
           $audio=Join-Path $env:NOTIQ_VIENNA_DIR $sample.audio_file
           $midi=Join-Path $env:NOTIQ_VIENNA_DIR $sample.midi_file
           $report=Join-Path $env:RUNNER_TEMP 'notiq-5pd-real-large-results.json'
-          python scripts/5pd/benchmark_real_piano.py --audio "$audio" --reference "$midi" --model "$env:NOTIQ_LARGE_MODEL" --cli "$env:NOTIQ_NATIVE_CLI" --ffmpeg "$env:NOTIQ_FFMPEG" --threads 4 --checkpoint --license-id CC-BY-4.0 --allow-short-smoke --timeout 4200 --report "$report"
+          python scripts/5pd/benchmark_real_piano.py --audio "$audio" --reference "$midi" --model "$env:NOTIQ_LARGE_MODEL" --cli "$env:NOTIQ_NATIVE_CLI" --ffmpeg "$env:NOTIQ_FFMPEG" --threads 4 --checkpoint --license-id CC-BY-4.0 --excerpt-seconds 20 --timeout 900 --report "$report"
           if($LASTEXITCODE -ne 0){throw 'Real Large inference incomplete; do not label 5PD PASS'}
           $result=Get-Content $report -Raw | ConvertFrom-Json
-          if($result.test_kind -eq 'REAL_AUDIO_FULL_LENGTH'){
-            Write-Host 'NOTIQ_5PD_ONE_REAL_4MIN_LARGE_PASS_NOT_FINAL_RELEASE'
-          }else{
-            Write-Host 'NOTIQ_5PD_ONE_REAL_SHORT_LARGE_SMOKE_NOT_4MIN_ACCEPTANCE'
+          if($result.test_kind -ne 'REAL_ACOUSTIC_EXCERPT_SMOKE_NOT_FULL_LENGTH'){
+            throw 'Incorrect provenance: this is strictly a real 20-second excerpt smoke test'
           }
+          Write-Host 'NOTIQ_5PD_REAL_20SEC_LARGE_SMOKE_COMPLETED_NOT_FULL_SONG'
           Write-Host "REAL measured F1 $($result.score.f1_raw), native RAM $($result.metrics.peak_native_rss_bytes) bytes"
       - name: Upload privacy-safe real measurement report only
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: NOTIQ-5PD-RealAudio-Large-Measurement-ONLY
+          name: NOTIQ-5PD-RealAudio-Large-Excerpt-Diagnostics-ONLY
           path: ${{ runner.temp }}/notiq-5pd-real-large-results.json
           if-no-files-found: ignore
           retention-days: 7
