@@ -1,9 +1,9 @@
-name: NOTIQ Stage 5N Audio Velocity Windows QA
+name: NOTIQ Stage 5N-B Note Accuracy Windows QA
 on:
   push:
-    branches: [feature/notiq-stage5n-audio-velocity]
+    branches: [feature/notiq-stage5nb-note-accuracy]
   pull_request:
-    branches: [feature/notiq-stage5md-acceptance]
+    branches: [feature/notiq-stage5n-audio-velocity]
   workflow_dispatch:
 permissions:
   contents: read
@@ -36,7 +36,7 @@ jobs:
           if($LASTEXITCODE -ne 0){throw 'Web dependencies failed'}
           npm run build
           if($LASTEXITCODE -ne 0){throw '5M-D TypeScript build failed'}
-          node --experimental-strip-types --test tests/stage5md-audit.test.mts tests/reference-benchmark.test.mts tests/note-quality.test.mts tests/velocity-from-audio.test.mts tests/daw-midi.test.mts
+          node --experimental-strip-types --test tests/stage5md-audit.test.mts tests/reference-benchmark.test.mts tests/note-quality.test.mts tests/velocity-from-audio.test.mts tests/daw-midi.test.mts tests/note-quality-5nb.test.mts
           if($LASTEXITCODE -ne 0){throw 'Audit/MIDI regression test failed'}
       - uses: actions/download-artifact@v4
         with:
@@ -82,10 +82,20 @@ jobs:
           ) -join [Environment]::NewLine | Set-Content (Join-Path $appRoot 'README-STAGE5N.txt')
           if(-not (Test-Path (Join-Path $appRoot 'NOTIQ-Stage5-FullSong.exe'))){throw 'Portable EXE missing'}
           if(-not (Test-Path (Join-Path $appRoot 'resources/app.asar'))){throw 'Electron ASAR missing'}
-          Write-Host 'NOTIQ_STAGE5N_WINDOWS_VELOCITY_PACK_PASS'
+          @(
+           'NOTIQ Stage 5N-B — conservative note diagnostics & duplicate cleanup'
+           'Click 5N-B in Chất lượng MIDI to review extra, unmatched and offset-warning notes.'
+           'Dedupe is opt-in. Actual pitch, onset and note-off are unchanged for retained notes.'
+           'Any reference F1/onset/offset regression blocks cleanup. Undo is available.'
+           'Requires separately supplied same-performance MIDI reference to flag missing/extra notes.'
+           'No automatic reconstruction of missing notes or expressive pedal from this check.'
+           'MuScriptor core native inference and checkpoint binary are unchanged.'
+           'Not a production release. Check actual Large 2.74GB accuracy on long songs locally.'
+          ) -join [Environment]::NewLine | Set-Content (Join-Path $appRoot 'README-STAGE5NB.txt')
+          Write-Host 'NOTIQ_STAGE5NB_WINDOWS_NOTE_QA_PASS'
       - uses: actions/upload-artifact@v4
         with:
-          name: NOTIQ-Stage5N-AudioVelocity-Windows-Preview
+          name: NOTIQ-Stage5NB-NoteAccuracy-Windows-Preview
           path: notiq-stage5md-base/
           retention-days: 7
           compression-level: 6
