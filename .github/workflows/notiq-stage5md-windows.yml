@@ -1,9 +1,9 @@
-name: NOTIQ Stage 5N-B Note Accuracy Windows QA
+name: NOTIQ Stage 5N-C Per-Note Velocity Windows QA
 on:
   push:
-    branches: [feature/notiq-stage5nb-note-accuracy]
+    branches: [feature/notiq-stage5nc-note-velocity]
   pull_request:
-    branches: [feature/notiq-stage5n-audio-velocity]
+    branches: [feature/notiq-stage5nb-note-accuracy]
   workflow_dispatch:
 permissions:
   contents: read
@@ -36,7 +36,7 @@ jobs:
           if($LASTEXITCODE -ne 0){throw 'Web dependencies failed'}
           npm run build
           if($LASTEXITCODE -ne 0){throw '5M-D TypeScript build failed'}
-          node --experimental-strip-types --test tests/stage5md-audit.test.mts tests/reference-benchmark.test.mts tests/note-quality.test.mts tests/velocity-from-audio.test.mts tests/daw-midi.test.mts tests/note-quality-5nb.test.mts
+          node --experimental-strip-types --test tests/stage5md-audit.test.mts tests/reference-benchmark.test.mts tests/note-quality.test.mts tests/velocity-from-audio.test.mts tests/daw-midi.test.mts tests/note-quality-5nb.test.mts tests/velocity-editor-5nc.test.mts tests/piano-edit.test.mts
           if($LASTEXITCODE -ne 0){throw 'Audit/MIDI regression test failed'}
       - uses: actions/download-artifact@v4
         with:
@@ -92,10 +92,21 @@ jobs:
            'MuScriptor core native inference and checkpoint binary are unchanged.'
            'Not a production release. Check actual Large 2.74GB accuracy on long songs locally.'
           ) -join [Environment]::NewLine | Set-Content (Join-Path $appRoot 'README-STAGE5NB.txt')
-          Write-Host 'NOTIQ_STAGE5NB_WINDOWS_NOTE_QA_PASS'
+          @(
+            'NOTIQ Stage 5N-C — Per-note expressive velocity manual editor'
+            'Select a note in the Piano Roll to edit 1..127 velocity precisely.'
+            'Slider values are drafts; Apply creates a single Undo step (Ctrl+Z).'
+            'Listen before/after uses same instrument and normalized track/master levels.'
+            'Live MIDI SoundFont playback retains MuScriptor default 100/127 as baseline.'
+            'MIDI Type 1 / Kontakt stem files store real individual note-on velocities.'
+            'SoundFont gain is NOT physical key pressure, piano timbre or full acoustic modeling.'
+            'AI core, original detected pitches/note timing and external model weights unchanged.'
+            'This is an experimental QA preview, NOT a production-ready release.'
+          ) -join [Environment]::NewLine | Set-Content (Join-Path $appRoot 'README-STAGE5NC.txt')
+          Write-Host 'NOTIQ_STAGE5NC_WINDOWS_VELOCITY_PACK_PASS'
       - uses: actions/upload-artifact@v4
         with:
-          name: NOTIQ-Stage5NB-NoteAccuracy-Windows-Preview
+          name: NOTIQ-Stage5NC-PerNoteVelocity-Windows-Preview
           path: notiq-stage5md-base/
           retention-days: 7
           compression-level: 6
