@@ -68,8 +68,11 @@ jobs:
       - name: Package Windows Electron app entirely from source, no prior Actions artifacts
         shell: pwsh
         run: |
-          npm install --prefix desktop-preview --no-fund --no-audit
-          if($LASTEXITCODE -ne 0){throw 'Electron packager setup failed'}
+          Push-Location desktop-preview
+          try{
+            npm install --no-fund --no-audit
+            if($LASTEXITCODE -ne 0){throw 'Electron packager setup failed'}
+          }finally{Pop-Location}
           $www=Join-Path (Resolve-Path desktop-preview).Path 'www'
           New-Item -ItemType Directory -Force $www | Out-Null
           Copy-Item -Path web/dist/* -Destination $www -Recurse -Force
