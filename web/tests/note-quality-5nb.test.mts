@@ -2,6 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {previewNearExactDuplicates,diagnoseAgainstReference,cleanupPreservesReference} from '../src/noteQuality5NB.ts';
 import {scoreAgainstReference} from '../src/referenceBenchmark.ts';
+import {nudgeNoteBoundary} from '../src/pianoEdit.ts';
 
 const n=(pitchMidi:number,startTimeSeconds:number,durationSeconds=.5,program=0,amplitude=.78)=>({
   pitchMidi,startTimeSeconds,durationSeconds,program,amplitude,isDrum:program===128
@@ -85,4 +86,30 @@ test('large dense same-onset input remains bounded and deterministic',()=>{
  const output=previewNearExactDuplicates(input);
  assert.equal(output.notes.length,1);
  assert.equal(output.removed,19999);
+});
+
+test('manual note-on nudge is 10ms precise; note-off remains fixed; undo input unchanged',()=>{
+ const original=[n(60,1,.5),n(64,2,.4)];
+ const next=nudgeNoteBoundary(original,0,'onset',.01,5);
+ assert.ok(Math.abs(next[0].startTimeSeconds-1.01)<.000001);
+ assert.ok(Math.abs(next[0].durationSeconds-.49)<.000001);
+ assert.ok(Math.abs(next[0].startTimeSeconds+next[0].durationSeconds-1.5)<.000001);
+ assert.deepEqual(original,[n(60,1,.5),n(64,2,.4)]);
+ assert.deepEqual(next[1],original[1]);
+});
+test('manual note-off nudge is 10ms precise and never snaps to coarse 125ms grid',()=>{
+ const original=[n(60,1.003,.537)];
+ const next=nudgeNoteBoundary(original,0,'offset',-.01,3);
+ assert.ok(Math.abs(next[0].startTimeSeconds-1.003)<.000001);
+ assert.ok(Math.abs(next[0].durationSeconds-.527)<.000001);
+ const restored=nudgeNoteBoundary(next,0,'offset',.01,3);
+ assert.ok(Math.abs(restored[0].durationSeconds-original[0].durationSeconds)<.000001);
+});
+test('nudge clamps at zero and minimum note duration, and never changes invalid selection',()=>{
+ const original=[n(60,0,.01),n(64,3,.01)];
+ assert.equal(nudgeNoteBoundary(original,55,'onset',.01,5),original);
+ assert.equal(nudgeNoteBoundary(original,0,'onset',-.01,5),original);
+ assert.equal(nudgeNoteBoundary(original,0,'offset',-.01,5),original);
+ const end=nudgeNoteBoundary(original,1,'offset',.01,3.01);
+ assert.ok(end[1].durationSeconds>.01);
 });
