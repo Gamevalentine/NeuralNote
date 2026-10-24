@@ -124,7 +124,7 @@ jobs:
             'Checkpoint self-test runs on genuine native bridge; it is not evidence of 4-minute Large accuracy.'
             'Complete real Large 2.74 GB on-device full-song benchmarks and MIDI listening before release.'
           ) -join [Environment]::NewLine | Set-Content (Join-Path $appRoot 'README-STAGE5NE.txt')
-          node -e "const a=require('./package-tools/node_modules/@electron/asar');const f=require('node:fs');const p=require('node:path');const x=p.join(process.argv[1],'resources','app.asar');for(const n of ['main.cjs','process-metrics.cjs','full-song-health.cjs']){const body=a.extractFile(x,n);if(!body.length)throw Error('Missing 5NE package module '+n)}"
+          node -e "const a=require('./package-tools/node_modules/@electron/asar');const f=require('node:fs');const p=require('node:path');const x=p.join(process.argv[1],'resources','app.asar');for(const n of ['main.cjs','process-metrics.cjs','full-song-health.cjs']){const body=a.extractFile(x,n);if(!body.length)throw Error('Missing 5NE package module '+n)}" "$appRoot"
           if($LASTEXITCODE -ne 0){throw 'Missing full song health adapter from Electron ZIP'}
           Write-Host 'NOTIQ_STAGE5NE_WINDOWS_FULLSONG_PACK_PASS'
       - uses: actions/upload-artifact@v4
