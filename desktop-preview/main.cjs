@@ -286,13 +286,18 @@ async function transcribeViaNative(input) {
       const metrics=safeFullSongReport({
         model:model.id,threadCount:cpuThreads,seconds:wavSeconds,
         elapsedMs:Date.now()-nativeStartedAt,noteCount:result.notes.length,
-        checkpointCount,resumed:resumedCount>0,stats
+        checkpointCount,resumed:resumedCount>0,stats,
+        // 5P-B: compare the same real WAV and MIDI across 2/4/6 threads.
+        // Hashes only: never persist the source recording or MIDI note list.
+        audioSha256:createHash('sha256').update(raw).digest('hex'),
+        notesSha256:createHash('sha256').update(JSON.stringify(result.notes)).digest('hex'),
+        modelSha256:model.sha256
       });
       let reportSaved=false;
       try{
         const folder=path.join(dataDir,'full-song-reports');
         await fsp.mkdir(folder,{recursive:true});
-        await fsp.writeFile(path.join(folder,'notiq-5ne-'+Date.now()+'-'+
+        await fsp.writeFile(path.join(folder,'notiq-5pb-'+Date.now()+'-'+
           model.id+'-'+cpuThreads+'threads.json'),JSON.stringify(metrics,null,2),'utf8');
         reportSaved=true;
       }catch{ /* write failure must not discard valid transcribed notes */ }
