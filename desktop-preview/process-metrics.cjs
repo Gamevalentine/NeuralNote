@@ -40,19 +40,27 @@ function createProcessSampler(pid,sample=windowsProcessSample,logicalCores=os.cp
  };
  const timer=setInterval(()=>{void tick()},4000);
  void tick();
+ const snapshot=()=>{
+  const cpuCoreEquivalent=first&&last&&last.at>first.at
+    ?Math.max(0,(last.cpuSeconds-first.cpuSeconds)/((last.at-first.at)/1000))
+    :null;
+  return {
+    samples:readings,lastWorkingSetBytes:last?.workingSetBytes??null,
+    peakWorkingSetBytes:readings?peak:null,
+    cpuCoreEquivalent:cpuCoreEquivalent===null?null:Math.round(cpuCoreEquivalent*100)/100,
+    machineCpuPercent:cpuCoreEquivalent!==null&&logicalCores>0
+      ?Math.round(cpuCoreEquivalent/logicalCores*1000)/10:null,
+    logicalCores,lastSampleAt:last?.at??null
+  };
+ };
  return {
+  snapshot,
   async stop(){
    clearInterval(timer);
    if(!ended)await tick();
    ended=true;
-   const cpuCoreEquivalent=first&&last&&last.at>first.at
-    ?Math.max(0,(last.cpuSeconds-first.cpuSeconds)/((last.at-first.at)/1000))
-    :null;
-   const machineCpuPercent=cpuCoreEquivalent!==null&&logicalCores>0
-    ?Math.round(cpuCoreEquivalent/logicalCores*1000)/10:null;
-   return {samples:readings,peakWorkingSetBytes:readings?peak:null,
-     cpuCoreEquivalent:cpuCoreEquivalent===null?null:Math.round(cpuCoreEquivalent*100)/100,
-     machineCpuPercent,logicalCores};
+   const {samples,peakWorkingSetBytes,cpuCoreEquivalent,machineCpuPercent,logicalCores}=snapshot();
+   return {samples,peakWorkingSetBytes,cpuCoreEquivalent,machineCpuPercent,logicalCores};
   },
  };
 }
