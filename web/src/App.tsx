@@ -1691,7 +1691,7 @@ function App() {
       {nativeReady&&selection&&acceptanceOpen&&<Stage5MDAcceptance
          key={selection.url+'|'+nativeModelSize+'|'+appliedCpuThreads+'|'+(referenceMidi?.fileName||'none')}
          trials={benchTrials} clipSeconds={benchSeconds} clipOffset={benchOffset}
-         model={nativeModelSize} notes={notes} referenceMidi={referenceMidi}
+         model={nativeModelSize} notes={notes} referenceMidi={referenceMidi} sourceAudio={selection.file}
          onImportBenchmarks={reports=>setBenchTrials(prev=>[...prev,...reports].slice(-36))}
          musicMode={musicMode} referenceOffset={referenceOffset}
          songDuration={info?.duration??0} busy={phase==='analyzing'||benchRunning||busyLoading}
