@@ -8,7 +8,7 @@ import { assertSupportedSong, MAX_SONG_BYTES, MAX_SONG_SECONDS } from './longAud
 import { createDawMidi, createDawBundle, extractDawTracks, midiChannelLimitExceeded } from './dawMidi';
 import { addPedalPoint } from './pedal.ts';
 import type { PedalEvent } from './pedal.ts';
-import { addNote, copyNotes, removeNote, sameNotes, SNAP_SECONDS, snapSeconds, updateNote, clamp } from './pianoEdit';
+import { addNote, copyNotes, removeNote, sameNotes, SNAP_SECONDS, snapSeconds, updateNote, nudgeNoteBoundary, clamp } from './pianoEdit';
 import type { Note, AudioInfo, PitchGroup } from './audio';
 import { DEFAULT_INSTRUMENTS, INSTRUMENTS, instrumentProgram, playSoundfontNote, prepareInstrument, stopSoundfontNotes } from './soundfont';
 import type { InstrumentId, InstrumentSelection } from './soundfont';
@@ -24,6 +24,7 @@ import {ComparisonOverlay} from './ComparisonOverlay';
 import {BenchmarkPanel} from './BenchmarkPanel';
 import {WebBenchmarkPanel} from './WebBenchmarkPanel';
 import {previewOverlapCleanup} from './noteQuality';
+import {previewNearExactDuplicates,diagnoseAgainstReference,cleanupPreservesReference} from './noteQuality5NB';
 import {estimateVelocityFromAudio} from './velocityFromAudio';
 import {soundingDurationWithPedal} from './pedalPlayback';
 import {readReferenceMidi,benchmarkComparison,scoreAgainstReference,type MidiReference,type MusicMode} from './referenceBenchmark';
@@ -120,6 +121,7 @@ function App() {
   const [pedalEvents, setPedalEvents] = useState<PedalEvent[]>([]);
   const [rawRecognitionNotes, setRawRecognitionNotes] = useState<Note[]|null>(null);
   const [velocityBusy, setVelocityBusy] = useState(false);
+  const [showNoteReview, setShowNoteReview] = useState(false);
   const noteCleanup=useMemo(()=>previewOverlapCleanup(notes),[notes]);
   const overlapBenchmark=useMemo(()=>{
     if(!referenceMidi || !noteCleanup.merged || !notes.length)return null;
@@ -135,6 +137,31 @@ function App() {
       return {before,after,change:Math.round((after.f1-before.f1)*10000)/100};
     }catch{return null}
   },[referenceMidi,noteCleanup,notes,musicMode,referenceOffset]);
+
+  const duplicateReview=useMemo(()=>previewNearExactDuplicates(notes),[notes]);
+  const qualityReferenceScope=useMemo(()=>{
+    if(!referenceMidi)return null;
+    const piano=musicMode==='piano'||(musicMode==='guided'&&
+      referenceMidi.notes.every(n=>n.program>=0&&n.program<8));
+    return {reference:piano?referenceMidi.notes.filter(n=>n.program>=0&&n.program<8):referenceMidi.notes,
+      selected:(array:Note[])=>piano?array.filter(n=>n.program===undefined||n.program>=0&&n.program<8):array};
+  },[referenceMidi,musicMode]);
+  const qualityDuplicateScores=useMemo(()=>{
+    if(!qualityReferenceScope||!qualityReferenceScope.reference.length||!duplicateReview.removed)return null;
+    try{
+      const before=scoreAgainstReference(qualityReferenceScope.reference,
+        qualityReferenceScope.selected(notes),referenceOffset);
+      const after=scoreAgainstReference(qualityReferenceScope.reference,
+        qualityReferenceScope.selected(duplicateReview.notes),referenceOffset);
+      return{before,after,safe:cleanupPreservesReference(before,after)};
+    }catch{return null}
+  },[qualityReferenceScope,notes,duplicateReview,referenceOffset]);
+  const noteDiagnostics=useMemo(()=>{
+    if(!showNoteReview||!qualityReferenceScope||!qualityReferenceScope.reference.length)return null;
+    try{return diagnoseAgainstReference(qualityReferenceScope.reference,
+      qualityReferenceScope.selected(notes),referenceOffset)}
+    catch{return null}
+  },[showNoteReview,qualityReferenceScope,notes,referenceOffset]);
 
   const [pedalTrack, setPedalTrack] = useState('*');
   // Transcribed notes are the default listening target; the original recording
@@ -1083,9 +1110,55 @@ function App() {
     if(phase==='analyzing'||!notesRef.current.length)return;
     const updated=previewOverlapCleanup(notesRef.current);
     if(!updated.merged){setStatus('Không có nốt chồng cùng cao độ/track; bản MIDI không thay đổi.');return}
+    if(qualityReferenceScope?.reference.length){
+      try{
+        const before=scoreAgainstReference(qualityReferenceScope.reference,
+          qualityReferenceScope.selected(notesRef.current),referenceOffset);
+        const after=scoreAgainstReference(qualityReferenceScope.reference,
+          qualityReferenceScope.selected(updated.notes),referenceOffset);
+        if(!cleanupPreservesReference(before,after)){
+          setError('5N-B: từ chối gộp nốt chồng vì MIDI chuẩn cho thấy chất lượng giảm.');
+          return;
+        }
+      }catch{setError('5N-B: chưa xác minh được F1, giữ nguyên MIDI.');return;}
+    }
     commitNotes(updated.notes);
     setStatus('Đã gộp '+updated.merged+' nốt chồng trong '+updated.affectedTracks+
       ' track. Bấm Hoàn tác để khôi phục.');
+  };
+  const nudgeSelectedNote = (edge:'onset'|'offset',delta:number) => {
+    if(phase==='analyzing'||selectedNote===null||!notesRef.current[selectedNote])return;
+    const old=notesRef.current;
+    const result=nudgeNoteBoundary(old,selectedNote,edge,delta,totalSeconds);
+    if(result===old)return;
+    commitNotes(result);
+    setStatus('5N-B: chỉnh ' + (edge==='onset'?'thời điểm nhấn':'thời điểm nhả') +
+      (delta>0?' +10 ms':' −10 ms') + '. Có thể Hoàn tác (Ctrl+Z).');
+  };
+  const applyStrictDuplicates = () => {
+    if(phase==='analyzing'||!notesRef.current.length)return;
+    const candidate=previewNearExactDuplicates(notesRef.current);
+    if(!candidate.removed){setStatus('Không phát hiện nốt trùng gần như giống hệt.');return;}
+    // Fail closed: never accept a cleanup that worsens independently supplied MIDI.
+    if(qualityReferenceScope){
+      if(!qualityReferenceScope.reference.length){
+        setError('Chưa có nốt phù hợp trong MIDI chuẩn để kiểm tra; giữ nguyên MIDI.');return;
+      }
+      try{
+        const before=scoreAgainstReference(qualityReferenceScope.reference,
+          qualityReferenceScope.selected(notesRef.current),referenceOffset);
+        const after=scoreAgainstReference(qualityReferenceScope.reference,
+          qualityReferenceScope.selected(candidate.notes),referenceOffset);
+        if(!cleanupPreservesReference(before,after)){
+          setError('5N-B: nốt trùng có thể là lần nhấn thật. MIDI chuẩn không cho phép xóa; giữ nguyên MIDI.');
+          return;
+        }
+      }catch{setError('5N-B: không kiểm tra được MIDI chuẩn; giữ nguyên MIDI.');return;}
+    }
+    commitNotes(candidate.notes);
+    setSelectedNote(null);
+    setStatus('5N-B: lọc ' + candidate.removed +
+      ' nốt gần như trùng tuyệt đối. Cao độ/thời gian nốt còn lại không đổi; có thể Hoàn tác.');
   };
   const applyAudioVelocity = async () => {
     const selected = selection, sourceNotes = notesRef.current;
@@ -1522,13 +1595,72 @@ function App() {
       {notes.length>0&&aiAvailable&&<section className="notiq-quality-controls"
         aria-label="Tối ưu nốt và pedal">
         <strong>Chất lượng MIDI</strong>
+        <button type="button" aria-label="Mở kiểm tra nốt MIDI 5N-B"
+          aria-expanded={showNoteReview}
+          onClick={()=>setShowNoteReview(v=>!v)}>
+          {showNoteReview?'Ẩn 5N-B · Kiểm tra nốt':'5N-B · Kiểm tra nốt đúng/sai'}
+        </button>
+        {showNoteReview&&<div className="notiq-5nb-review" aria-label="Báo cáo nốt MIDI 5N-B">
+          <p>Ứng viên trùng gần như tuyệt đối: <b>{duplicateReview.removed}</b>.
+            Không tự xóa các lần nhấn lặp, nốt trống hay nốt có pitch-bend.</p>
+          {qualityDuplicateScores&&<p>F1 trước/sau lọc theo MIDI chuẩn:
+            <b> {(qualityDuplicateScores.before.f1*100).toFixed(2)}% → {(qualityDuplicateScores.after.f1*100).toFixed(2)}%</b>
+            {qualityDuplicateScores.safe?' · Không giảm tiêu chí F1/onset/offset.':
+              ' · Không đạt: thao tác bị chặn để giữ nốt gốc.'}</p>}
+          <div className="notiq-5nb-nudge">
+            <strong>Chỉnh chính xác nốt đang chọn {selectedNote===null?'(chọn nốt trên Piano Roll)':
+              '('+noteName(notes[selectedNote]?.pitchMidi??60)+')'}</strong>
+            {([
+              ['Nhấn −10 ms','onset',-.01],['Nhấn +10 ms','onset',.01],
+              ['Nhả −10 ms','offset',-.01],['Nhả +10 ms','offset',.01]
+            ] as const).map(([label,edge,delta])=>
+              <button type="button" key={label}
+                disabled={phase==='analyzing'||selectedNote===null||!notes[selectedNote]}
+                onClick={()=>nudgeSelectedNote(edge,delta)}>{label}</button>)}
+            <small>Thay đổi một nốt, không làm tròn vào lưới 125 ms.
+              Thao tác được lưu vào lịch sử Hoàn tác.</small>
+          </div>
+          <button type="button" disabled={!duplicateReview.removed||phase==='analyzing'||
+             (!!qualityReferenceScope&&!qualityDuplicateScores?.safe)}
+            onClick={applyStrictDuplicates}>
+            Lọc {duplicateReview.removed} ứng viên trùng · Hoàn tác được
+          </button>
+          {noteDiagnostics?<div role="group" aria-label="Đối chiếu MIDI chuẩn">
+            <p><strong>MIDI chuẩn đã nạp:</strong> khớp {noteDiagnostics.matched} nốt,
+              thiếu tương ứng {noteDiagnostics.missing}, dư {noteDiagnostics.extra},
+              nhả nốt lệch dung sai {noteDiagnostics.offsetWarnings}.</p>
+            <small>So khớp cùng cao độ và thời điểm nhấn ±100 ms theo 5I.
+              Kết quả chỉ có ý nghĩa khi MIDI chuẩn cùng bản diễn và đã chỉnh offset.
+              Không tự chèn nốt thiếu hoặc thay bản gốc.</small>
+            {([
+              ['Chưa khớp với MIDI chuẩn',noteDiagnostics.missingExamples],
+              ['Nốt dư so với MIDI chuẩn',noteDiagnostics.extraExamples],
+              ['Nhả nốt lệch thời gian',noteDiagnostics.offsetExamples]
+            ] as const).map(([label,items])=>items.length>0&&<div key={label}>
+              <strong>{label}</strong>
+              <div className="notiq-5nb-issues">
+                {items.map((item,index)=><button type="button"
+                  key={label+'-'+index} onClick={()=>seekTo(item.timeSeconds)}
+                  title="Tới vị trí để nghe và sửa thủ công">
+                  {noteName(item.pitchMidi)} · {fmt(item.timeSeconds)}
+                  {item.errorMs!==undefined?' · lệch '+item.errorMs+' ms':''}
+                </button>)}
+              </div>
+            </div>)}
+          </div>:<small>Nạp MIDI chuẩn ở bảng 5I để chỉ rõ nốt không khớp,
+            nốt dư và thời gian nhả sai. Không có MIDI chuẩn thì chỉ lọc nốt trùng cực gần,
+            không tự khẳng định AI nhận diện tốt hơn.</small>}
+        </div>}
         <button type="button" aria-label="Ước lượng velocity theo cường độ bản ghi"
           disabled={phase==='analyzing'||velocityBusy||!selection}
           onClick={()=>void applyAudioVelocity()}>
           {velocityBusy?'Đang đo lực nhấn…':'5N · Ước lượng mạnh–nhẹ từ âm thanh'}
         </button>
         <button type="button" aria-label="Xử lý nốt chồng cùng cao độ"
-          disabled={phase==='analyzing'||noteCleanup.merged===0} onClick={applyOverlapCleanup}>
+          disabled={phase==='analyzing'||noteCleanup.merged===0||
+             (!!qualityReferenceScope && !!overlapBenchmark &&
+               !cleanupPreservesReference(overlapBenchmark.before,overlapBenchmark.after))}
+           onClick={applyOverlapCleanup}>
           Gộp {noteCleanup.merged} nốt chồng (xem trước)
         </button>
         <button type="button" aria-label="Khôi phục nốt AI gốc"
