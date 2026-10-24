@@ -3,6 +3,7 @@ import type {Note} from './audio';
 import type {BenchmarkResult} from './nativeBenchmark';
 import {auditCpuTrials,parseSavedBenchmark,validateFullSongEvidence} from './stage5mdAudit';
 import {readReferenceMidi,scoreAgainstReference,type MidiReference,type MusicMode,type NoteScore} from './referenceBenchmark';
+import {convertAudioToNativeWav} from './muscriptorNative';
 type Props={
  trials:BenchmarkResult[];clipSeconds:20|30|60;clipOffset:number;
  model:'small'|'large';notes:Note[];referenceMidi:MidiReference|null;
