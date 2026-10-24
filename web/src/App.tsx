@@ -26,6 +26,7 @@ import {WebBenchmarkPanel} from './WebBenchmarkPanel';
 import {previewOverlapCleanup} from './noteQuality';
 import {previewNearExactDuplicates,diagnoseAgainstReference,cleanupPreservesReference} from './noteQuality5NB';
 import {estimateVelocityFromAudio} from './velocityFromAudio';
+import {midiVelocity,setNoteVelocity,nudgeNoteVelocity,notePreviewVolume} from './velocityEditor';
 import {soundingDurationWithPedal} from './pedalPlayback';
 import {readReferenceMidi,benchmarkComparison,scoreAgainstReference,type MidiReference,type MusicMode} from './referenceBenchmark';
 import { runPianoV2 } from './transkunNative';
@@ -121,6 +122,12 @@ function App() {
   const [pedalEvents, setPedalEvents] = useState<PedalEvent[]>([]);
   const [rawRecognitionNotes, setRawRecognitionNotes] = useState<Note[]|null>(null);
   const [velocityBusy, setVelocityBusy] = useState(false);
+  // 5N-C slider is a draft, so dragging produces only one Undo step when applied.
+  const [velocityDraft,setVelocityDraft] = useState<number|null>(null);
+  const [velocityBefore,setVelocityBefore] = useState<{
+    index:number;key:string;velocity:number
+  }|null>(null);
+  useEffect(()=>{setVelocityDraft(null);setVelocityBefore(null)},[selectedNote,selection]);
   const [showNoteReview, setShowNoteReview] = useState(false);
   const noteCleanup=useMemo(()=>previewOverlapCleanup(notes),[notes]);
   const overlapBenchmark=useMemo(()=>{
@@ -289,6 +296,15 @@ function App() {
     [notes, activeGroups, nativeMuted, nativeSolo]);
   const visibleIndexedNotes = useMemo(() => notes.map((note,index) => ({note,index})).filter(({note}) => isNoteAudible(note)),
     [notes, activeGroups, nativeMuted, nativeSolo]);
+  const selectedVelocityNote=selectedNote===null?null:notes[selectedNote]??null;
+  const selectedVelocityKey=selectedVelocityNote?
+    [selectedVelocityNote.pitchMidi,selectedVelocityNote.program??'none',
+     selectedVelocityNote.startTimeSeconds,selectedVelocityNote.durationSeconds].join('|'):'';
+  const originalVelocity=(velocityBefore && velocityBefore.index===selectedNote &&
+      velocityBefore.key===selectedVelocityKey) ?
+    velocityBefore.velocity:(selectedVelocityNote?midiVelocity(selectedVelocityNote):100);
+  const editingVelocity=selectedVelocityNote?
+    velocityDraft??midiVelocity(selectedVelocityNote):100;
   const canUndo = historyTick >= 0 && undoRef.current.length > 0;
   const canRedo = historyTick >= 0 && redoRef.current.length > 0;
   const summary = useMemo(() => {
@@ -994,14 +1010,11 @@ function App() {
         if (n.startTimeSeconds >= from && n.startTimeSeconds <= now + 0.060) {
           firedNotes.current.add(i);
           const level = n.program === undefined ? gain[group] : (nativeGain[n.program] ?? 0.7);
-          // Preserve baseline loudness at MuScriptor's default 100/127;
-          // use estimated expressive velocity only where opt-in analysis supplied it.
-          const velocityGain = Math.max(0.3, Math.min(1.15,
-            (Number.isFinite(n.amplitude) ? n.amplitude : 0.7874015748) / 0.7874015748));
-          // The previous 0.85s cap cut off long held notes during MIDI preview.
-          // SoundFont player's existing safe maximum is 8 seconds.
+          // 5N-C: full 1..127 note velocity dynamic range, not the old 0.3/1.15
+          // clipping that flattened soft/strong notes. MuScriptor 100 remains 1x.
+          // SoundFont gain is a preview, not physical piano key-force or timbre.
           void previewNote(n.pitchMidi, soundingDurationWithPedal(n,pedalEvents),
-            Math.min(1, level * masterVolume * velocityGain), n.program);
+            Math.min(1, notePreviewVolume(n,level,masterVolume)), n.program);
         }
       }
     }, 45);
@@ -1159,6 +1172,42 @@ function App() {
     setSelectedNote(null);
     setStatus('5N-B: lọc ' + candidate.removed +
       ' nốt gần như trùng tuyệt đối. Cao độ/thời gian nốt còn lại không đổi; có thể Hoàn tác.');
+  };
+  const commitSelectedVelocity = (target:number) => {
+    if(phase==='analyzing'||playing||selectedNote===null||!notesRef.current[selectedNote])
+      return;
+    const current=notesRef.current[selectedNote];
+    const next=setNoteVelocity(notesRef.current,selectedNote,target);
+    if(next===notesRef.current){
+      setVelocityDraft(null);
+      return;
+    }
+    const key=[current.pitchMidi,current.program??'none',
+      current.startTimeSeconds,current.durationSeconds].join('|');
+    setVelocityBefore(previous=>
+      previous?.index===selectedNote&&previous.key===key
+        ? previous:{index:selectedNote,key,velocity:midiVelocity(current)});
+    commitNotes(next);
+    setVelocityDraft(null);
+    setStatus('5N-C: nốt '+noteName(current.pitchMidi)+' velocity '+
+      midiVelocity(current)+' → '+midiVelocity(next[selectedNote])+
+      '/127. MIDI xuất ghi đúng lực nhấn; Ctrl+Z để hoàn tác.');
+  };
+  const nudgeSelectedVelocity=(delta:number)=>{
+    if(selectedNote===null||!notesRef.current[selectedNote]||
+      phase==='analyzing'||playing)return;
+    const target=nudgeNoteVelocity(notesRef.current,selectedNote,delta);
+    if(target===notesRef.current)return;
+    commitSelectedVelocity(midiVelocity(target[selectedNote]));
+  };
+  const previewSelectedVelocity = (candidate:number) => {
+    if(!selectedVelocityNote||playing||phase==='analyzing')return;
+    if(audioCtx.current)stopSoundfontNotes(audioCtx.current);
+    const sample={...selectedVelocityNote,amplitude:Math.max(1,Math.min(127,candidate))/127};
+    const level=sample.program===undefined
+      ? gain[groupFor(sample.pitchMidi)]:(nativeGain[sample.program]??0.7);
+    void previewNote(sample.pitchMidi,Math.max(0.12,Math.min(0.75,sample.durationSeconds)),
+      Math.min(1,notePreviewVolume(sample,level,masterVolume)),sample.program);
   };
   const applyAudioVelocity = async () => {
     const selected = selection, sourceNotes = notesRef.current;
@@ -1595,6 +1644,34 @@ function App() {
       {notes.length>0&&aiAvailable&&<section className="notiq-quality-controls"
         aria-label="Tối ưu nốt và pedal">
         <strong>Chất lượng MIDI</strong>
+        <div className="notiq-5nc-velocity" role="group" aria-label="Chỉnh velocity từng nốt MIDI 5N-C">
+          <strong>5N-C · Velocity từng nốt</strong>
+          {selectedVelocityNote ? <>
+            <label htmlFor="notiq-velocity-5nc">
+              {noteName(selectedVelocityNote.pitchMidi)} · {editingVelocity}/127
+              {velocityDraft!==null?' (chưa áp dụng)':''}
+            </label>
+            <input type="range" id="notiq-velocity-5nc"
+              min={1} max={127} step={1} value={editingVelocity}
+              disabled={phase==='analyzing'||playing}
+              onChange={event=>setVelocityDraft(Number(event.target.value))}/>
+            <button type="button" disabled={phase==='analyzing'||playing}
+              onClick={()=>nudgeSelectedVelocity(-5)}>−5</button>
+            <button type="button" disabled={phase==='analyzing'||playing}
+              onClick={()=>nudgeSelectedVelocity(5)}>+5</button>
+            <button type="button" disabled={phase==='analyzing'||playing||
+              velocityDraft===null||velocityDraft===midiVelocity(selectedVelocityNote)}
+              onClick={()=>commitSelectedVelocity(editingVelocity)}>Áp dụng</button>
+            <button type="button" disabled={phase==='analyzing'||playing||
+              editingVelocity===originalVelocity}
+              onClick={()=>previewSelectedVelocity(originalVelocity)}>Nghe trước</button>
+            <button type="button" disabled={phase==='analyzing'||playing}
+              onClick={()=>previewSelectedVelocity(editingVelocity)}>Nghe sau</button>
+            <small>MIDI 1–127 · bản nháp không sửa nốt cho tới khi Áp dụng.
+              Nghe trước/sau cùng nhạc cụ và âm lượng tổng; Ctrl+Z để hoàn tác.
+              SoundFont chỉ mô phỏng độ lớn, chưa tái tạo lực gõ/âm sắc piano thật.</small>
+          </> : <small>Chọn một nốt trên Piano Roll để chỉnh lực nhấn và nghe so sánh.</small>}
+        </div>
         <button type="button" aria-label="Mở kiểm tra nốt MIDI 5N-B"
           aria-expanded={showNoteReview}
           onClick={()=>setShowNoteReview(v=>!v)}>
@@ -1887,7 +1964,7 @@ function App() {
                     <button type="button" className={'note editable-note' + (selectedNote === index ? ' selected-note' : '')}
                       key={index} aria-label={'Nốt ' + noteName(n.pitchMidi) + ', bắt đầu ' + fmt(n.startTimeSeconds)}
                       aria-pressed={selectedNote === index}
-                      title={noteName(n.pitchMidi) + ' · ' + fmt(n.startTimeSeconds) + ' · ' + n.durationSeconds.toFixed(2) + 's · Kéo để chuyển nốt, kéo mép phải để đổi độ dài'}
+                      title={noteName(n.pitchMidi) + ' · ' + fmt(n.startTimeSeconds) + ' · ' + n.durationSeconds.toFixed(2) + 's · Velocity '+midiVelocity(n)+'/127 · Kéo để chuyển nốt, kéo mép phải để đổi độ dài'}
                       onPointerDown={event => beginNoteGesture(event, index,
                         event.target instanceof HTMLElement && event.target.closest('.note-resize-handle') ? 'resize' : 'move')}
                       onPointerMove={moveNoteGesture}
