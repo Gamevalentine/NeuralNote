@@ -82,3 +82,11 @@ test('quality permits only <=1 absolute F1 point drop; invalid scores never pass
  assert.equal(validateFullSongEvidence(true,true,Number.NaN,.90,true).status,'missing');
  assert.equal(validateFullSongEvidence(true,true,1.2,.90,true).status,'missing');
 });
+
+test('unrounded F1 threshold blocks a 1.004 point loss, permits exactly 1 point',()=>{
+ const excess=validateFullSongEvidence(true,true,.9,.88996,true);
+ assert.equal(excess.status,'risk');
+ assert.ok((excess.deltaF1??0)<-1);
+ const exact=validateFullSongEvidence(true,true,.9,.89,true);
+ assert.equal(exact.status,'comparable');
+});
