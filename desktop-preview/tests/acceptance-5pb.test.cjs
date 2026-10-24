@@ -96,3 +96,12 @@ test('5PB SHA-256 fingerprints are optional for old 5N-E but required for new ve
   checkpointCount:2,resumed:true,stats:null,audioSha256:'bad'
  }),/SHA-256/);
 });
+
+test('5PB rejects fabricated empty reference note counts instead of treating F1 zero as reliable',()=>{
+ const bad=q(0);
+ bad.current={truePositive:0,falsePositive:0,falseNegative:0};
+ bad.baseline={truePositive:0,falsePositive:0,falseNegative:0};
+ const report=audit5PB(records(),[bad,q(1)],review);
+ assert.equal(report.status,'HOLD');
+ assert.match(report.blockers.join(';'),/MIDI chuẩn/);
+});
