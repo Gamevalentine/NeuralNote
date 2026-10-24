@@ -15,3 +15,6 @@
 .notiq-5nb-review small{min-width:0;flex-basis:100%}
 .notiq-5nb-issues{display:flex;flex-wrap:wrap;gap:5px}
 .notiq-quality-controls .notiq-5nb-issues button{font-variant-numeric:tabular-nums;background:#233a4c}
+
+.notiq-5nb-nudge{display:flex;align-items:center;gap:6px;flex-wrap:wrap;flex-basis:100%;padding:5px 0;border-bottom:1px solid #465a6e}
+.notiq-5nb-nudge small{flex-basis:100%;color:#b4cadd}
