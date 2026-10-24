@@ -3,6 +3,12 @@ on:
   push:
     branches: [feature/notiq-stage5pd-real-piano-benchmark]
   workflow_dispatch:
+    inputs:
+      enable_large_diagnostic:
+        description: 'Explicitly authorize a costly Large inference diagnostic (never default)'
+        required: true
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -27,9 +33,10 @@ jobs:
           Write-Host 'NOTIQ_5PD_BENCHMARK_GATE_TESTS_PASS_NOT_REAL_INFERENCE'
   real-audio-large:
     needs: algorithm-preflight
-    # One costly real Large run is triggered only by the reviewed [5PD_RUN]
-    # commit or workflow_dispatch, never by every rapid source commit.
-    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[5PD_RUN]') }}
+    # CRITICAL 5P-D STOP RULE: never trigger Large on push or by commit tag.
+    # A 20s real excerpt ran only to 39% in 900s; no more unattended costly
+    # tests. The owner must separately approve a one-off manual diagnostic.
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.enable_large_diagnostic == true }}
     runs-on: windows-latest
     timeout-minutes: 110
     env:
