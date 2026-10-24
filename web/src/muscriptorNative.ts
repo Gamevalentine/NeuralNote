@@ -28,6 +28,10 @@ declare global {
   interface Window {
     notiqNative?: {
       status: () => Promise<NativeStatus>;
+      finalFingerprint?: (audioSha256:string)=>Promise<{
+        audioSha256:string;currentModelNotesSha256:string;modelSha256:string;
+        threads:number;songSeconds:number;
+      }|null>;
       finalReview?: (payload:{
         comparisons:Record<string,unknown>[];
         review:{ownPlaybackReviewed:boolean;velocityPedalReviewed:boolean;
