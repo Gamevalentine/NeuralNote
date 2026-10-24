@@ -5,7 +5,9 @@ const {MODELS}=require('./models.cjs');
 const HASH=/^[a-f0-9]{64}$/;
 const GiB=1024**3;
 const sha=x=>typeof x==='string'&&HASH.test(x);
-function f1({truePositive:tp,falsePositive:fp,falseNegative:fn}){
+function f1(score){
+ if(!score||typeof score!=='object')return null;
+ const {truePositive:tp,falsePositive:fp,falseNegative:fn}=score;
  if(![tp,fp,fn].every(x=>Number.isInteger(x)&&x>=0))return null;
  const total=2*tp+fp+fn;
  return total?2*tp/total:0;
