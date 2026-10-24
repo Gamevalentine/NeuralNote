@@ -1,9 +1,9 @@
-name: NOTIQ Stage 5N-C Per-Note Velocity Windows QA
+name: NOTIQ Stage 5N-D CC64 Pedal Windows QA
 on:
   push:
-    branches: [feature/notiq-stage5nc-note-velocity]
+    branches: [feature/notiq-stage5nd-pedal-cc64]
   pull_request:
-    branches: [feature/notiq-stage5nb-note-accuracy]
+    branches: [feature/notiq-stage5nc-note-velocity]
   workflow_dispatch:
 permissions:
   contents: read
@@ -36,7 +36,7 @@ jobs:
           if($LASTEXITCODE -ne 0){throw 'Web dependencies failed'}
           npm run build
           if($LASTEXITCODE -ne 0){throw '5M-D TypeScript build failed'}
-          node --experimental-strip-types --test tests/stage5md-audit.test.mts tests/reference-benchmark.test.mts tests/note-quality.test.mts tests/velocity-from-audio.test.mts tests/daw-midi.test.mts tests/note-quality-5nb.test.mts tests/velocity-editor-5nc.test.mts tests/piano-edit.test.mts
+          node --experimental-strip-types --test tests/stage5md-audit.test.mts tests/reference-benchmark.test.mts tests/note-quality.test.mts tests/velocity-from-audio.test.mts tests/daw-midi.test.mts tests/note-quality-5nb.test.mts tests/velocity-editor-5nc.test.mts tests/piano-edit.test.mts tests/pedal-5nd.test.mts
           if($LASTEXITCODE -ne 0){throw 'Audit/MIDI regression test failed'}
       - uses: actions/download-artifact@v4
         with:
@@ -103,10 +103,20 @@ jobs:
             'AI core, original detected pitches/note timing and external model weights unchanged.'
             'This is an experimental QA preview, NOT a production-ready release.'
           ) -join [Environment]::NewLine | Set-Content (Join-Path $appRoot 'README-STAGE5NC.txt')
-          Write-Host 'NOTIQ_STAGE5NC_WINDOWS_VELOCITY_PACK_PASS'
+          @(
+            'NOTIQ Stage 5N-D — CC64 pedal authoring, playback and MIDI export'
+            'Manual down/up points and bounded pedal spans are opt-in per selected track or all melodic tracks.'
+            'Click CC64 markers to select and move +/-10ms or delete; dedicated pedal undo and redo.'
+            'Same timestamp track-specific CC64 overrides global in BOTH SoundFont preview and MIDI export.'
+            'MIDI Type 1 / Kontakt stems keep original note-off and store genuine CC64 controller events.'
+            'No CC64 on drums, and unfinished MIDI pedal events are closed safely after the last note.'
+            'SoundFont sustain is a sample-duration approximation, not acoustic damper resonance.'
+            'MuScriptor models, weights and native inference are unchanged; this is not a final release.'
+          ) -join [Environment]::NewLine | Set-Content (Join-Path $appRoot 'README-STAGE5ND.txt')
+          Write-Host 'NOTIQ_STAGE5ND_WINDOWS_CC64_PACK_PASS'
       - uses: actions/upload-artifact@v4
         with:
-          name: NOTIQ-Stage5NC-PerNoteVelocity-Windows-Preview
+          name: NOTIQ-Stage5ND-PedalCC64-Windows-Preview
           path: notiq-stage5md-base/
           retention-days: 7
           compression-level: 6
