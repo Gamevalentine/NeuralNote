@@ -76,3 +76,10 @@ Retain default 2 threads and keep the draft PR unmerged until acceptance reports
 - Added a focused regression to `web/tests/stage5md-audit.test.mts` for both cases. Re-evaluated actual fetched audit source and test source in isolated V8 after removing **type-only** TypeScript syntax: **12/12 tests PASS** (original 11 + new threshold test). Original source SHA `63739486d6355bcc87e99d7d0be3653054f6d5d6`, tests SHA `9d2c191a1cb8ea7aec8defdade0e5cd2701f661b`. This is explicitly **not** the official TS compiler, full Windows CI, native MuScriptor, or Windows ZIP test.
 - Feature branch commits: code `17de507dfdfcf12fe0613608f5fa358da04782d1`, regression test `d7a89fba6366b5dffbdb5b48462c5ce56f6c1445`, UI `5f19e444c205dc2808b63dbca55e6f3ae0f3aae5`. The isolated CI branch carries corresponding code/test/UI commits `36641e60`, `8055f6f1`, `310ccc9e`.
 - Github Actions has still not produced a 5M-D run ID. Any acceptance of Windows packaging must wait for a real Windows workflow and artifact verification. Repo `main` remains unchanged.
+
+
+## D1-C GitHub UI user-initiated push trigger (24 October 2026)
+- A direct UI link to original `.github/workflows/ci_build.yml` displayed "This workflow does not exist". The file is present on `main` but no matching run exists in the examined Actions runs; do not instruct the user to click an unavailable CI workflow again.
+- This intentionally documentation-only commit lives on `ci/notiq-5md-user-trigger`, based on the latest 5M-D feature head. It is proposed as a tiny PR targeting `feature/notiq-stage5md-acceptance` **not main**.
+- A GitHub UI merge initiated by the actual repository owner would create a genuine `push` to `feature/notiq-stage5md-acceptance`, which matches the declared `on.push.branches` of `notiq-stage5md-windows.yml`; check GitHub Actions runs after merging. It is a trigger experiment, **not an assurance CI will run**.
+- Do not touch `main`, skip required Windows run ID and logs, or interpret a user-initiated merge itself as 5M-D PASS.
