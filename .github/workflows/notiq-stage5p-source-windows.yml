@@ -1,7 +1,7 @@
-name: NOTIQ 5P Full Source Windows Packaging QA
+name: NOTIQ 5P-B Real Audio Evidence Gates Windows QA
 on:
   push:
-    branches: [feature/notiq-stage5p-release-gates]
+    branches: [feature/notiq-stage5pb-real-audio-evidence]
   workflow_dispatch:
 permissions:
   contents: read
@@ -22,10 +22,11 @@ jobs:
       - name: Test CPU, full song monitoring and 5P packaging guards
         shell: pwsh
         run: |
-          node --test desktop-preview/tests/native-thread-spawn.test.cjs desktop-preview/tests/cpu-threads.test.cjs desktop-preview/tests/cpu-benchmark.test.cjs desktop-preview/tests/native-progress.test.cjs desktop-preview/tests/models.test.cjs desktop-preview/tests/full-song-5ne.test.cjs desktop-preview/tests/release-audit-5p.test.cjs
+          node --test desktop-preview/tests/native-thread-spawn.test.cjs desktop-preview/tests/cpu-threads.test.cjs desktop-preview/tests/cpu-benchmark.test.cjs desktop-preview/tests/native-progress.test.cjs desktop-preview/tests/models.test.cjs desktop-preview/tests/full-song-5ne.test.cjs desktop-preview/tests/release-audit-5p.test.cjs desktop-preview/tests/acceptance-5pb.test.cjs
           if($LASTEXITCODE -ne 0){throw 'Native QA or release preflight tests failed'}
           node --check desktop-preview/main.cjs
           node --check desktop-preview/release-audit.cjs
+          node --check desktop-preview/acceptance-5pb.cjs
           if($LASTEXITCODE -ne 0){throw 'Desktop syntax failed'}
       - name: Detect installed MSVC CMake generator
         shell: pwsh
@@ -107,11 +108,20 @@ jobs:
             'A validation manifest is supplied as NOTIQ-5P-INTEGRITY.json.'
             'Store model weights and NOTIQ-Data on the user-selected portable drive, not the OS drive.'
           ) -join [Environment]::NewLine | Set-Content (Join-Path $env:NOTIQ_5P_PORTABLE 'README-STAGE5P-QA.txt')
-          Write-Host 'NOTIQ_5P_SOURCE_BUILD_AUDIT_PASS_PREVIEW_ONLY'
+          @(
+            'NOTIQ 5P-B — Real Music Acceptance Evidence Preview'
+            'This build captures local SHA-256 fingerprints of the successful real WAV, verified GGUF and native note list.'
+            'It stores only aggregate CPU, RAM, elapsed time and checkpoint data in NOTIQ-Data/full-song-reports.'
+            'Stage 5P-B acceptance-5pb.cjs requires two genuine 4–6 minute songs, measured Large 2/4/6 threads and paired MIDI reference comparisons.'
+            'Synthetic samples and CI test scores never approve quality, pedal realism or release.'
+            'Source package can be rebuilt without expired older GitHub Action artifacts.'
+            'DO NOT RELEASE: QA_PREVIEW_ONLY, releaseApproved false. main remains unchanged.'
+          ) -join [Environment]::NewLine | Set-Content (Join-Path $env:NOTIQ_5P_PORTABLE 'README-STAGE5PB-QA.txt')
+          Write-Host 'NOTIQ_STAGE5PB_SOURCE_BUILD_GATED_PREVIEW_PASS'
       - name: Upload isolated source-built Windows QA preview
         uses: actions/upload-artifact@v4
         with:
-          name: NOTIQ-Stage5P-SourceBuilt-Windows-QA-Preview
+          name: NOTIQ-Stage5PB-EvidenceGated-Windows-QA
           path: release-5p/NOTIQ-Stage5-FullSong-win32-x64/
           retention-days: 7
           compression-level: 6
