@@ -24,3 +24,10 @@
 .pedal-marker.pedal-on{background:#f4c671}
 .pedal-marker.pedal-off{background:#7ec8b2}
 .pedal-marker:focus-visible{outline:2px solid white}
+
+/* Stage 5N-D: editable pedal state and selected marker, no blocking overlay. */
+.pedal-marker.pedal-selected{outline:2px solid #fff;outline-offset:1px;z-index:5;box-shadow:0 0 0 2px #091925}
+.pedal-toolbar .notiq-pedal-status{font-weight:600;color:#a7f2d3;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pedal-toolbar .notiq-pedal-selection{font-variant-numeric:tabular-nums;color:#efdfaa;white-space:nowrap}
+.pedal-toolbar label{font-size:10px;color:#cdd8e5}
+.pedal-toolbar select#notiq-pedal-span{max-width:105px;min-width:95px}
