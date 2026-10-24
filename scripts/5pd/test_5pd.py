@@ -85,6 +85,35 @@ class RealBenchmarkGateTests(unittest.TestCase):
             choices=dataset.selected_pairs(archive,allow_short=True)
             self.assertEqual(choices[0][0],"Chopin_op10_no3_p01")
             self.assertLess(choices[0][1],240)
+    def test_real_native_telemetry_does_not_invent_progress(self):
+        telemetry=core.parse_native_telemetry(
+            "PROGRESS 3\nPROGRESS 20\nNOTIQ_CHECKPOINT 23 10.00\nPROGRESS 36\n"
+        )
+        self.assertEqual(telemetry["last_real_percent"],36)
+        self.assertEqual(telemetry["checkpoint_events"],1)
+        self.assertFalse(telemetry["resumed"])
+        missing=core.parse_native_telemetry("CPU busy, no native progress emitted")
+        self.assertIsNone(missing["last_real_percent"])
+        self.assertEqual(missing["progress_lines"],0)
+    def test_fail_closed_diagnostics_require_no_fake_f1(self):
+        diag={"last_real_percent":20,"peak_native_rss_bytes":4*1024**3,
+              "elapsed_seconds":900,"midi_score_available":False}
+        error=core.NativeRunIncomplete("Timeout; NOT PASS",diag)
+        self.assertIs(error.diagnostics,diag)
+        self.assertNotIn("f1_raw",error.diagnostics)
+    def test_real_acoustic_excerpt_is_explicitly_limited(self):
+        with tempfile.TemporaryDirectory() as d:
+            from unittest.mock import patch
+            audio=Path(d)/"source.wav";audio.write_bytes(b"source")
+            result=Path(d)/"segment.wav"
+            with patch.object(core.subprocess,"run") as execute:
+                with patch.object(core,"safe_riiffloat_duration",return_value=20.):
+                    duration=core.prepare_wav(audio,result,"ffmpeg",20)
+                    self.assertEqual(duration,20.)
+                    command=execute.call_args.args[0]
+                    self.assertIn("-t",command)
+                    self.assertEqual(command[command.index("-t")+1],"20")
+            self.assertRaises(ValueError,core.prepare_wav,audio,result,"ffmpeg",61)
     def test_download_creates_windows_temp_folder_before_network_request(self):
         from unittest.mock import patch
         with tempfile.TemporaryDirectory() as d:
