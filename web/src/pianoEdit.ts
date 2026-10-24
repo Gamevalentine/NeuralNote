@@ -56,3 +56,29 @@ export const sameNotes = (a: Note[], b: Note[]) =>
     n.startTimeSeconds === b[i].startTimeSeconds &&
     n.durationSeconds === b[i].durationSeconds &&
     n.amplitude === b[i].amplitude);
+
+
+/** 5N-B precision editor: one explicit +/-10ms correction, independent of
+ * coarse 125ms mouse grid. Moving note-on keeps note-off fixed, while moving
+ * note-off keeps note-on fixed. Never shifts any other note or AI output.
+ */
+export function nudgeNoteBoundary(notes:Note[],index:number,edge:'onset'|'offset',
+  deltaSeconds:number,maxSeconds:number):Note[]{
+ if(!Number.isInteger(index)||index<0||index>=notes.length||
+   !Number.isFinite(deltaSeconds)||Math.abs(deltaSeconds)>0.05||
+   !Number.isFinite(maxSeconds)||maxSeconds<=0||!['onset','offset'].includes(edge))
+  return notes;
+ const original=notes[index];
+ const start=original.startTimeSeconds,end=start+original.durationSeconds;
+ if(!Number.isFinite(start)||!Number.isFinite(end)||start<0||end<=start)return notes;
+ const ceiling=Math.max(maxSeconds,end);
+ const roundMillis=(value:number)=>Math.round(value*1000)/1000;
+ let nextStart=start,nextEnd=end;
+ if(edge==='onset')nextStart=roundMillis(clamp(start+deltaSeconds,0,end-0.01));
+ else nextEnd=roundMillis(clamp(end+deltaSeconds,start+0.01,ceiling));
+ if(Math.abs(nextStart-start)<1e-8&&Math.abs(nextEnd-end)<1e-8)return notes;
+ const result=notes.slice();
+ result[index]={...original,startTimeSeconds:nextStart,
+  durationSeconds:roundMillis(nextEnd-nextStart),pitchBends:undefined};
+ return result;
+}
