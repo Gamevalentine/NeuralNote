@@ -28,6 +28,17 @@ declare global {
   interface Window {
     notiqNative?: {
       status: () => Promise<NativeStatus>;
+      finalReview?: (payload:{
+        comparisons:Record<string,unknown>[];
+        review:{ownPlaybackReviewed:boolean;velocityPedalReviewed:boolean;
+         deviceResponsive:boolean;checkpointBoundaryChecked:boolean}
+      }) => Promise<{
+        schema:string;status:'HOLD'|'READY_FOR_OWNER_REVIEW';releaseApproved:false;
+        blockers:string[];warnings:string[];
+        independentSongs:number;nativeRunsAccepted:number;
+        qualityPacketsAccepted:number;qualityPacketsRejected:number;
+        sourceBuildPass:boolean;portableIntegrityPass:boolean;windowsLaunchVerified:boolean
+      }>;
       acceptanceEvidence?: () => Promise<{
         schema:string;status:'HOLD'|'READY_FOR_HUMAN_REVIEW';releaseApproved:false;
         sourceCount:number;validNativeRuns:number;loadedReports:number;
