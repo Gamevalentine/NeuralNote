@@ -1,6 +1,6 @@
 import type {Note} from './audio';
 import type {PedalEvent} from './pedal';
-import {effectivePedalEvents} from './pedal';
+import {effectivePedalEvents} from './pedal.ts';
 // Same pitch-group boundaries as NOTIQ audio.ts, without importing browser AI.
 const groupFor=(pitch:number)=>pitch<60?'low':pitch<72?'mid':'high';
 /** Approximate sample sustain to next CC64 up. DO NOT change MIDI note-off.
