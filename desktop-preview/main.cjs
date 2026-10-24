@@ -15,6 +15,8 @@ const { spawn, spawnSync } = require('node:child_process');
 const { MODELS, getModel } = require('./models.cjs');
 const { hasVerifiedModel, downloadVerifiedModel } = require('./model-download.cjs');
 const { createNativeProgressParser } = require('./native-progress.cjs');
+const { createProcessSampler } = require('./process-metrics.cjs');
+const { songSecondsFromWav, heartbeatInfo, safeFullSongReport } = require('./full-song-health.cjs');
 const { runBenchmark } = require('./benchmark-native.cjs');
 const { cpuThreadCount } = require('./cpu-threads.cjs');
 const pianoRuntime = require('./transkun-runtime.cjs');
@@ -166,8 +168,9 @@ async function transcribeViaNative(input) {
   const raw=supplied instanceof Uint8Array?supplied:new Uint8Array(supplied);
   if (raw.byteLength < 44 || raw.byteLength > 15*60*16000*4+4096)
     throw new Error('MuScriptor hỗ trợ tệp đã chuyển đổi tối đa 15 phút.');
-  if (String.fromCharCode(...raw.subarray(0,4)) !== 'RIFF')
-    throw new Error('Dữ liệu âm thanh chuyển sang native không phải WAV.');
+  const wavSeconds=songSecondsFromWav(raw);
+  if(wavSeconds===null||wavSeconds>15*60)
+    throw new Error('WAV phải là Float32 mono 16 kHz hợp lệ, dài tối đa 15 phút.');
 
   const job = {cancelled:false,child:null,percent:0,lastProgressAt:Date.now(),startedAt:Date.now()};
   activeMuScriptor=job;
@@ -193,6 +196,8 @@ async function transcribeViaNative(input) {
       await fsp.writeFile(audio,raw);
       if(job.cancelled)throw new Error('Bạn đã hủy nhận diện.');
       report('transcribe',0,'MuScriptor '+model.label+' khởi chạy CPU; đang chờ tiến độ thật từ engine…');
+      let stopMonitor=null,checkpointCount=0,resumedCount=0;
+      const nativeStartedAt=Date.now();
       await new Promise((resolve,reject)=>{
         let stderr='',stdout='';
         let settled=false;
@@ -208,21 +213,23 @@ async function transcribeViaNative(input) {
         });
         job.child=child;
         job.lastProgressAt=Date.now();
+        const nativeMonitor=child.pid?createProcessSampler(child.pid):null;
         const finish=(error)=>{
           if(settled)return;
           settled=true;
           clearInterval(heartbeat);
+          stopMonitor=nativeMonitor?nativeMonitor.stop():Promise.resolve(null);
           if(error)reject(error);else resolve();
         };
-        // Heartbeats are wall-clock diagnostics, NEVER made-up model progress.
+        // 5N-E: Only actual CLI lines advance %. Report observed native
+        // CPU/RAM from this PID, but never fabricate process measurements.
         const heartbeat=setInterval(()=>{
-          if(settled || job.cancelled)return;
-          const seconds=Math.floor((Date.now()-job.lastProgressAt)/1000);
-          const elapsed=Math.floor((Date.now()-job.startedAt)/1000);
-          const label=seconds>=90
-            ? 'Không có cập nhật AI mới '+seconds+' giây; Large có thể xử lý chậm hoặc bị kẹt. Kiểm tra CPU trong Task Manager, hoặc bấm Dừng AI.'
-            : 'MuScriptor đang chạy (tổng '+elapsed+' giây, cập nhật cuối '+seconds+' giây trước). Bạn có thể Dừng AI.';
-          report('transcribe',job.percent,label);
+          if(settled||job.cancelled)return;
+          const health=heartbeatInfo({
+            nowMs:Date.now(),startedMs:job.startedAt,lastProgressMs:job.lastProgressAt,
+            percent:job.percent,snapshot:nativeMonitor?.snapshot()??null
+          });
+          report('transcribe',job.percent,health.message);
         },15000);
         let checkpointLines='';
         const parseCheckpoints=text=>{
@@ -233,13 +240,17 @@ async function transcribeViaNative(input) {
             checkpointLines=checkpointLines.slice(at+1);
             const update=/^NOTIQ_CHECKPOINT (\d+) ([0-9]+(?:\.[0-9]+)?)$/.exec(line);
             if(update && resumable){
+              checkpointCount++;
               report('checkpoint',job.percent,
                 'Đã lưu '+update[1]+' nốt · đã xác nhận tới '+update[2]+
                 ' giây. Có thể Dừng và tiếp tục từ checkpoint.');
             }
             const resumed=/^NOTIQ_RESUMED_NOTES (\d+)$/.exec(line);
-            if(resumed && resumable)report('checkpoint',job.percent,
-              'Đang tiếp tục bài cũ từ checkpoint, giữ nguyên '+resumed[1]+' nốt đã xác nhận.');
+            if(resumed && resumable){
+              resumedCount++;
+              report('checkpoint',job.percent,
+                'Đang tiếp tục bài cũ từ checkpoint, giữ nguyên '+resumed[1]+' nốt đã xác nhận.');
+            }
           }
         };
         const progressParser=createNativeProgressParser(pct=>{
@@ -265,10 +276,31 @@ async function transcribeViaNative(input) {
         if(job.cancelled && child.exitCode===null)child.kill();
       });
       if(job.cancelled)throw new Error('Đã hủy nhận diện MuScriptor.');
+      const stats=stopMonitor?await stopMonitor:null;
       const result=JSON.parse(await fsp.readFile(output,'utf8'));
-      if(result?.schema!==1 || result?.engine!=='muscriptor' || !Array.isArray(result.notes))
+      if(result?.schema!==1 || result?.engine!=='muscriptor' || !Array.isArray(result.notes) ||
+          result.notes.length>150000)
         throw new Error('Kết quả từ native bridge không hợp lệ.');
-      report('transcribe',100,'MuScriptor '+model.label+' đã nhận diện '+result.notes.length+' nốt');
+      // A compact local report: never save source audio, MIDI notes or filepaths.
+      const metrics=safeFullSongReport({
+        model:model.id,threadCount:cpuThreads,seconds:wavSeconds,
+        elapsedMs:Date.now()-nativeStartedAt,noteCount:result.notes.length,
+        checkpointCount,resumed:resumedCount>0,stats
+      });
+      let reportSaved=false;
+      try{
+        const folder=path.join(dataDir,'full-song-reports');
+        await fsp.mkdir(folder,{recursive:true});
+        await fsp.writeFile(path.join(folder,'notiq-5ne-'+Date.now()+'-'+
+          model.id+'-'+cpuThreads+'threads.json'),JSON.stringify(metrics,null,2),'utf8');
+        reportSaved=true;
+      }catch{ /* write failure must not discard valid transcribed notes */ }
+      const ram=metrics.peakNativeWorkingSetBytes===null?'chưa đo được':
+        (metrics.peakNativeWorkingSetBytes/1024**3).toFixed(2)+' GiB';
+      report('transcribe',100,'MuScriptor '+model.label+' nhận diện '+result.notes.length+
+        ' nốt; thời gian native '+Math.round(metrics.totalElapsedMs/1000)+' giây; RAM đỉnh '+
+        ram+'; checkpoint '+checkpointCount+
+        (reportSaved?'; báo cáo 5N-E đã lưu cạnh ứng dụng.':'; không lưu được báo cáo.'));
       return result;
     }finally{
       await fsp.rm(work,{recursive:true,force:true}).catch(()=>{});
