@@ -6,6 +6,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 const native = Object.freeze({
   status: () => ipcRenderer.invoke('notiq:status'),
   acceptanceEvidence: () => ipcRenderer.invoke('notiq:5pb-evidence'),
+  finalReview: (payload) => ipcRenderer.invoke('notiq:5pc-review',payload),
   downloadModel: () => ipcRenderer.invoke('notiq:download-model'),
   pianoStatus: () => ipcRenderer.invoke('notiq:piano-status'),
   installPiano: () => ipcRenderer.invoke('notiq:piano-install'),
