@@ -17,7 +17,9 @@ const { hasVerifiedModel, downloadVerifiedModel } = require('./model-download.cj
 const { createNativeProgressParser } = require('./native-progress.cjs');
 const { createProcessSampler } = require('./process-metrics.cjs');
 const { songSecondsFromWav, heartbeatInfo, safeFullSongReport } = require('./full-song-health.cjs');
-const { audit5PB } = require('./acceptance-5pb.cjs');
+const { audit5PB,validRun } = require('./acceptance-5pb.cjs');
+const { finalReadiness } = require('./final-review-5pc.cjs');
+const { sha256: localFileSha256, isX64PE } = require('./release-audit.cjs');
 const { runBenchmark } = require('./benchmark-native.cjs');
 const { cpuThreadCount } = require('./cpu-threads.cjs');
 const pianoRuntime = require('./transkun-runtime.cjs');
@@ -415,6 +417,49 @@ function createWindow() {
   }).catch(error => { console.error('Cannot load NOTIQ Web UI', error); window.show(); });
 }
 
+// Fixed-root local-only evidence; no renderer-controlled file path.
+async function readNativeReports5PC(){
+  const folder=path.join(dataDir,'full-song-reports');
+  let entries;
+  try{entries=await fsp.readdir(folder)}catch{return []}
+  const reports=[];
+  const names=entries.filter(n=>/^notiq-5pb-[0-9]+-(small|large)-[246]threads\\.json$/.test(n))
+    .sort().slice(-80);
+  for(const name of names){
+    try{
+      const localPath=path.join(folder,name);
+      const stat=await fsp.lstat(localPath);
+      if(!stat.isFile()||stat.isSymbolicLink()||stat.size<50||stat.size>16000)continue;
+      reports.push(JSON.parse(await fsp.readFile(localPath,'utf8')));
+    }catch{/* reject bad report; never throw into GUI */}
+  }
+  return reports;
+}
+function verifyInstalledPortable5PC(){
+  const manifestPath=path.join(portableDir,'NOTIQ-5P-INTEGRITY.json');
+  try{
+    if(!fs.existsSync(manifestPath)||fs.statSync(manifestPath).size>16000)return false;
+    const manifest=JSON.parse(fs.readFileSync(manifestPath,'utf8'));
+    if(manifest.schema!=='notiq-5p-portable-audit-v1'||
+      manifest.status!=='QA_PREVIEW_ONLY'||manifest.releaseApproved!==false)return false;
+    const expected={
+      app:'NOTIQ-Stage5-FullSong.exe',
+      cli:'resources/bridge-bin/notiq-muscriptor-cli.exe',
+      archive:'resources/app.asar'
+    };
+    for(const [key,rel] of Object.entries(expected)){
+      const x=manifest.files?.[key];
+      if(!x||x.path!==rel||!Number.isInteger(x.bytes)||!(/^[0-9a-f]{64}$/).test(x.sha256))
+        return false;
+      const absolute=path.join(portableDir,...rel.split('/'));
+      if(!fs.statSync(absolute).isFile()||fs.statSync(absolute).size!==x.bytes||
+         localFileSha256(absolute)!==x.sha256)return false;
+      if(key!=='archive'&&!isX64PE(absolute))return false;
+    }
+    return true;
+  }catch{return false}
+}
+
 app.whenReady().then(() => {
   ipcMain.handle('notiq:5pb-evidence', async()=>{
     // 5P-B: only inspect NOTIQ's own JSON summary directory; never accept
@@ -434,6 +479,35 @@ app.whenReady().then(() => {
     }
     const result=audit5PB(reports,[],null);
     return {...result,loadedReports:reports.length};
+  });
+  ipcMain.handle('notiq:5pc-fingerprint', async(_event,audioSha256)=>{
+    if(typeof audioSha256!=='string'||!(/^[0-9a-f]{64}$/).test(audioSha256))
+      throw Error('Checksum âm thanh không hợp lệ.');
+    const reports=await readNativeReports5PC();
+    const matching=reports.filter(r=>validRun(r)&&r.audioSha256===audioSha256);
+    if(!matching.length)return null;
+    const source=matching[matching.length-1];
+    return{
+      audioSha256:source.audioSha256,
+      currentModelNotesSha256:source.notesSha256,
+      modelSha256:source.modelSha256,
+      threads:source.threads,songSeconds:source.songSeconds
+    };
+  });
+  ipcMain.handle('notiq:5pc-review', async(_event,payload)=>{
+    // Only user-entered MIDI summary/checkboxes cross IPC, never arbitrary
+    // files, executable paths, WAV, or user-supplied native performance reports.
+    if(!payload||typeof payload!=='object'||Array.isArray(payload)||
+       JSON.stringify(payload).length>32000)throw Error('Dữ liệu nghiệm thu 5P-C quá lớn.');
+    const packages=verifyInstalledPortable5PC();
+    const reports=await readNativeReports5PC();
+    const comparisons=payload.comparisons||[];
+    const review=payload.review||null;
+    return finalReadiness(reports,comparisons,review,{
+      sourceBuildPass:packages,
+      portableIntegrityPass:packages,
+      windowsLaunchVerified:true // invocation is from the running portable GUI
+    });
   });
   ipcMain.handle('notiq:status', () => bridgeStatus());
   ipcMain.handle('notiq:download-model', () => downloadModel());

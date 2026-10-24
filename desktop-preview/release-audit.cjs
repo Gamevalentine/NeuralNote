@@ -4,6 +4,7 @@ const PE64=0x8664;
 const ASAR_MODULES=[
  'main.cjs','preload.cjs','models.cjs','model-download.cjs',
  'native-progress.cjs','process-metrics.cjs','full-song-health.cjs','acceptance-5pb.cjs',
+ 'final-review-5pc.cjs','release-audit.cjs',
  'benchmark-native.cjs','wav-benchmark.cjs','cpu-threads.cjs',
  'transkun-runtime.cjs','transkun-runner.py','www/index.html'
 ];

@@ -3,9 +3,10 @@ import type {Note} from './audio';
 import type {BenchmarkResult} from './nativeBenchmark';
 import {auditCpuTrials,parseSavedBenchmark,validateFullSongEvidence} from './stage5mdAudit';
 import {readReferenceMidi,scoreAgainstReference,type MidiReference,type MusicMode,type NoteScore} from './referenceBenchmark';
+import {convertAudioToNativeWav} from './muscriptorNative';
 type Props={
  trials:BenchmarkResult[];clipSeconds:20|30|60;clipOffset:number;
- model:'small'|'large';notes:Note[];referenceMidi:MidiReference|null;
+ model:'small'|'large';notes:Note[];referenceMidi:MidiReference|null;sourceAudio:Blob;
  musicMode:MusicMode;referenceOffset:number;songDuration:number;busy:boolean;
  onImportBenchmarks:(reports:BenchmarkResult[])=>void;
 };
@@ -29,6 +30,110 @@ export function Stage5MDAcceptance(p:Props){
   }[]}[];
  }|null>(null);
  const [realError,setRealError]=useState('');
+ const [finalQualityFiles,setFinalQualityFiles]=useState<Record<string,unknown>[]>([]);
+ const [finalImportError,setFinalImportError]=useState('');
+ const [finalQualityBusy,setFinalQualityBusy]=useState(false);
+ const [finalQualityStatus,setFinalQualityStatus]=useState('');
+ const [finalReviewFlags,setFinalReviewFlags]=useState({
+   ownPlaybackReviewed:false,velocityPedalReviewed:false,
+   deviceResponsive:false,checkpointBoundaryChecked:false
+ });
+ const [finalResult,setFinalResult]=useState<{
+   status:'HOLD'|'READY_FOR_OWNER_REVIEW';releaseApproved:false;
+   blockers:string[];warnings:string[];independentSongs:number;
+   nativeRunsAccepted:number;qualityPacketsAccepted:number;qualityPacketsRejected:number;
+   sourceBuildPass:boolean;portableIntegrityPass:boolean;windowsLaunchVerified:boolean
+ }|null>(null);
+ const [finalBusy,setFinalBusy]=useState(false);
+ const createQualityPacketFromSong=async()=>{
+   setFinalImportError('');setFinalQualityStatus('');
+   if(p.busy||finalQualityBusy)return;
+   if(p.model!=='large'||!sameRecording||!p.referenceMidi||!oldMidi||
+      !quality.current||!quality.old||!p.notes.length){
+     setFinalImportError('Cần xử lý bằng Large, nạp MIDI chuẩn và MIDI cũ cùng bản diễn, rồi xác nhận khớp thời gian.');
+     return;
+   }
+   if(!window.crypto?.subtle||!window.notiqNative?.finalFingerprint){
+     setFinalImportError('Tính năng tạo báo cáo 5P-C chỉ hoạt động trong bản Windows hỗ trợ SHA-256.');
+     return;
+   }
+   setFinalQualityBusy(true);
+   try{
+     // Same deterministic 16 kHz Float32 WAV converter used in real inference.
+     // Matching the actual native audio hash is mandatory before creating a
+     // report; a test fixture, unrelated song or renamed file cannot match.
+     const digest=async(bytes:Uint8Array)=>{
+       const copy=new Uint8Array(bytes.byteLength);copy.set(bytes);
+       const output=new Uint8Array(await window.crypto.subtle.digest('SHA-256',copy.buffer));
+       return Array.from(output,x=>x.toString(16).padStart(2,'0')).join('');
+     };
+     const jsonHash=(value:unknown)=>digest(new TextEncoder().encode(JSON.stringify(value)));
+     const pcm=await convertAudioToNativeWav(p.sourceAudio);
+     const audioSha256=await digest(pcm);
+     const source=await window.notiqNative.finalFingerprint(audioSha256);
+     if(!source)throw Error('Chưa có lần Large thật hoàn thành cho chính bản âm thanh đang mở.');
+     const report={
+       schema:'notiq-5pc-quality-v1',samePerformanceConfirmed:true,
+       audioSha256,
+       currentModelNotesSha256:source.currentModelNotesSha256,
+       referenceSha256:await jsonHash(p.referenceMidi.notes),
+       currentMidiSha256:await jsonHash(p.notes),
+       baselineMidiSha256:await jsonHash(oldMidi.notes),
+       current:{truePositive:quality.current.truePositive,
+         falsePositive:quality.current.falsePositive,falseNegative:quality.current.falseNegative},
+       baseline:{truePositive:quality.old.truePositive,
+         falsePositive:quality.old.falsePositive,falseNegative:quality.old.falseNegative},
+       onsetMeanAbsoluteMs:quality.current.onsetMeanAbsoluteMs,
+       offsetMeanAbsoluteMs:quality.current.matchedOffsetMeanAbsoluteMs
+     };
+     setFinalQualityFiles(previous=>[...previous.filter(item=>item.audioSha256!==audioSha256),report].slice(-8));
+     setFinalResult(null);
+     const url=URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}));
+     const anchor=document.createElement('a');anchor.href=url;
+     anchor.download='NOTIQ-5PC-Doi-chieu-MIDI-'+audioSha256.slice(0,12)+'.json';
+     document.body.appendChild(anchor);anchor.click();anchor.remove();
+     setTimeout(()=>URL.revokeObjectURL(url),250);
+     setFinalQualityStatus('Đã tạo báo cáo MIDI cùng bản Large được xác minh bằng SHA-256. Cần thêm bài thứ hai để xét duyệt.');
+   }catch(error){
+     setFinalImportError(error instanceof Error?error.message:'Không tạo được báo cáo MIDI cùng bản diễn.');
+   }finally{setFinalQualityBusy(false);}
+ };
+ const loadQualityFiles=async(files:FileList|null)=>{
+   if(!files?.length)return;
+   setFinalResult(null);setFinalImportError('');setFinalQualityFiles([]);
+   if(files.length>8){setFinalImportError('Chỉ nhận tối đa 8 báo cáo MIDI.');return;}
+   try{
+     const parsed:Record<string,unknown>[]=[];
+     for(const file of Array.from(files)){
+       if(!file.name.toLowerCase().endsWith('.json')||file.size<30||file.size>24000)
+         throw Error('Chỉ nhận báo cáo JSON tối đa 24 KB mỗi tệp.');
+       const candidate=JSON.parse(await file.text());
+       if(!candidate||typeof candidate!=='object'||Array.isArray(candidate)||
+          candidate.schema!=='notiq-5pc-quality-v1')
+         throw Error('Báo cáo MIDI không có định dạng 5P-C. Không thể dùng báo cáo đo CPU thay thế.');
+       parsed.push(candidate);
+     }
+     setFinalQualityFiles(parsed);
+   }catch(error){setFinalImportError(error instanceof Error?error.message:'Báo cáo không hợp lệ.');}
+ };
+ const inspectFinalReview=async()=>{
+   setFinalBusy(true);setFinalResult(null);setFinalImportError('');
+   try{
+     if(!window.notiqNative?.finalReview)throw Error('Bản Windows chưa hỗ trợ 5P-C.');
+     setFinalResult(await window.notiqNative.finalReview({
+       comparisons:finalQualityFiles,review:finalReviewFlags
+     }));
+   }catch(error){setFinalImportError(error instanceof Error?error.message:'Không kiểm tra được nghiệm thu 5P-C.');}
+   finally{setFinalBusy(false);}
+ };
+ const saveFinalReview=()=>{
+   if(!finalResult)return;
+   const summary={...finalResult,
+     note:'Đây là báo cáo thẩm định, không phải giấy phép phát hành; không chứa audio, MIDI thô hoặc đường dẫn.'};
+   const url=URL.createObjectURL(new Blob([JSON.stringify(summary,null,2)],{type:'application/json'}));
+   const link=document.createElement('a');link.href=url;link.download='NOTIQ-5PC-Danh-gia-phat-hanh.json';
+   document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),250);
+ };
  const inspectRealEvidence=async()=>{
   setRealError('');
   try{
@@ -109,6 +214,51 @@ export function Stage5MDAcceptance(p:Props){
   <header><strong>5M-D · Nghiệm thu tốc độ, RAM và chất lượng MIDI</strong>
    <small>Chưa có kết quả Large trên máy thì chưa thể kết luận tăng tốc.</small>
   </header>
+  <div className="notiq-5pc-review" aria-label="5P-C cổng nghiệm thu cuối">
+    <strong>5P-C · Đánh giá phát hành cuối</strong>
+    <p>Chỉ đánh giá kết quả Large thật từ NOTIQ-Data trên máy Windows.
+      Cần hai bài dài 4–6 phút, đủ lượt 2/4/6 luồng, MIDI chuẩn cùng bản diễn
+      và xác nhận nghe thử. Chưa có dữ liệu thì giữ HOLD.</p>
+    <button type="button" disabled={p.busy||finalBusy||finalQualityBusy}
+      onClick={()=>void createQualityPacketFromSong()}>
+      {finalQualityBusy?'Đang đối chiếu SHA-256…':'Tạo báo cáo MIDI 5P-C từ bài đang mở'}
+    </button>
+    {finalQualityStatus&&<small role="status">{finalQualityStatus}</small>}
+    <label>Nhập báo cáo đối chiếu MIDI 5P-C (.json, có checksum và TP/FP/FN)
+      <input type="file" accept=".json,application/json" multiple disabled={p.busy||finalBusy}
+        onChange={event=>void loadQualityFiles(event.target.files)}/>
+    </label>
+    <small>Đã chọn {finalQualityFiles.length} báo cáo. Đây là kết quả so sánh MIDI,
+      không phải báo cáo CPU hoặc báo cáo 5M-D; hệ thống sẽ từ chối nhầm định dạng.</small>
+    {([
+      ['ownPlaybackReviewed','Tôi đã nghe và đối chiếu MIDI với bản ghi âm thật.'],
+      ['velocityPedalReviewed','Đã nghe thử velocity và điểm đạp/nhả CC64.'],
+      ['deviceResponsive','Máy Windows 16 GB vẫn phản hồi trong lúc chạy Large.'],
+      ['checkpointBoundaryChecked','Đã thử tiếp tục checkpoint và kiểm tra các mốc nối 5 giây.']
+    ] as const).map(([field,label])=>
+      <label key={field}><input type="checkbox" checked={finalReviewFlags[field]}
+        onChange={event=>{
+          setFinalResult(null);
+          setFinalReviewFlags(previous=>({...previous,[field]:event.target.checked}));
+        }}/>{label}</label>)}
+    <button type="button" disabled={p.busy||finalBusy}
+      onClick={()=>void inspectFinalReview()}>
+      {finalBusy?'Đang kiểm tra':'Kiểm tra 5P-C trên Windows'}
+    </button>
+    {finalImportError&&<p role="alert">{finalImportError}</p>}
+    {finalResult&&<div role="status">
+      <p><b>{finalResult.status==='HOLD'?'HOLD — CHƯA ĐƯỢC PHÁT HÀNH':
+        'ĐỦ HỒ SƠ ĐỂ CHỦ SỞ HỮU XÉT DUYỆT'}</b></p>
+      <small>{finalResult.independentSongs} bài · {finalResult.nativeRunsAccepted}
+        lượt native đo thật · {finalResult.qualityPacketsAccepted} báo cáo MIDI hợp lệ.
+        Gói Windows toàn vẹn: {finalResult.portableIntegrityPass?'Có':'Chưa xác minh'}.</small>
+      {finalResult.blockers.map((reason,i)=><p key={i}>Cần bổ sung: {reason}</p>)}
+      {finalResult.warnings.map((reason,i)=><small key={i}>Cần rà soát: {reason}</small>)}
+      <p>Giấy phép phát hành: <b>Chưa được duyệt</b>. Ngay cả khi đủ hồ sơ,
+        chủ sở hữu vẫn phải phê duyệt riêng; công cụ không tự đổi sang production.</p>
+      <button type="button" onClick={saveFinalReview}>Xuất báo cáo 5P-C (JSON)</button>
+    </div>}
+  </div>
   <div className="notiq-5pb-review">
     <strong>5P-B · Bằng chứng nhận diện thật (Large 2,74 GB)</strong>
     <button type="button" disabled={p.busy}

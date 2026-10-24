@@ -34,3 +34,12 @@
 .notiq-5md-scroll th,.notiq-5md-scroll td{border-bottom:1px solid #45606f;padding:7px;text-align:left;vertical-align:top}
 .notiq-5md-metrics{display:flex;gap:15px;flex-wrap:wrap}
 .notiq-5md-panel [role=status]{color:#d9e9f5}
+
+/* Stage 5P-C: compact, separate final release evidence panel. */
+.notiq-5pc-review{display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid #5c7b86;border-radius:7px;background:#112b33}
+.notiq-5pc-review>strong{color:#b0eed8;font-size:14px}
+.notiq-5pc-review p{margin:0;line-height:1.6}
+.notiq-5pc-review label{display:flex;flex-wrap:wrap;align-items:center;gap:8px;color:#d6e4ee}
+.notiq-5pc-review input[type=file]{max-width:100%}
+.notiq-5pc-review div[role=status]{padding:8px;border:1px solid #496c70;border-radius:6px;display:flex;flex-direction:column;gap:6px}
+.notiq-5pc-review button{align-self:flex-start}
