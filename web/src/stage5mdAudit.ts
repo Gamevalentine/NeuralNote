@@ -89,10 +89,11 @@ export function validateFullSongEvidence(referencePresent:boolean,baselinePresen
     !Number.isFinite(baselineF1)||!Number.isFinite(currentF1)||
     baselineF1<0||baselineF1>1||currentF1<0||currentF1>1)
   return{status:'missing',explanation:'Cần MIDI chuẩn, MIDI 5L cũ và điểm F1 hợp lệ của cùng bản ghi.',deltaF1:null};
- const delta=Math.round((currentF1-baselineF1)*10000)/100;
- // More than one absolute F1 percentage point below baseline fails; smaller
- // drops must still be reported honestly and are never described as improvement.
- const failed=delta< -1;
+ const rawDelta=(currentF1-baselineF1)*100;
+ // Evaluate the strict >1 percentage-point regression limit BEFORE rounding.
+ // Floating-point tolerance avoids falsely failing an exact 1-point drop.
+ const failed=rawDelta< -1-1e-9;
+ const delta=Math.round(rawDelta*1000)/1000;
  return{status:failed?'risk':'comparable',
    explanation:failed?'F1 giảm quá 1 điểm % so với 5L; không đạt tiêu chí nghiệm thu.'
     :delta<0?'F1 giảm nhẹ (trong ngưỡng 1 điểm %); phải kiểm tra nốt thủ công trước khi nghiệm thu.'
