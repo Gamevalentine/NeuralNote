@@ -17,3 +17,20 @@
 .notiq-5mc-options label{display:flex;gap:7px;align-items:center}
 .notiq-5mc-options button{padding:6px 9px;border-radius:5px;background:#354b60;color:white;border:1px solid #718aa0}
 .notiq-5mc-options small{min-width:220px;flex:1;color:#c2cede}
+
+.notiq-5md-toggle{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;background:#18343a;border-bottom:1px solid #497b81;color:#dff0ed;font-size:12px}
+.notiq-5md-toggle strong{color:#9af0c6}
+.notiq-5md-toggle button,.notiq-5md-panel button{background:#325465;color:white;border:1px solid #7199a1;border-radius:5px;padding:7px 10px;cursor:pointer}
+.notiq-5md-toggle small{color:#adcac9}
+.notiq-5md-panel{display:flex;flex-direction:column;gap:9px;padding:15px;background:#172832;color:#e6f0fa;border-bottom:1px solid #507b87;font-size:12px;line-height:1.5}
+.notiq-5md-panel header{display:flex;flex-wrap:wrap;gap:12px}
+.notiq-5md-panel strong{color:#a9edce}
+.notiq-5md-panel label{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.notiq-5md-panel small{color:#b9cbd7}
+.notiq-5md-panel input[type=file]{padding:5px;max-width:100%;border:1px solid #486275}
+.notiq-5md-panel input[type=checkbox]{accent-color:#87d1bd}
+.notiq-5md-scroll{max-width:100%;overflow-x:auto}
+.notiq-5md-scroll table{border-collapse:collapse;width:100%;min-width:660px}
+.notiq-5md-scroll th,.notiq-5md-scroll td{border-bottom:1px solid #45606f;padding:7px;text-align:left;vertical-align:top}
+.notiq-5md-metrics{display:flex;gap:15px;flex-wrap:wrap}
+.notiq-5md-panel [role=status]{color:#d9e9f5}

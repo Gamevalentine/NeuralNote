@@ -1,0 +1,82 @@
+name: NOTIQ Stage 5M-D Windows Acceptance
+on:
+  push:
+    branches: [feature/notiq-stage5md-acceptance]
+  pull_request:
+    branches: [feature/notiq-stage5mc-resume]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify evidence gates, CLI progress and reference MIDI regressions
+        shell: pwsh
+        run: |
+          node --test desktop-preview/tests/native-thread-spawn.test.cjs desktop-preview/tests/cpu-threads.test.cjs desktop-preview/tests/cpu-benchmark.test.cjs desktop-preview/tests/native-progress.test.cjs desktop-preview/tests/models.test.cjs
+          if($LASTEXITCODE -ne 0){throw 'CPU/CLI tests failed'}
+          node --check desktop-preview/main.cjs
+          node --check desktop-preview/preload.cjs
+          node --check desktop-preview/repack-5md.cjs
+          if($LASTEXITCODE -ne 0){throw 'Electron syntax failed'}
+      - name: React TypeScript and MIDI accuracy tests
+        shell: pwsh
+        working-directory: web
+        run: |
+          npm install --no-audit --no-fund
+          if($LASTEXITCODE -ne 0){throw 'Web dependencies failed'}
+          npm run build
+          if($LASTEXITCODE -ne 0){throw '5M-D TypeScript build failed'}
+          node --experimental-strip-types --test tests/stage5md-audit.test.mts tests/reference-benchmark.test.mts tests/note-quality.test.mts
+          if($LASTEXITCODE -ne 0){throw 'Audit/MIDI regression test failed'}
+      - uses: actions/download-artifact@v4
+        with:
+          repository: Gamevalentine/NeuralNote
+          run-id: 39838381380
+          name: NOTIQ-Stage5M-C-Resumable-Windows-Preview
+          github-token: ${{ github.token }}
+          path: notiq-stage5md-base
+      - name: Verify actual C++ checkpoint support and pack audited UI
+        shell: pwsh
+        run: |
+          npm install --prefix package-tools --no-audit --no-fund @electron/asar@3
+          if($LASTEXITCODE -ne 0){throw 'ASAR dependency failed'}
+          $asar=Get-ChildItem notiq-stage5md-base -Recurse -File -Filter app.asar | Select-Object -First 1
+          if(-not $asar){throw '5M-C portable base missing'}
+          $resources=Split-Path $asar.FullName -Parent
+          $cli=Join-Path $resources 'bridge-bin/notiq-muscriptor-cli.exe'
+          if(-not (Test-Path $cli)){throw 'Resumable native binary missing'}
+          $cap=(& $cli --capabilities) | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0 -or $cap.resume_checkpoint -ne $true -or ($cap.cpu_threads -join ',') -ne '2,4,6'){throw 'Wrong native binary'}
+          $self=& $cli --self-test-checkpoint
+          if($LASTEXITCODE -ne 0 -or "$self" -notmatch 'NOTIQ_5MC_CHECKPOINT_SELF_TEST_PASS'){throw 'C++ checkpoint roundtrip failed'}
+          node desktop-preview/repack-5md.cjs "$($asar.FullName)" "$((Resolve-Path web/dist).Path)"
+          if($LASTEXITCODE -ne 0){throw 'Electron 5M-D repack failed'}
+          $appRoot=Split-Path $resources -Parent
+          @(
+           'NOTIQ Stage 5M-D -- Windows Portable offline acceptance edition'
+           'Extract onto E: and copy existing models and NOTIQ-Data next to the executable.'
+           'Open same source song, run AI 5M-B 2/4/6 threads twice each to compare proper median inference speed.'
+           'Use 5M-D audit: supply the actual prior 5L MIDI and separately loaded ground-truth MIDI in 5I.'
+           'Manually confirm correct audio/score alignment and successful 5M-C pause/resume at 5-second boundaries.'
+           'Export a local JSON audit report without uploading raw audio or full MIDI.'
+           'Do not claim faster Large 2.74GB inference or quality improvement before true on-device tests.'
+           'Original MuScriptor native C++ model weights and algorithm unchanged.'
+          ) -join [Environment]::NewLine | Set-Content (Join-Path $appRoot 'README-STAGE5M-D.txt')
+          Write-Host 'NOTIQ_STAGE5MD_WINDOWS_AUDIT_PACK_PASS'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NOTIQ-Stage5M-D-Windows-Acceptance-Preview
+          path: notiq-stage5md-base/
+          retention-days: 7
+          compression-level: 6
+          if-no-files-found: error
