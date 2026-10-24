@@ -125,7 +125,7 @@ export function Stage5MDAcceptance(p:Props){
   <div className="notiq-5md-metrics">
    <span>F1 bản MIDI 5L cũ: <b>{pct(quality.old?.f1??null)}</b></span>
    <span>F1 MIDI NOTIQ hiện tại: <b>{pct(quality.current?.f1??null)}</b></span>
-   <span>Chênh lệch: <b>{qa.deltaF1===null?'Chưa xác định':(qa.deltaF1>=0?'+':'')+qa.deltaF1.toFixed(2)+' điểm %'}</b></span>
+   <span>Chênh lệch: <b>{qa.deltaF1===null?'Chưa xác định':(qa.deltaF1>=0?'+':'')+qa.deltaF1.toFixed(3)+' điểm %'}</b></span>
   </div>
   <small>{qa.explanation} F1 dựa vào pitch/onset dung sai 100ms, không thay cho nghe thật hay đánh giá pedal.</small>
   <p><b>Bước 3 — Xác nhận thủ công trên Windows</b></p>
