@@ -1,6 +1,9 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {estimateVelocityFromAudio} from '../src/velocityFromAudio.ts';
+import toneMidi from '@tonejs/midi';
+import {extractDawTracks,createDawMidi} from '../src/dawMidi.ts';
+const {Midi} = toneMidi;
 
 const sampleRate = 8000;
 const makeNotes = (program=0) => Array.from({length: 8}, (_,i) => ({
@@ -60,4 +63,17 @@ test('reject invalid PCM and short recording without changing any input notes', 
   assert.throws(()=>estimateVelocityFromAudio(notes,{sampleRate,channels:[new Float32Array(100)]}),/quá ngắn/);
   const corrupt=recording(notes);corrupt.channels[0][5000]=Number.NaN;
   assert.throws(()=>estimateVelocityFromAudio(notes,corrupt),/không hợp lệ/);
+});
+
+test('estimated velocity is exported to genuine MIDI note-on events, not just shown in UI', () => {
+  const input=makeNotes(), result=estimateVelocityFromAudio(input,recording(input));
+  const tracks=extractDawTracks(result.notes,{high:0,mid:0,low:0},
+    new Set(['high','mid','low'] as const));
+  const midi=new Midi(createDawMidi(tracks,120));
+  assert.equal(midi.tracks.length,1);
+  assert.equal(midi.tracks[0].notes.length,8);
+  const velocities=midi.tracks[0].notes.map(n=>n.velocity);
+  assert.ok(velocities[1]>velocities[0]+.25);
+  assert.ok(velocities[3]>velocities[2]+.25);
+  assert.ok(Math.abs(midi.tracks[0].notes[0].time-input[0].startTimeSeconds)<.002);
 });
