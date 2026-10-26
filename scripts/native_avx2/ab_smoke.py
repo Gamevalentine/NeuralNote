@@ -101,11 +101,18 @@ def compare(baseline,optimized):
     if baseline["completed"] and optimized["completed"]:
         duration1=baseline["elapsed_wall_seconds"]
         duration2=optimized["elapsed_wall_seconds"]
-        return {"kind":"FULL_NATIVE_SMOKE_COMPARISON",
+        has_notes=baseline.get("notes_count",0)>0 and optimized.get("notes_count",0)>0
+        exact_match=baseline["native_notes_sha256"]==optimized["native_notes_sha256"] if has_notes else None
+        return {"kind":"COMPLETE_NATIVE_SMOKE_WITH_NOTES" if has_notes else "COMPLETE_NATIVE_SMOKE_ZERO_NOTES",
                 "relative_speedup":round(duration1/duration2,3) if duration2 else None,
-                "equal_note_sha256":baseline["native_notes_sha256"]==optimized["native_notes_sha256"],
-                "output_midi_verified":True,
-                "note_difference_needs_review":baseline["native_notes_sha256"]!=optimized["native_notes_sha256"]}
+                "equal_note_sha256":exact_match,
+                "nonempty_native_note_sets":has_notes,
+                # No aligned same-performance MIDI reference exists in this test,
+                # so even identical nonempty output is not proof of MIDI accuracy.
+                "output_midi_verified":False,
+                "note_difference_needs_review":has_notes and exact_match is False,
+                "warning":"Both runs emitted ZERO notes: speed comparison is valid, but MIDI accuracy is unmeasured."
+                    if not has_notes else "Native notes exist, but no same-performance reference/F1 was checked."}
     return {"kind":"INCOMPLETE_CENSORED_MEASUREMENT",
             "relative_speedup":None,
             "equal_note_sha256":None,
