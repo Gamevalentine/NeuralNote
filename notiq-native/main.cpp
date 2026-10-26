@@ -120,11 +120,11 @@ void writeJson(const std::filesystem::path& path, const std::vector<msl::Note>& 
 
 int run(const std::vector<std::filesystem::path>& args) {
     if(args.size()==1 && args[0]==std::filesystem::path("--cpu-isa")){
-        std::cout << "{\\"experimental_avx2_build\\":"
+        std::cout << "{\"experimental_avx2_build\":"
                   << (notiq_cpu_isa::kAvx2DiagnosticBuild?"true":"false")
-                  << ",\\"host_avx2_fma_bmi2\\":"
+                  << ",\"host_avx2_fma_bmi2\":"
                   << (notiq_cpu_isa::supports_avx2_fma_bmi2()?"true":"false")
-                  << "}\\n";
+                  << "}\n";
         return 0;
     }
     if(args.size()==1 && args[0]==std::filesystem::path("--capabilities")){
