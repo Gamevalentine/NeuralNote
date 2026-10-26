@@ -2,6 +2,7 @@
 // The bridge never downloads model weights, sends audio to a server, or logs audio.
 #include <muscriptor/muscriptor.hpp>
 #include "checkpoint.hpp"
+#include "cpu_isa.hpp"
 
 #include <algorithm>
 #include <bit>
@@ -118,6 +119,14 @@ void writeJson(const std::filesystem::path& path, const std::vector<msl::Note>& 
 }
 
 int run(const std::vector<std::filesystem::path>& args) {
+    if(args.size()==1 && args[0]==std::filesystem::path("--cpu-isa")){
+        std::cout << "{\"experimental_avx2_build\":"
+                  << (notiq_cpu_isa::kAvx2DiagnosticBuild?"true":"false")
+                  << ",\"host_avx2_fma_bmi2\":"
+                  << (notiq_cpu_isa::supports_avx2_fma_bmi2()?"true":"false")
+                  << "}\n";
+        return 0;
+    }
     if(args.size()==1 && args[0]==std::filesystem::path("--capabilities")){
         std::cout << "{\"bridge\":\"notiq-muscriptor\",\"schema\":1,\"cpu_threads\":[2,4,6],\"default_threads\":2,\"resume_checkpoint\":true}\n";
         return 0;
@@ -159,26 +168,36 @@ int run(const std::vector<std::filesystem::path>& args) {
                   << " seconds=" << (static_cast<double>(audio.size())/kSampleRate) << '\n';
         return 0;
     }
-    if(args.size()<3 || args.size()>5){
+    if(args.size()<3 || args.size()>6){
         std::cerr << "Usage: notiq-muscriptor-cli <16k-f32-mono.wav> <model.gguf> <result.json>\n";
         return 2;
     }
     int requestedThreads=2;
+    bool emitTiming=false;
     std::filesystem::path checkpointPath;
     for(std::size_t arg=3;arg<args.size();++arg){
         const auto wide=args[arg].wstring();
         const auto setting=args[arg].string();
-        if(setting=="--threads=2")requestedThreads=2;
+        if(setting=="--timing" && !emitTiming)emitTiming=true;
+        else if(setting=="--threads=2")requestedThreads=2;
         else if(setting=="--threads=4")requestedThreads=4;
         else if(setting=="--threads=6")requestedThreads=6;
         else if(wide.rfind(L"--checkpoint=",0)==0 && checkpointPath.empty() && wide.size()>13)
             checkpointPath=wide.substr(13);
-        else throw std::runtime_error("Invalid CLI argument; only --threads=2,4,6 and --checkpoint=<path>");
+        else throw std::runtime_error("Invalid CLI argument; only --threads=2,4,6, --checkpoint=<path> and --timing");
     }
+    // The diagnostic AVX2 build is deliberately NOT safe on all Windows PCs.
+    // Reject unsupported CPU/OS state before model load / any ggml compute.
+    // Original baseline build is unaffected and remains the release default.
+    if(notiq_cpu_isa::kAvx2DiagnosticBuild &&
+       !notiq_cpu_isa::supports_avx2_fma_bmi2())
+        throw std::runtime_error(
+            "AVX2 diagnostic binary requires AVX2, FMA, BMI2 and OS YMM support. Use original NOTIQ baseline.");
     if(!std::filesystem::is_regular_file(args[1]))
         throw std::runtime_error("MuScriptor model missing; download an approved GGUF first");
     auto audio=decodeWave(args[0]);
     std::cerr << "PROGRESS 3\n";
+    const auto loadStartedAt=std::chrono::steady_clock::now();
     msl::LoadOptions loadOptions {};
     // Empty device = Auto; CPU-only library means this resolves to CPU.
     loadOptions.on_progress=[](float fraction){
@@ -188,6 +207,11 @@ int run(const std::vector<std::filesystem::path>& args) {
     auto engine=msl::Transcriber::load(args[1],std::move(loadOptions));
     if(!engine) throw std::runtime_error(std::string("MuScriptor could not load weights: ")+msl::describe(engine.error()));
     std::cerr << "PROGRESS 20\n";
+    if(emitTiming){
+        const auto elapsed=std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now()-loadStartedAt).count();
+        std::cerr << "NOTIQ_TIMING_LOAD_WALL_MS " << elapsed << '\n';
+    }
     msl::TranscribeOptions options {};
     options.n_threads=requestedThreads;
     const bool resumable=!checkpointPath.empty();
@@ -200,7 +224,18 @@ int run(const std::vector<std::filesystem::path>& args) {
             std::cerr<<"NOTIQ_RESUMED_NOTES "<<completed.notes.size()<<"\n";
         }
     }
+    auto lastChunkAt=std::chrono::steady_clock::now();
+    std::size_t updatesMeasured=0;
     auto onUpdate=[&](const msl::TranscriptionUpdate& update){
+        if(emitTiming){
+            const auto now=std::chrono::steady_clock::now();
+            const auto ms=std::chrono::duration_cast<std::chrono::milliseconds>(
+                now-lastChunkAt).count();
+            lastChunkAt=now;
+            std::cerr << "NOTIQ_TIMING_UPDATE " << ++updatesMeasured
+                      << " wall_ms=" << ms
+                      << " finalized_through_s=" << update.finalized_through << '\n';
+        }
         if(resumable){
             // The original model releases notes one 5-second chunk late.
             // This preserves cross-boundary continuity without re-decoding

@@ -1,0 +1,42 @@
+name: NOTIQ Native AVX2 Lightweight Preflight
+on:
+  push:
+    branches: [feature/notiq-native-avx2-diagnostic]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  isa-no-weights:
+    runs-on: windows-latest
+    timeout-minutes: 9
+    steps:
+      - name: Checkout source only, no 2.74GB weights
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check release isolation and pinned MuScriptor source
+        shell: pwsh
+        run: |
+          python -m unittest discover -s scripts/native_avx2 -p "test_configuration.py" -v
+          if($LASTEXITCODE -ne 0){throw 'AVX2 source isolation failed'}
+          python -m unittest discover -s scripts/5pd -p "test_5pd.py" -v
+          if($LASTEXITCODE -ne 0){throw 'Native timing parser/benchmark regression failed'}
+      - name: Configure tiny MSVC ISA tests (NO GGML, model or audio downloads)
+        shell: pwsh
+        run: |
+          $generators=cmake --help | Out-String
+          if($generators -match 'Visual Studio 18 2026'){$generator='Visual Studio 18 2026'}
+          elseif($generators -match 'Visual Studio 17 2022'){$generator='Visual Studio 17 2022'}
+          else{throw 'No supported MSVC C++ generator'}
+          cmake -S scripts/native_avx2 -B build-isa -G "$generator" -A x64
+          if($LASTEXITCODE -ne 0){throw 'ISA quickcheck CMake configure failed'}
+          cmake --build build-isa --config Release --parallel 2
+          if($LASTEXITCODE -ne 0){throw 'ISA quickcheck compiler failure'}
+          ctest --test-dir build-isa --build-config Release --output-on-failure
+          if($LASTEXITCODE -ne 0){throw 'AVX2 host guard failed'}
+          Write-Host 'NOTIQ_AVX2_NO_WEIGHTS_SAFETY_PREFLIGHT_PASS'
+      - name: Explain what passing proves
+        shell: pwsh
+        run: |
+          Write-Host 'ISA preflight only: tests CPU feature detection and build isolation.'
+          Write-Host 'No ggml transformer inference, no F1, no speedup claim, no Windows release.'

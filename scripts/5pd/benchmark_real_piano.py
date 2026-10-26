@@ -157,7 +157,14 @@ def parse_native_telemetry(log_text):
     lines=log_text.splitlines()
     progress=[int(match.group(1)) for line in lines
       if (match:=re.fullmatch(r"PROGRESS\s+(\d{1,3})",line.strip()))]
+    load_ms=next((int(m.group(1)) for line in lines
+      if (m:=re.fullmatch(r"NOTIQ_TIMING_LOAD_WALL_MS (\d+)",line.strip()))),None)
+    update_ms=[int(m.group(1)) for line in lines
+      if (m:=re.fullmatch(r"NOTIQ_TIMING_UPDATE \d+ wall_ms=(\d+) finalized_through_s=[0-9.]+",line.strip()))]
     return {
+      "model_load_wall_ms":load_ms,
+      "measured_update_count":len(update_ms),
+      "slowest_update_wall_ms":max(update_ms) if update_ms else None,
       "last_real_percent":progress[-1] if progress else None,
       "highest_real_percent":max(progress) if progress else None,
       "progress_lines":len(progress),
@@ -172,7 +179,7 @@ class NativeRunIncomplete(RuntimeError):
 
 def measure_inference(cli,wav,model,output,threads,timeout,checkpoint):
     import psutil
-    args=[str(cli),str(wav),str(model),str(output),f"--threads={threads}"]
+    args=[str(cli),str(wav),str(model),str(output),f"--threads={threads}","--timing"]
     if checkpoint:args.append(f"--checkpoint={checkpoint}")
     started=time.monotonic()
     # A PIPE can deadlock after many progress lines over a long recital.
@@ -239,7 +246,10 @@ def measure_inference(cli,wav,model,output,threads,timeout,checkpoint):
           "native_progress_confirmed":signal["highest_real_percent"]==100,
           "last_real_percent":signal["last_real_percent"],
           "highest_real_percent":signal["highest_real_percent"],
-          "progress_lines":signal["progress_lines"]
+          "progress_lines":signal["progress_lines"],
+          "model_load_wall_ms":signal["model_load_wall_ms"],
+          "slowest_update_wall_ms":signal["slowest_update_wall_ms"],
+          "measured_update_count":signal["measured_update_count"]
         }
     finally:
         if proc.poll() is None:
