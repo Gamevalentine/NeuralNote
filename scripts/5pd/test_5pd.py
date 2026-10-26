@@ -101,6 +101,19 @@ class RealBenchmarkGateTests(unittest.TestCase):
         error=core.NativeRunIncomplete("Timeout; NOT PASS",diag)
         self.assertIs(error.diagnostics,diag)
         self.assertNotIn("f1_raw",error.diagnostics)
+    def test_native_timing_trace_only_uses_actual_log_lines(self):
+        trace=core.parse_native_telemetry(
+          "PROGRESS 20\nNOTIQ_TIMING_LOAD_WALL_MS 328\n"
+          "NOTIQ_TIMING_UPDATE 1 wall_ms=287 finalized_through_s=5.00\n"
+          "PROGRESS 39\nNOTIQ_TIMING_UPDATE 2 wall_ms=502 finalized_through_s=10.00\n"
+        )
+        self.assertEqual(trace["model_load_wall_ms"],328)
+        self.assertEqual(trace["slowest_update_wall_ms"],502)
+        self.assertEqual(trace["measured_update_count"],2)
+        self.assertEqual(trace["last_real_percent"],39)
+        missing=core.parse_native_telemetry("PROGRESS 3")
+        self.assertIsNone(missing["model_load_wall_ms"])
+        self.assertIsNone(missing["slowest_update_wall_ms"])
     def test_real_acoustic_excerpt_is_explicitly_limited(self):
         with tempfile.TemporaryDirectory() as d:
             from unittest.mock import patch
