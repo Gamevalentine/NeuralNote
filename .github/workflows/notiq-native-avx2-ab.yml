@@ -1,0 +1,136 @@
+name: NOTIQ Native Baseline vs AVX2 Bounded A-B
+on:
+  push:
+    branches: [feature/notiq-avx2-ab-bounded]
+  workflow_dispatch:
+    inputs:
+      approve_bounded_small_ab:
+        description: 'Authorize Small-only two native inference attempts, each killed after 60 seconds'
+        required: true
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  safe-preflight:
+    runs-on: windows-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run no-weight tests
+        shell: pwsh
+        run: |
+          python -m unittest discover -s scripts/native_avx2 -p 'test_*.py' -v
+          if($LASTEXITCODE -ne 0){throw 'A/B code safety tests failed'}
+          python -m unittest discover -s scripts/5pd -p 'test_5pd.py' -v
+          if($LASTEXITCODE -ne 0){throw 'Native timing/parser regression failed'}
+          Write-Host 'NOTIQ_AB_PRECHECK_PASS_NO_WEIGHTS'
+  real-bounded-ab:
+    needs: safe-preflight
+    if: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[AB_RUN_ONCE]')) || (github.event_name == 'workflow_dispatch' && inputs.approve_bounded_small_ab == true) }}
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      SMALL_MODEL_URL: https://huggingface.co/DamRsn/muscriptor-gguf/resolve/d7045f94e8b19427f4ff9542975035e66596e51c/v1/muscriptor-small-f16.gguf
+      SMALL_MODEL_SHA: 925f55af65a20ebc4f8b45ceaf095a12b72493d436cb112623cd0041a1af23d4
+      PIANO_SAMPLE_URL: https://raw.githubusercontent.com/facebookincubator/Meta-open-sound/251c0be57d5d1b3242b91f53e0cde62ab1cb42d9/systems/instruments/meta-piano/ogg/INSPiano_Vel01_A4_01.ogg
+    steps:
+      - name: Checkout pinned native source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install short-test dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check psutil==6.1.1 imageio-ffmpeg==0.6.0
+          if($LASTEXITCODE -ne 0){throw 'Python dependencies failed'}
+          $ffmpeg=python -c "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())"
+          if(-not (Test-Path $ffmpeg)){throw 'FFmpeg missing'}
+          "NOTIQ_AB_FFMPEG=$ffmpeg" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Build FULL original MuScriptor C++ engine with MSVC
+        shell: pwsh
+        run: |
+          $generators=cmake --help | Out-String
+          if($generators -match 'Visual Studio 18 2026'){$generator='Visual Studio 18 2026'}
+          elseif($generators -match 'Visual Studio 17 2022'){$generator='Visual Studio 17 2022'}
+          else{throw 'No supported MSVC generator'}
+          "NOTIQ_AB_GENERATOR=$generator" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          cmake -S notiq-native -B build-ab-baseline -G "$generator" -A x64 -DNOTIQ_ENABLE_AVX2_DIAGNOSTIC=OFF -DMUSCRIPTOR_VULKAN=OFF -DMUSCRIPTOR_METAL=OFF
+          if($LASTEXITCODE -ne 0){throw 'Baseline configure failed'}
+          cmake --build build-ab-baseline --config Release --target notiq-muscriptor-cli --parallel 2
+          if($LASTEXITCODE -ne 0){throw 'Full baseline build failed'}
+          $exe=Get-ChildItem build-ab-baseline -Filter notiq-muscriptor-cli.exe -Recurse -File | Select-Object -First 1
+          if(-not $exe){throw 'Baseline EXE missing'}
+          $isa=& $exe.FullName --cpu-isa | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0 -or $isa.experimental_avx2_build -ne $false){throw 'Baseline mode invalid'}
+          $self=& $exe.FullName --self-test-checkpoint
+          if($LASTEXITCODE -ne 0 -or "$self" -notmatch 'NOTIQ_5MC_CHECKPOINT_SELF_TEST_PASS'){throw 'Baseline checkpoint failed'}
+          "NOTIQ_AB_BASE_EXE=$($exe.FullName)" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          $src=(Resolve-Path build-ab-baseline/_deps/ggml-src).Path
+          "NOTIQ_AB_GGML_SOURCE=$src" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host 'NOTIQ_FULL_BASELINE_MSVC_BUILD_PASS'
+      - name: Build FULL isolated AVX2 MuScriptor C++ engine with MSVC
+        shell: pwsh
+        run: |
+          cmake -S notiq-native -B build-ab-avx2 -G "$env:NOTIQ_AB_GENERATOR" -A x64 -DNOTIQ_ENABLE_AVX2_DIAGNOSTIC=ON -DMUSCRIPTOR_VULKAN=OFF -DMUSCRIPTOR_METAL=OFF "-DFETCHCONTENT_SOURCE_DIR_GGML=$env:NOTIQ_AB_GGML_SOURCE"
+          if($LASTEXITCODE -ne 0){throw 'AVX2 configure failed'}
+          cmake --build build-ab-avx2 --config Release --target notiq-muscriptor-cli --parallel 2
+          if($LASTEXITCODE -ne 0){throw 'Full AVX2 build failed'}
+          $exe=Get-ChildItem build-ab-avx2 -Filter notiq-muscriptor-cli.exe -Recurse -File | Select-Object -First 1
+          if(-not $exe){throw 'AVX2 EXE missing'}
+          $isa=& $exe.FullName --cpu-isa | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0 -or $isa.experimental_avx2_build -ne $true){throw 'AVX2 mode invalid'}
+          $self=& $exe.FullName --self-test-checkpoint
+          if($LASTEXITCODE -ne 0 -or "$self" -notmatch 'NOTIQ_5MC_CHECKPOINT_SELF_TEST_PASS'){throw 'AVX2 checkpoint failed'}
+          "NOTIQ_AB_AVX2_EXE=$($exe.FullName)" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "NOTIQ_AB_HOST_AVX2=$($isa.host_avx2_fma_bmi2)" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host 'NOTIQ_FULL_AVX2_MSVC_BUILD_PASS'
+      - name: Fetch single licensed CC0 piano note and verified Small model ONLY
+        shell: pwsh
+        run: |
+          $dir=Join-Path $env:RUNNER_TEMP 'notiq-avx2-ephemeral'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          $sample=Join-Path $dir 'cc0-piano-a4.ogg'
+          $wav=Join-Path $dir 'cc0-piano-3s.wav'
+          $model=Join-Path $dir 'small.gguf'
+          curl.exe --fail --location --retry 1 --connect-timeout 15 --max-time 40 --output $sample "$env:PIANO_SAMPLE_URL"
+          if($LASTEXITCODE -ne 0){throw 'CC0 sample download failed'}
+          if((Get-Item $sample).Length -ne 119558){throw 'CC0 sample expected bytes mismatch'}
+          & "$env:NOTIQ_AB_FFMPEG" -nostdin -hide_banner -loglevel error -y -i "$sample" -t 3 -vn -ar 16000 -ac 1 -c:a pcm_f32le "$wav"
+          if($LASTEXITCODE -ne 0){throw 'WAV conversion failed'}
+          curl.exe --fail --location --retry 1 --connect-timeout 30 --max-time 240 --output $model "$env:SMALL_MODEL_URL"
+          if($LASTEXITCODE -ne 0){throw 'Small model download exceeded network budget'}
+          if((Get-Item $model).Length -ne 209425152){throw 'Small GGUF byte size mismatch'}
+          $hash=(Get-FileHash $model -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($hash -ne "$env:SMALL_MODEL_SHA"){throw 'Small GGUF digest mismatch'}
+          "NOTIQ_AB_WAV=$wav" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "NOTIQ_AB_MODEL=$model" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host 'NOTIQ_CC0_AUDIO_AND_PINNED_SMALL_VERIFIED'
+      - name: Two bounded native inferences, 60 seconds maximum each
+        shell: pwsh
+        run: |
+          $report=Join-Path $env:RUNNER_TEMP 'notiq-avx2-small-quick.json'
+          if($env:NOTIQ_AB_HOST_AVX2 -ne 'True'){
+            @{schema='notiq-avx2-ab-small-quick-v1';status='UNSUPPORTED_HOST';release_approved=$false;comparison='No AVX2 inference on unsupported CPU'} | ConvertTo-Json | Set-Content $report
+            Write-Host 'NOTIQ_AB_HOST_UNSUPPORTED_NO_INFERENCE'
+          }else{
+            python scripts/native_avx2/ab_smoke.py --baseline "$env:NOTIQ_AB_BASE_EXE" --optimized "$env:NOTIQ_AB_AVX2_EXE" --model "$env:NOTIQ_AB_MODEL" --wav "$env:NOTIQ_AB_WAV" --hard-seconds 60 --report "$report"
+            if($LASTEXITCODE -ne 0){throw 'A/B diagnostic failed; no speedup claimed'}
+          }
+          Write-Host 'NOTIQ_AB_SMALL_DIAGNOSTIC_COMPLETED_NOT_LARGE_ACCEPTANCE'
+      - name: Publish compact diagnostics only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NOTIQ-Baseline-vs-AVX2-Small-Quick-Diagnostics
+          path: ${{ runner.temp }}/notiq-avx2-small-quick.json
+          if-no-files-found: ignore
+          retention-days: 7
+          compression-level: 9
