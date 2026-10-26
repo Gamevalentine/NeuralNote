@@ -75,10 +75,27 @@ foreach(MUSCRIPTOR_X86_FEATURE GGML_SSE42 GGML_AVX GGML_F16C)
     set(${MUSCRIPTOR_X86_FEATURE} ON)
 endforeach()
 
+# NOTIQ internal-only A/B variant. The ORIGINAL muscriptor.cpp pins these
+# instructions OFF for CPUs as old as Ivy Bridge. On explicitly approved
+# Windows x64 QA builds we can exercise ggml AVX2/FMA/BMI2 kernels.
+# Never enable on the generic shipping binary; it can fault on older CPUs.
+option(NOTIQ_EXPERIMENTAL_AVX2
+       "INTERNAL ONLY: enable AVX2/FMA/BMI2 in pinned MuScriptor ggml" OFF)
+if(NOTIQ_EXPERIMENTAL_AVX2)
+    if(NOT MSVC OR NOT WIN32 OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
+        message(FATAL_ERROR "NOTIQ_EXPERIMENTAL_AVX2 requires MSVC Windows x64")
+    endif()
+    if(MUSCRIPTOR_NATIVE)
+        message(FATAL_ERROR "NOTIQ_EXPERIMENTAL_AVX2 must not use host-dependent GGML_NATIVE")
+    endif()
+endif()
 foreach(MUSCRIPTOR_X86_FEATURE GGML_AVX2 GGML_BMI2 GGML_FMA)
-    set(${MUSCRIPTOR_X86_FEATURE} OFF CACHE BOOL "" FORCE)
-    set(${MUSCRIPTOR_X86_FEATURE} OFF)
+    set(${MUSCRIPTOR_X86_FEATURE} ${NOTIQ_EXPERIMENTAL_AVX2} CACHE BOOL "" FORCE)
+    set(${MUSCRIPTOR_X86_FEATURE} ${NOTIQ_EXPERIMENTAL_AVX2})
 endforeach()
+if(NOTIQ_EXPERIMENTAL_AVX2)
+    message(STATUS "NOTIQ DIAGNOSTIC: ggml CPU AVX2/BMI2/FMA enabled (not for generic release)")
+endif()
 
 # Metal, on Apple platforms only. Without a Metal device, Auto runs on the CPU.
 # How the shaders are shipped: docs/BUILDING.md#metal.
@@ -216,7 +233,7 @@ foreach(MUSCRIPTOR_OMP_TARGET ggml-base ggml-cpu)
 endforeach()
 
 # And for the x86 instruction set, read from the compile line. No match on ARM.
-if(TARGET ggml-cpu)
+if(TARGET ggml-cpu AND NOT NOTIQ_EXPERIMENTAL_AVX2)
     get_target_property(MUSCRIPTOR_CPU_FLAGS ggml-cpu COMPILE_OPTIONS)
 
     if(MUSCRIPTOR_CPU_FLAGS MATCHES "-mavx2|-mfma|-mbmi2")
