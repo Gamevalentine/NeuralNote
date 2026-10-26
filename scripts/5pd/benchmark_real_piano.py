@@ -158,9 +158,9 @@ def parse_native_telemetry(log_text):
     progress=[int(match.group(1)) for line in lines
       if (match:=re.fullmatch(r"PROGRESS\s+(\d{1,3})",line.strip()))]
     load_ms=next((int(m.group(1)) for line in lines
-      if (m:=re.fullmatch(r"NOTIQ_TIMING_LOAD_WALL_MS (\\d+)",line.strip()))),None)
+      if (m:=re.fullmatch(r"NOTIQ_TIMING_LOAD_WALL_MS (\d+)",line.strip()))),None)
     update_ms=[int(m.group(1)) for line in lines
-      if (m:=re.fullmatch(r"NOTIQ_TIMING_UPDATE \\d+ wall_ms=(\\d+) finalized_through_s=[0-9.]+",line.strip()))]
+      if (m:=re.fullmatch(r"NOTIQ_TIMING_UPDATE \d+ wall_ms=(\d+) finalized_through_s=[0-9.]+",line.strip()))]
     return {
       "model_load_wall_ms":load_ms,
       "measured_update_count":len(update_ms),
