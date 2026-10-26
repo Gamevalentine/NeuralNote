@@ -19,6 +19,8 @@ jobs:
         run: |
           python -m unittest discover -s scripts/native_avx2 -p "test_configuration.py" -v
           if($LASTEXITCODE -ne 0){throw 'AVX2 source isolation failed'}
+          python -m unittest discover -s scripts/5pd -p "test_5pd.py" -v
+          if($LASTEXITCODE -ne 0){throw 'Native timing parser/benchmark regression failed'}
       - name: Configure tiny MSVC ISA tests (NO GGML, model or audio downloads)
         shell: pwsh
         run: |
