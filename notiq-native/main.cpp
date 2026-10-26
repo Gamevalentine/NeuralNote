@@ -206,11 +206,11 @@ int run(const std::vector<std::filesystem::path>& args) {
     };
     auto engine=msl::Transcriber::load(args[1],std::move(loadOptions));
     if(!engine) throw std::runtime_error(std::string("MuScriptor could not load weights: ")+msl::describe(engine.error()));
-    std::cerr << "PROGRESS 20\\n";
+    std::cerr << "PROGRESS 20\n";
     if(emitTiming){
         const auto elapsed=std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now()-loadStartedAt).count();
-        std::cerr << "NOTIQ_TIMING_LOAD_WALL_MS " << elapsed << '\\n';
+        std::cerr << "NOTIQ_TIMING_LOAD_WALL_MS " << elapsed << '\n';
     }
     msl::TranscribeOptions options {};
     options.n_threads=requestedThreads;
@@ -234,7 +234,7 @@ int run(const std::vector<std::filesystem::path>& args) {
             lastChunkAt=now;
             std::cerr << "NOTIQ_TIMING_UPDATE " << ++updatesMeasured
                       << " wall_ms=" << ms
-                      << " finalized_through_s=" << update.finalized_through << '\\n';
+                      << " finalized_through_s=" << update.finalized_through << '\n';
         }
         if(resumable){
             // The original model releases notes one 5-second chunk late.
