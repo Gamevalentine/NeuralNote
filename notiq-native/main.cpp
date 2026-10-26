@@ -2,6 +2,7 @@
 // The bridge never downloads model weights, sends audio to a server, or logs audio.
 #include <muscriptor/muscriptor.hpp>
 #include "checkpoint.hpp"
+#include "cpu_isa.hpp"
 
 #include <algorithm>
 #include <bit>
@@ -118,6 +119,14 @@ void writeJson(const std::filesystem::path& path, const std::vector<msl::Note>& 
 }
 
 int run(const std::vector<std::filesystem::path>& args) {
+    if(args.size()==1 && args[0]==std::filesystem::path("--cpu-isa")){
+        std::cout << "{\\"experimental_avx2_build\\":"
+                  << (notiq_cpu_isa::kAvx2DiagnosticBuild?"true":"false")
+                  << ",\\"host_avx2_fma_bmi2\\":"
+                  << (notiq_cpu_isa::supports_avx2_fma_bmi2()?"true":"false")
+                  << "}\\n";
+        return 0;
+    }
     if(args.size()==1 && args[0]==std::filesystem::path("--capabilities")){
         std::cout << "{\"bridge\":\"notiq-muscriptor\",\"schema\":1,\"cpu_threads\":[2,4,6],\"default_threads\":2,\"resume_checkpoint\":true}\n";
         return 0;
@@ -175,6 +184,13 @@ int run(const std::vector<std::filesystem::path>& args) {
             checkpointPath=wide.substr(13);
         else throw std::runtime_error("Invalid CLI argument; only --threads=2,4,6 and --checkpoint=<path>");
     }
+    // The diagnostic AVX2 build is deliberately NOT safe on all Windows PCs.
+    // Reject unsupported CPU/OS state before model load / any ggml compute.
+    // Original baseline build is unaffected and remains the release default.
+    if(notiq_cpu_isa::kAvx2DiagnosticBuild &&
+       !notiq_cpu_isa::supports_avx2_fma_bmi2())
+        throw std::runtime_error(
+            "AVX2 diagnostic binary requires AVX2, FMA, BMI2 and OS YMM support. Use original NOTIQ baseline.");
     if(!std::filesystem::is_regular_file(args[1]))
         throw std::runtime_error("MuScriptor model missing; download an approved GGUF first");
     auto audio=decodeWave(args[0]);
