@@ -25,12 +25,32 @@ class BoundedAB(unittest.TestCase):
         self.assertIsNone(result["relative_speedup"])
         self.assertFalse(result["output_midi_verified"])
     def test_complete_pair_requires_identical_note_hash_for_exact_match(self):
-        a={"completed":True,"elapsed_wall_seconds":30,"native_notes_sha256":"abc"}
-        b={"completed":True,"elapsed_wall_seconds":15,"native_notes_sha256":"def"}
+        a={"completed":True,"elapsed_wall_seconds":30,"native_notes_sha256":"abc","notes_count":2}
+        b={"completed":True,"elapsed_wall_seconds":15,"native_notes_sha256":"def","notes_count":2}
         c=ab_smoke.compare(a,b)
         self.assertEqual(c["relative_speedup"],2)
         self.assertFalse(c["equal_note_sha256"])
         self.assertTrue(c["note_difference_needs_review"])
+    def test_zero_notes_must_never_be_called_correct_midi(self):
+        a={"completed":True,"elapsed_wall_seconds":28.89,
+           "native_notes_sha256":"samehash","notes_count":0}
+        b={"completed":True,"elapsed_wall_seconds":2.125,
+           "native_notes_sha256":"samehash","notes_count":0}
+        result=ab_smoke.compare(a,b)
+        self.assertEqual(result["kind"],"COMPLETE_NATIVE_SMOKE_ZERO_NOTES")
+        self.assertEqual(result["relative_speedup"],13.595)
+        self.assertIsNone(result["equal_note_sha256"])
+        self.assertFalse(result["output_midi_verified"])
+        self.assertFalse(result["nonempty_native_note_sets"])
+    def test_even_matching_nonempty_notes_require_ground_truth_for_accuracy(self):
+        a={"completed":True,"elapsed_wall_seconds":10,
+           "native_notes_sha256":"same","notes_count":2}
+        b={"completed":True,"elapsed_wall_seconds":5,
+           "native_notes_sha256":"same","notes_count":2}
+        result=ab_smoke.compare(a,b)
+        self.assertTrue(result["equal_note_sha256"])
+        self.assertEqual(result["relative_speedup"],2)
+        self.assertFalse(result["output_midi_verified"])
     def test_small_model_hash_pinned_and_release_never_approved(self):
         source=pathlib.Path(ab_smoke.__file__).read_text(encoding="utf-8")
         self.assertIn("925f55af65a20ebc4f8b45ceaf095a12b72493d436cb112623cd0041a1af23d4",source)
